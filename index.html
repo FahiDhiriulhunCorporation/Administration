@@ -16,15 +16,173 @@
       extend: {
         fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'] },
         colors: {
-          brand: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' }
+          brand: Object.fromEntries([50,100,200,300,400,500,600,700,800,900].map(k=>[k,'rgb(var(--brand-'+k+') / <alpha-value>)']))
         }
       }
     }
   }
   }
 </script>
+<script>
+/* =====================================================================
+   COLOUR SCHEMES — accent colour (buttons, links, focus rings, active nav)
+   and the sidebar / top-bar colour. Saved per browser, like light/dark.
+===================================================================== */
+const COLOR_SCHEME_KEY = 'fdc_inventory_color_scheme';
+const COLOR_SCHEMES = [
+  { id:'default',    name:'Indigo (default)',  swatches:['#6366f1','#4f46e5','#a5b4fc','#0f172a'], fixed:{
+      50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' },
+    chrome:'#0f172a', chromeHover:'#1e293b', surfaces:'slate' },
+  { id:'zesty-lemon',      name:'Zesty lemon',       swatches:['#FFFF66','#FFE566','#D6D58B','#B3B347'], accent:'#B3B347', chromeFrom:'#B3B347', tint:.022 },
+  { id:'california-beaches', name:'California beaches', swatches:['#FFC067','#66F4FF','#66C4FF','#7D99AA'], accent:'#66C4FF', chromeFrom:'#7D99AA', tint:.025 },
+  { id:'pistachio-dream',  name:'Pistachio dream',   swatches:['#80EF80','#E3F0A3','#BADBA2','#42D674'], accent:'#42D674', chromeFrom:'#42D674', tint:.025 },
+  { id:'guava',            name:'Guava',             swatches:['#FF8559','#FFB578','#E65447','#CF5376'], accent:'#E65447', chromeFrom:'#CF5376', tint:.022 },
+  { id:'cool-revival',     name:'Cool revival',      swatches:['#00FFFF','#00AEFF','#00DE94','#00FF52'], accent:'#00DE94', chromeFrom:'#00AEFF', tint:.03 },
+  { id:'cobalt-sky',       name:'Cobalt sky',        swatches:['#0047AB','#000080','#82C8E5','#6D8196'], accent:'#0047AB', chrome:'#000080', tintFrom:'#000080', tint:.075 },
+  { id:'neon-noir',        name:'Neon noir',         swatches:['#000000','#2CFF05','#BF00FF','#2D2D2D'], accent:'#BF00FF', chrome:'#141414', chromeHover:'#2D2D2D', tint:0, darkBase:.17 },
+];
+
+/* --- OKLCH helpers: every scheme gets the same lightness ladder as the default,
+       so white text on buttons and coloured links stay readable whatever the hue. --- */
+const _csLin = c => (c/=255) <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4);
+const _csGam = c => c <= 0.0031308 ? 12.92*c : 1.055*Math.pow(c, 1/2.4) - 0.055;
+function _csHexToOklch(hex){
+  const n = parseInt(hex.replace('#',''),16);
+  const r=_csLin(n>>16&255), g=_csLin(n>>8&255), b=_csLin(n&255);
+  const l=Math.cbrt(.4122214708*r+.5363325363*g+.0514459929*b), m=Math.cbrt(.2119034982*r+.6806995451*g+.1073969566*b), s=Math.cbrt(.0883024619*r+.2817188376*g+.6299787005*b);
+  const L=.2104542553*l+.793617785*m-.0040720468*s, A=1.9779984951*l-2.428592205*m+.4505937099*s, B=.0259040371*l+.7827717662*m-.808675766*s;
+  return { L, C:Math.hypot(A,B), H:Math.atan2(B,A) };
+}
+function _csOklchToRgb(L,C,H){
+  const A=C*Math.cos(H), B=C*Math.sin(H);
+  const l=(L+.3963377774*A+.2158037573*B)**3, m=(L-.1055613458*A-.0638541728*B)**3, s=(L-.0894841775*A-1.291485548*B)**3;
+  return [4.0767416621*l-3.3077115913*m+.2309699292*s, -1.2684380046*l+2.6097574011*m-.3413193965*s, -.0041960863*l-.7034186147*m+1.707614701*s];
+}
+function _csOklchToTriplet(L,C,H){
+  // reduce chroma until the colour fits in sRGB
+  let lo=0, hi=C, rgb=_csOklchToRgb(L,C,H);
+  const ok = v => v.every(x=>x>=-1e-4 && x<=1+1e-4);
+  if(!ok(rgb)){ for(let i=0;i<20;i++){ const mid=(lo+hi)/2; if(ok(_csOklchToRgb(L,mid,H))) lo=mid; else hi=mid; } rgb=_csOklchToRgb(L,lo,H); }
+  return rgb.map(x=>Math.round(Math.min(1,Math.max(0,_csGam(Math.min(1,Math.max(0,x)))))*255)).join(' ');
+}
+const _csHexToTriplet = hex => { const n=parseInt(hex.replace('#',''),16); return (n>>16&255)+' '+(n>>8&255)+' '+(n&255); };
+const _CS_LADDER = { 50:[.971,.12],100:[.936,.22],200:[.87,.4],300:[.785,.65],400:[.68,.85],500:[.585,1],600:[.511,1],700:[.457,.92],800:[.398,.8],900:[.359,.7] };
+
+function colorSchemeVars(scheme){
+  const vars = {};
+  if(scheme.fixed){
+    for(const k in scheme.fixed) vars['--brand-'+k] = _csHexToTriplet(scheme.fixed[k]);
+  } else {
+    const a = _csHexToOklch(scheme.accent);
+    const C = Math.min(Math.max(a.C, .08), .25);
+    for(const k in _CS_LADDER){ const [L,f]=_CS_LADDER[k]; vars['--brand-'+k] = _csOklchToTriplet(L, C*f, a.H); }
+  }
+  if(scheme.chrome){
+    vars['--chrome'] = _csHexToTriplet(scheme.chrome);
+    if(scheme.chromeHover) vars['--chrome-hover'] = _csHexToTriplet(scheme.chromeHover);
+    else { const c=_csHexToOklch(scheme.chrome); vars['--chrome-hover'] = _csOklchToTriplet(Math.min(c.L+.08,1), c.C, c.H); }
+  } else {
+    const c = _csHexToOklch(scheme.chromeFrom || scheme.accent);
+    const cc = Math.min(c.C*.35, .05);
+    vars['--chrome'] = _csOklchToTriplet(.24, cc, c.H);
+    vars['--chrome-hover'] = _csOklchToTriplet(.32, cc, c.H);
+  }
+  // Page surfaces (backgrounds, cards, borders) for light and dark mode, tinted with the scheme's hue.
+  if(scheme.surfaces === 'slate'){
+    Object.assign(vars, {
+      '--s-bg':'15 23 42','--s-surface':'30 41 59','--s-raised':'51 65 85','--s-line':'71 85 105','--s-hover':'39 52 73','--s-hover2':'61 76 99','--s-tip':'11 18 32',
+      '--l-bg':'241 245 249','--l-soft':'248 250 252','--l-line':'226 232 240','--l-line-soft':'241 245 249','--l-line-strong':'203 213 225' });
+  } else {
+    const h = _csHexToOklch(scheme.tintFrom || scheme.chromeFrom || scheme.chrome || scheme.accent).H;
+    const t = scheme.tint == null ? .025 : scheme.tint;
+    const b = scheme.darkBase || .208;   // lightness of the dark page background
+    const D = (dl, k=1) => _csOklchToTriplet(b + dl, t*k, h);
+    const Lt = (L, k) => _csOklchToTriplet(L, t*k, h);
+    Object.assign(vars, {
+      '--s-bg':D(0), '--s-surface':D(.071), '--s-raised':D(.164,.9), '--s-line':D(.238,.8), '--s-hover':D(.112), '--s-hover2':D(.19,.85), '--s-tip':D(-.04),
+      '--l-bg':Lt(.968,.45), '--l-soft':Lt(.984,.25), '--l-line':Lt(.929,.5), '--l-line-soft':Lt(.968,.4), '--l-line-strong':Lt(.869,.55) });
+  }
+  return vars;
+}
+function getColorSchemeId(){
+  let id = null;
+  try{ id = localStorage.getItem(COLOR_SCHEME_KEY); }catch(e){}
+  return COLOR_SCHEMES.some(s=>s.id===id) ? id : 'default';
+}
+function applyColorScheme(id){
+  const scheme = COLOR_SCHEMES.find(s=>s.id===id) || COLOR_SCHEMES[0];
+  const vars = colorSchemeVars(scheme);
+  const root = document.documentElement;
+  for(const k in vars) root.style.setProperty(k, vars[k]);
+  root.setAttribute('data-color-scheme', scheme.id);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content', 'rgb(' + vars['--chrome'].split(' ').join(',') + ')');
+}
+function setColorScheme(id){
+  try{ localStorage.setItem(COLOR_SCHEME_KEY, id); }catch(e){}
+  applyColorScheme(id);
+  refreshAppearanceModal();
+}
+applyColorScheme(getColorSchemeId());
+
+/* --- Appearance panel (opened from the sidebar) --- */
+function setThemeMode(mode){
+  try{ localStorage.setItem(THEME_KEY, mode); }catch(e){}
+  applyTheme(mode);
+  refreshAppearanceModal();
+}
+function appearanceBodyHtml(){
+  const mode = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const current = getColorSchemeId();
+  const modeBtn = (m, label, icon) => `
+    <button type="button" onclick="setThemeMode('${m}')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${mode===m ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}">${icon}${label}</button>`;
+  const sun = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="3.2"/><path stroke-linecap="round" d="M10 2.5v1.8M10 15.7v1.8M17.5 10h-1.8M4.3 10H2.5M15.3 4.7l-1.27 1.27M5.97 14.03L4.7 15.3M15.3 15.3l-1.27-1.27M5.97 5.97L4.7 4.7"/></svg>';
+  const moon = '<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 10.8A7.5 7.5 0 0 1 9.2 3 7.5 7.5 0 1 0 17 10.8z"/></svg>';
+  const cards = COLOR_SCHEMES.map(s => {
+    const sel = s.id === current;
+    return `
+    <button type="button" onclick="setColorScheme('${s.id}')" aria-pressed="${sel}" class="text-left rounded-lg border ${sel ? 'border-brand-600 ring-2 ring-brand-500' : 'border-slate-200 hover:border-brand-400'} p-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <div class="flex h-10 rounded-md overflow-hidden">${s.swatches.map(c=>`<span class="flex-1" style="background:${c}"></span>`).join('')}</div>
+      <div class="flex items-center justify-between gap-2 mt-2 px-0.5">
+        <span class="text-[13px] font-semibold text-slate-800 truncate">${s.name}</span>
+        ${sel ? '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" class="text-brand-600 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>' : ''}
+      </div>
+    </button>`;
+  }).join('');
+  return `
+    <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Mode</div>
+    <div class="flex gap-1 border border-slate-200 rounded-lg p-1 bg-slate-50 mb-6">${modeBtn('light','Light',sun)}${modeBtn('dark','Dark',moon)}</div>
+    <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Colour scheme</div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${cards}</div>
+    <p class="text-xs text-slate-500 mt-4">Changes the accent colour (buttons, links, highlights) and the sidebar. Saved on this device only.</p>`;
+}
+function openAppearanceModal(){
+  if(typeof toggleSidebar === 'function') toggleSidebar(false);
+  openModal('Appearance', appearanceBodyHtml());
+}
+function refreshAppearanceModal(){
+  const overlay = document.getElementById('modal-overlay');
+  const title = document.getElementById('modal-title');
+  if(overlay && !overlay.classList.contains('hidden') && title && title.textContent === 'Appearance'){
+    document.getElementById('modal-body').innerHTML = appearanceBodyHtml();
+  }
+}
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root{ --brand-50:238 242 255; --brand-100:224 231 255; --brand-200:199 210 254; --brand-300:165 180 252; --brand-400:129 140 248; --brand-500:99 102 241; --brand-600:79 70 229; --brand-700:67 56 202; --brand-800:55 48 163; --brand-900:49 46 129; --chrome:15 23 42; --chrome-hover:30 41 59;
+         --s-bg:15 23 42; --s-surface:30 41 59; --s-raised:51 65 85; --s-line:71 85 105; --s-hover:39 52 73; --s-hover2:61 76 99; --s-tip:11 18 32;
+         --l-bg:241 245 249; --l-soft:248 250 252; --l-line:226 232 240; --l-line-soft:241 245 249; --l-line-strong:203 213 225; }
+  /* light mode: page background, soft panels and borders follow the colour scheme */
+  html:not([data-theme="dark"]) body.bg-slate-100, html:not([data-theme="dark"]) #auth-screen{ background-color: rgb(var(--l-bg)); }
+  html:not([data-theme="dark"]) .bg-slate-50{ background-color: rgb(var(--l-soft)); }
+  html:not([data-theme="dark"]) .border-slate-200{ border-color: rgb(var(--l-line)); }
+  html:not([data-theme="dark"]) .border-slate-100{ border-color: rgb(var(--l-line-soft)); }
+  html:not([data-theme="dark"]) .border-slate-300{ border-color: rgb(var(--l-line-strong)); }
+  html:not([data-theme="dark"]) .divide-slate-100 > :not([hidden]) ~ :not([hidden]){ border-color: rgb(var(--l-line-soft)); }
+  .app-chrome{ background-color: rgb(var(--chrome)); transition: background-color .2s; }
+  .app-chrome .hover\:bg-slate-800:hover{ background-color: rgb(var(--chrome-hover)); }
   body{ font-family:'Inter', ui-sans-serif, system-ui, sans-serif; }
   ::-webkit-scrollbar{ width:8px; height:8px; }
   ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:8px; }
@@ -34,10 +192,10 @@
   @media (min-width: 1024px){
     #sidebar{ position: sticky; top: 0; bottom: auto; align-self: flex-start; height: 100vh; width: 16rem; flex-shrink: 0; }
   }
-  .sticky-toolbar{ position: sticky; top: 3.5rem; z-index: 20; background: #f1f5f9; padding-top: 0.5rem; margin-top: -0.5rem; }
+  .sticky-toolbar{ position: sticky; top: 3.5rem; z-index: 20; background: rgb(var(--l-bg)); padding-top: 0.5rem; margin-top: -0.5rem; }
   @media (min-width: 1024px){ .sticky-toolbar{ top: 0; } }
   .sticky-toolbar.sticky-toolbar-card{ background: #fff; padding-top: 1rem; margin-top: 0; }
-  .sticky-thead th{ position: sticky; top: 3.5rem; z-index: 15; background: #fff; box-shadow: 0 1px 0 0 rgb(241 245 249); }
+  .sticky-thead th{ position: sticky; top: 3.5rem; z-index: 15; background: #fff; box-shadow: 0 1px 0 0 rgb(var(--l-line-soft)); }
   @media (min-width: 1024px){ .sticky-thead th{ top: 0; } }
 
   /* Purchase requisition form: keep the header fields pinned while scrolling a long list of items
@@ -55,11 +213,11 @@
      a fixed 3.5rem top bar below desktop width, none on desktop. Not pinned on phones or very short windows. */
   .pr-page{ container: prpage / inline-size; }
   .pr-top{ position: sticky; top: 3.5rem; z-index: 20; margin: -1rem -1rem 1.25rem; padding: 1rem 1rem .875rem;
-           background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+           background: rgb(var(--l-bg)); border-bottom: 1px solid rgb(var(--l-line)); }
   @media (min-width: 640px){ .pr-top{ margin-left: -1.5rem; margin-right: -1.5rem; padding-left: 1.5rem; padding-right: 1.5rem; } }
   @media (min-width: 1024px){ .pr-top{ top: 0; margin-left: -2.5rem; margin-right: -2.5rem; padding-left: 2.5rem; padding-right: 2.5rem; } }
   @media (max-width: 639px), (max-height: 599px){ .pr-top{ position: static; } }
-  html[data-theme="dark"] .pr-top{ background: #0f172a; border-bottom-color: #1e293b; }
+  html[data-theme="dark"] .pr-top{ background: rgb(var(--s-bg)); border-bottom-color: rgb(var(--s-surface)); }
   .pr-head{ display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: .875rem; }
   .pr-head-text{ flex: 1 1 0; min-width: 0; }
   .pr-head-actions{ display: flex; gap: .625rem; flex-shrink: 0; }
@@ -152,33 +310,33 @@
 
   /* ---------- Dark mode ---------- */
   html[data-theme="dark"]{ color-scheme: dark; }
-  html[data-theme="dark"] body.bg-slate-100{ background-color: #0f172a; }
-  html[data-theme="dark"] .bg-slate-100{ background-color: #334155; }
-  html[data-theme="dark"] .bg-slate-50{ background-color: #1e293b; }
-  html[data-theme="dark"] .bg-white{ background-color: #1e293b; }
+  html[data-theme="dark"] body.bg-slate-100{ background-color: rgb(var(--s-bg)); }
+  html[data-theme="dark"] .bg-slate-100{ background-color: rgb(var(--s-raised)); }
+  html[data-theme="dark"] .bg-slate-50{ background-color: rgb(var(--s-surface)); }
+  html[data-theme="dark"] .bg-white{ background-color: rgb(var(--s-surface)); }
   .donut-hole{ fill: #fff; }
-  html[data-theme="dark"] .donut-hole{ fill: #1e293b; }
+  html[data-theme="dark"] .donut-hole{ fill: rgb(var(--s-surface)); }
   .chart-gridline{ color: #e2e8f0; }
-  html[data-theme="dark"] .chart-gridline{ color: #334155; }
+  html[data-theme="dark"] .chart-gridline{ color: rgb(var(--s-raised)); }
   .chart-axis-label{ fill: #94a3b8; }
-  html[data-theme="dark"] .border-slate-100{ border-color: #334155; }
-  html[data-theme="dark"] .border-slate-200{ border-color: #334155; }
-  html[data-theme="dark"] .border-slate-300{ border-color: #475569; }
-  html[data-theme="dark"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]){ border-color: #334155; }
+  html[data-theme="dark"] .border-slate-100{ border-color: rgb(var(--s-raised)); }
+  html[data-theme="dark"] .border-slate-200{ border-color: rgb(var(--s-raised)); }
+  html[data-theme="dark"] .border-slate-300{ border-color: rgb(var(--s-line)); }
+  html[data-theme="dark"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]){ border-color: rgb(var(--s-raised)); }
   html[data-theme="dark"] .text-slate-900{ color: #f1f5f9; }
   html[data-theme="dark"] .text-slate-800{ color: #e2e8f0; }
   html[data-theme="dark"] .text-slate-700{ color: #cbd5e1; }
   html[data-theme="dark"] .text-slate-600{ color: #b4c0d3; }
   html[data-theme="dark"] .text-slate-500{ color: #a3b1c6; }
   html[data-theme="dark"] .text-slate-400{ color: #8394ad; }
-  html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea{ background-color: #0f172a; color: #e2e8f0; }
+  html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea{ background-color: rgb(var(--s-bg)); color: #e2e8f0; }
   html[data-theme="dark"] input::placeholder, html[data-theme="dark"] textarea::placeholder{ color: #7c8ba3; }
-  html[data-theme="dark"] .hover\:bg-slate-50:hover{ background-color: #273449; }
-  html[data-theme="dark"] .hover\:bg-slate-100:hover{ background-color: #334155; }
+  html[data-theme="dark"] .hover\:bg-slate-50:hover{ background-color: rgb(var(--s-hover)); }
+  html[data-theme="dark"] .hover\:bg-slate-100:hover{ background-color: rgb(var(--s-raised)); }
 
   /* Dark-mode readability: colours that were tuned for white backgrounds */
-  html[data-theme="dark"] .text-brand-600{ color: #a5b4fc; }
-  html[data-theme="dark"] .text-brand-700, html[data-theme="dark"] .text-brand-800{ color: #c7d2fe; }
+  html[data-theme="dark"] .text-brand-600{ color: rgb(var(--brand-300)); }
+  html[data-theme="dark"] .text-brand-700, html[data-theme="dark"] .text-brand-800{ color: rgb(var(--brand-200)); }
   html[data-theme="dark"] .text-rose-600{ color: #fb7185; }
   html[data-theme="dark"] .text-rose-700{ color: #fda4af; }
   html[data-theme="dark"] .text-emerald-600{ color: #34d399; }
@@ -186,25 +344,25 @@
   html[data-theme="dark"] .text-amber-700{ color: #fcd34d; }
   html[data-theme="dark"] .text-amber-800{ color: #fde68a; }
   /* tinted boxes/pills become dark translucent tints so their (now light) text stays readable */
-  html[data-theme="dark"] .bg-slate-200{ background-color: #334155; }
+  html[data-theme="dark"] .bg-slate-200{ background-color: rgb(var(--s-raised)); }
   html[data-theme="dark"] .bg-slate-50\/50{ background-color: rgba(148,163,184,.07); }
   html[data-theme="dark"] .bg-rose-50{ background-color: rgba(244,63,94,.12); }
   html[data-theme="dark"] .bg-rose-100{ background-color: rgba(244,63,94,.18); }
   html[data-theme="dark"] .bg-amber-50{ background-color: rgba(245,158,11,.12); }
   html[data-theme="dark"] .bg-amber-100{ background-color: rgba(245,158,11,.18); }
   html[data-theme="dark"] .bg-emerald-100{ background-color: rgba(16,185,129,.18); }
-  html[data-theme="dark"] .bg-brand-50{ background-color: rgba(99,102,241,.15); }
+  html[data-theme="dark"] .bg-brand-50{ background-color: rgb(var(--brand-500) / .15); }
   /* hover states that would otherwise turn dark-on-dark or flash a light background */
   html[data-theme="dark"] .hover\:text-slate-600:hover{ color: #e2e8f0; }
   html[data-theme="dark"] .hover\:text-slate-700:hover{ color: #f1f5f9; }
   html[data-theme="dark"] .hover\:text-rose-600:hover{ color: #fb7185; }
-  html[data-theme="dark"] .hover\:text-brand-600:hover{ color: #c7d2fe; }
-  html[data-theme="dark"] .hover\:bg-slate-200:hover{ background-color: #3d4c63; }
+  html[data-theme="dark"] .hover\:text-brand-600:hover{ color: rgb(var(--brand-200)); }
+  html[data-theme="dark"] .hover\:bg-slate-200:hover{ background-color: rgb(var(--s-hover2)); }
   html[data-theme="dark"] .hover\:bg-rose-50:hover{ background-color: rgba(244,63,94,.15); }
-  html[data-theme="dark"] .sticky-toolbar{ background-color: #0f172a; }
-  html[data-theme="dark"] .sticky-toolbar.sticky-toolbar-card{ background-color: #1e293b; }
-  html[data-theme="dark"] .sticky-thead th{ background-color: #1e293b; box-shadow: 0 1px 0 0 #334155; }
-  html[data-theme="dark"] ::-webkit-scrollbar-thumb{ background:#475569; }
+  html[data-theme="dark"] .sticky-toolbar{ background-color: rgb(var(--s-bg)); }
+  html[data-theme="dark"] .sticky-toolbar.sticky-toolbar-card{ background-color: rgb(var(--s-surface)); }
+  html[data-theme="dark"] .sticky-thead th{ background-color: rgb(var(--s-surface)); box-shadow: 0 1px 0 0 rgb(var(--s-raised)); }
+  html[data-theme="dark"] ::-webkit-scrollbar-thumb{ background:rgb(var(--s-line)); }
 
   .vh-bar{ height:6px; border-radius:999px; background:#e2e8f0; overflow:hidden; }
   .vh-bar i{ display:block; height:100%; border-radius:999px; background:#10b981; }
@@ -213,9 +371,9 @@
   .vh-grid{ stroke:#e2e8f0; } .vh-grid.base{ stroke:#cbd5e1; } .vh-xhair{ stroke:#94a3b8; stroke-dasharray:3 3; }
   .vh-hdot{ stroke:#fff; stroke-width:2; } .vh-slice{ stroke:#fff; stroke-width:2; stroke-linejoin:round; transition:opacity .12s; }
   .vh-tip{ position:absolute; pointer-events:none; background:#0f172a; color:#fff; border-radius:8px; padding:8px 11px; font-size:12px; line-height:1.5; box-shadow:0 6px 18px rgba(0,0,0,.25); z-index:5; min-width:140px; }
-  html[data-theme="dark"] .vh-bar{ background:#334155; } html[data-theme="dark"] .vh-ax{ fill:#94a3b8; } html[data-theme="dark"] .vh-pie-total{ fill:#f1f5f9; }
-  html[data-theme="dark"] .vh-grid{ stroke:#334155; } html[data-theme="dark"] .vh-grid.base{ stroke:#475569; } html[data-theme="dark"] .vh-hdot, html[data-theme="dark"] .vh-slice{ stroke:#1e293b; }
-  html[data-theme="dark"] .vh-tip{ background:#0b1220; border:1px solid #334155; }
+  html[data-theme="dark"] .vh-bar{ background:rgb(var(--s-raised)); } html[data-theme="dark"] .vh-ax{ fill:#94a3b8; } html[data-theme="dark"] .vh-pie-total{ fill:#f1f5f9; }
+  html[data-theme="dark"] .vh-grid{ stroke:rgb(var(--s-raised)); } html[data-theme="dark"] .vh-grid.base{ stroke:rgb(var(--s-line)); } html[data-theme="dark"] .vh-hdot, html[data-theme="dark"] .vh-slice{ stroke:rgb(var(--s-surface)); }
+  html[data-theme="dark"] .vh-tip{ background:rgb(var(--s-tip)); border:1px solid rgb(var(--s-raised)); }
   @media print{
     .no-print{ display:none !important; }
     body{ background:#fff; }
@@ -234,7 +392,7 @@
 <div class="min-h-screen flex" id="app-root">
 
   <!-- Mobile top bar -->
-  <header class="lg:hidden fixed top-0 inset-x-0 h-14 bg-slate-900 text-white flex items-center justify-between px-4 z-30">
+  <header class="app-chrome lg:hidden fixed top-0 inset-x-0 h-14 text-white flex items-center justify-between px-4 z-30">
     <button onclick="toggleSidebar(true)" class="p-2 -ml-2 rounded hover:bg-slate-800">
       <svg width="24" height="24" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
@@ -246,12 +404,11 @@
   <div id="sidebar-backdrop" onclick="toggleSidebar(false)" class="fixed inset-0 bg-slate-900/50 z-30 hidden lg:hidden"></div>
 
   <!-- Sidebar -->
-  <aside id="sidebar" class="fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 left-0 w-64 bg-slate-900 text-slate-200 flex flex-col z-40 -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-out">
+  <aside id="sidebar" class="fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 left-0 w-64 app-chrome text-slate-200 flex flex-col z-40 -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-out">
     <div class="px-4 py-5 border-b border-white/10 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2.5 min-w-0"><img data-logo alt="" class="w-9 h-9 rounded-lg shrink-0"><div class="text-[16px] font-extrabold tracking-tight text-white whitespace-nowrap">Admin Database</div></div>
-      <button onclick="toggleTheme()" id="theme-toggle-btn" title="Switch theme" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white">
-        <svg id="theme-icon-sun" width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" class="hidden"><circle cx="10" cy="10" r="3.2"/><path stroke-linecap="round" d="M10 2.5v1.8M10 15.7v1.8M17.5 10h-1.8M4.3 10H2.5M15.3 4.7l-1.27 1.27M5.97 14.03L4.7 15.3M15.3 15.3l-1.27-1.27M5.97 5.97L4.7 4.7"/></svg>
-        <svg id="theme-icon-moon" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 10.8A7.5 7.5 0 0 1 9.2 3 7.5 7.5 0 1 0 17 10.8z"/></svg>
+      <button onclick="openAppearanceModal()" id="theme-toggle-btn" title="Appearance: light/dark mode and colour scheme" aria-label="Appearance" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path stroke-linejoin="round" d="M10 2.5a7.5 7.5 0 0 0 0 15c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.5 1.6-1.5h1.8a3.3 3.3 0 0 0 3.3-3.3C17.5 5.5 14.1 2.5 10 2.5z"/><circle cx="6.3" cy="9.3" r="1" fill="currentColor" stroke="none"/><circle cx="8.6" cy="6.1" r="1" fill="currentColor" stroke="none"/><circle cx="12.4" cy="6.1" r="1" fill="currentColor" stroke="none"/></svg>
       </button>
     </div>
     <nav id="nav-list" class="flex-1 px-3 py-4 space-y-1 overflow-y-auto"></nav>
@@ -330,9 +487,12 @@ const ui = {
   productsFilter: { search:'', category:'' },
   movementsFilter: { search:'', type:'', locationId:'', acquisition:'', dateFrom:'', dateTo:'' },
   movementsView: 'log',
-  reportView: 'log',
+  reportView: 'location',
   trendDateFrom: new Date().getFullYear()+'-01-01',
   trendDateTo: new Date().getFullYear()+'-12-31',
+  locValDateFrom: new Date().getFullYear()+'-01-01',
+  locValDateTo: new Date().getFullYear()+'-12-31',
+  locValLocationId: '',
   assetsFilter: { search:'', locationId:'', department:'' },
   assetTransactionsFilter: { search:'', locationId:'', dateFrom:'', dateTo:'' },
   prStatusFilter: '',
@@ -1435,6 +1595,7 @@ const ICONS = {
   locations:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 4.5 7 3l6 2 4.5-1.5v11L13 16l-6-2-4.5 1.5z"/><path d="M7 3v11M13 5v11"/></svg>',
   pr:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5.5 2.5h7l3 3v12h-10z"/><path d="M12.5 2.5v3h3"/><path d="M7 10.5h6M7 13h6M7 8h3"/></svg>',
   key:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6.5" cy="10" r="3.2"/><path stroke-linecap="round" d="M9.7 10H17M14.5 10v2.8M17 10v2"/></svg>',
+  coins:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="8" cy="5.5" rx="5" ry="2.2"/><path d="M3 5.5v3c0 1.2 2.2 2.2 5 2.2s5-1 5-2.2v-3M3 8.5v3c0 1.2 2.2 2.2 5 2.2"/><ellipse cx="13" cy="13" rx="4.5" ry="2"/><path d="M8.5 13v2.5c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V13"/></svg>',
   cash:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/><path d="M5 8.2v3.6M15 8.2v3.6"/></svg>',
   statement:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 2.5h7l3.5 3.5V17a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z"/><path d="M12 2.5V6h3.5"/><path d="M7 10h6M7 13h6"/></svg>',
   vehicle:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11l1.5-4.5A2 2 0 0 1 6.4 5h7.2a2 2 0 0 1 1.9 1.5L17 11"/><rect x="2.5" y="11" width="15" height="4.5" rx="1.5"/><circle cx="6" cy="13.3" r=".7"/><circle cx="14" cy="13.3" r=".7"/></svg>',
@@ -1463,6 +1624,7 @@ function currentNav(){
     { section:'Asset Management' },
     { id:'assets', label:'Assets', icon:'assets' },
     { id:'asset-transactions', label:'Asset Movements', icon:'assettx' },
+    { id:'asset-report', label:'Report', icon:'chart' },
     { section:'Vehicle Management' },
     { id:'vehicles', label:'Vehicles', icon:'vehicle', badge:vAlerts.length, tone:tone(vAlerts) },
     { id:'fueling', label:'Fueling', icon:'fuel', badge:rAlerts.length, tone:tone(rAlerts) },
@@ -1471,6 +1633,7 @@ function currentNav(){
     { section:'Petty Cash Management' },
     { id:'petty-cash', label:'Petty Cash Request', icon:'cash', badge:pcAwaiting, tone:'warn' },
     { id:'petty-statement', label:'Statement', icon:'statement' },
+    { id:'petty-count', label:'Cash Count', icon:'coins' },
     { section:'Manage' },
     { id:'handovers', label:'Handovers', icon:'handover' },
     { id:'keys', label:'Key Registry', icon:'key' },
@@ -3888,7 +4051,7 @@ function pcFillStatementSheet(xml, s, ctx){
   if(ctx.prev){ const pv = "'" + ctx.prev.replace(/'/g, "''") + "'"; setFormula('X4', pv + '!X27', 0); setFormula('X5', pv + '!T28', ctx.prevTotal); setCached('X6', ctx.prevTotal); }
   // cash at hand: the quantity counted for each denomination
   const counts = ctx.cash || {}; let cashTotal = 0;
-  PC_DENOMS.forEach((d, i) => { const q = Math.max(0, Math.floor(vNum(counts[String(d)]))), t = pcRound(d * q); cashTotal += t; if(q) setNum('W' + (14 + i), q); setCached('X' + (14 + i), t); });
+  PC_DENOMS.forEach((d, i) => { const q = Math.max(0, Math.floor(vNum(counts[String(d)]))), t = pcRound(d * q); cashTotal += t; setNum('W' + (14 + i), q); setCached('X' + (14 + i), t); });
   cashTotal = pcRound(cashTotal); setCached('X27', cashTotal);
   const adv = pcRound(vNum(ctx.pending)); if(adv > 0) setNum('X10', adv);          // pending replenishment: closed statements not yet paid back, and cash handed out awaiting an invoice
   const totalCash = pcRound(grand + cashTotal + adv), unbalanced = pcRound(vNum(ctx.float) - totalCash);
@@ -3986,7 +4149,7 @@ function openPcCashCount(fundId){
   openModal('Cash at hand — ' + f.name, `
     <div class="text-[12.5px] text-slate-500 mb-3">Enter how many notes and coins of each kind are in the petty cash, and any amount waiting to be replenished. You can update this at any time.${cnt ? `<br>Last counted ${esc(new Date(cnt.countedAt).toLocaleString())} by ${esc(cnt.countedBy || '')}.` : ''}</div>
     <table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wider text-slate-400"><th class="py-1.5 font-semibold">Denomination</th><th class="py-1.5 font-semibold w-32">Quantity</th><th class="py-1.5 font-semibold text-right">Total MVR</th></tr></thead>
-      <tbody id="pc-count-body" data-expected="${rc.expected}" data-tracked="${rc.tracked}">${PC_DENOMS.map(d => `<tr class="border-t border-slate-100"><td class="py-1.5 font-semibold text-slate-700 num">${d}</td><td class="py-1.5"><input type="number" min="0" step="1" data-d="${d}" value="${esc(counts[String(d)] || '')}" oninput="pcCountRecalc()" class="${VEH_FIELD} !py-1.5"></td><td class="py-1.5 text-right num pc-ct">0.00</td></tr>`).join('')}</tbody></table>
+      <tbody id="pc-count-body" data-expected="${rc.expected}" data-tracked="${rc.tracked}">${PC_DENOMS.map(d => `<tr class="border-t border-slate-100"><td class="py-1.5 font-semibold text-slate-700 num">${d}</td><td class="py-1.5"><input type="number" min="0" step="1" data-d="${d}" value="${esc(counts[String(d)] || '')}" placeholder="0" oninput="pcCountRecalc()" class="${VEH_FIELD} !py-1.5"></td><td class="py-1.5 text-right num pc-ct">0.00</td></tr>`).join('')}</tbody></table>
     <div class="border-t border-slate-200 mt-1 pt-3 grid grid-cols-2 gap-y-2.5 text-sm items-center">
       <span class="text-slate-500">Cash at hand</span><span id="pc-count-total" class="text-right font-bold num">MVR 0.00</span>
       <span class="text-slate-700 font-semibold">Pending replenishment<span class="block text-[11px] font-normal text-slate-400">Money waiting to come back to the petty cash (MVR)</span></span><input type="number" min="0" step="0.01" id="pc-count-pending" value="${rc.manual ? esc(String(rc.manual)) : ''}" placeholder="0.00" oninput="pcCountRecalc()" class="${VEH_FIELD} !py-1.5 text-right">
@@ -4005,6 +4168,201 @@ async function savePcCashCount(fundId){
   await vehSave('pettyCounts', { id:fundId, counts, total, pendingManual:manual, countedAt:at, countedBy:authUser ? authUser.name : '', countedByUid:authUser ? authUser.uid : '', log:((prev && prev.log) || []).concat([{ at, by:authUser ? authUser.name : '', total, pendingManual:manual, diff }]).slice(-10) });
   closeModal();
   if(Math.abs(diff) < 0.005) toast('Cash count saved. It balances.'); else toast('Cash count saved. The cash is ' + (diff > 0 ? 'short by ' : 'over by ') + fmtMVR(Math.abs(diff)) + '.', true);
+}
+
+
+/* =====================================================================
+   PETTY CASH — CASH COUNT page: the month-end cash count, filled in like the "Cash at hand" window,
+   saved to the same record, and exported as CSV or PDF in the finance "Month-end Cash Count" layout.
+   An empty quantity always counts (and exports) as 0.
+===================================================================== */
+const pcCcQty = v => Math.max(0, Math.floor(vNum(v)));
+const pcCcDenomLabel = d => d >= 1 ? String(d) : d.toFixed(2);
+const pcCcDmy = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; };
+function pcCcFund(){
+  const funds = pcFundList();
+  if(!funds.some(f => f.id === vehUi.ccFund)) vehUi.ccFund = (funds.find(f => pcCanCount(f.id)) || funds[0] || {}).id || '';
+  return pcFund(vehUi.ccFund);
+}
+// the sheet being filled in for a fund: starts from the last saved count, then keeps what has been typed (so a live refresh never loses it)
+function pcCcDraft(fundId){
+  vehUi.ccDraft = vehUi.ccDraft || {};
+  if(!vehUi.ccDraft[fundId]){
+    const cnt = pcCountOf(fundId), sh = (cnt && cnt.sheet) || {}, me = authUser || {};
+    vehUi.ccDraft[fundId] = {
+      counts: Object.assign({}, (cnt && cnt.counts) || {}), pending: cnt && vNum(cnt.pendingManual) ? String(cnt.pendingManual) : '',
+      date: vToday(),
+      pName: sh.pName || me.name || '', pTitle: sh.pTitle || me.designation || '', pDept: sh.pDept || me.department || '',
+      cName: sh.cName || '', cTitle: sh.cTitle || '', cDept: sh.cDept || '',
+    };
+  }
+  return vehUi.ccDraft[fundId];
+}
+function pcCcPerson(name){
+  const n = String(name || '').trim().toLowerCase(); if(!n) return null;
+  const pr = state.profiles.find(x => String(x.name || '').trim().toLowerCase() === n);
+  if(pr) return pr;
+  return authUser && String(authUser.name || '').trim().toLowerCase() === n ? authUser : null;
+}
+// fill designation / department from the user's details (always on a name change; otherwise only where still empty,
+// which also covers user details that finish loading after the page first opened)
+function pcCcFillPerson(dr, k, overwrite){
+  const pr = pcCcPerson(dr[k + 'Name']); if(!pr) return;
+  if(pr.designation && (overwrite || !dr[k + 'Title'])) dr[k + 'Title'] = pr.designation;
+  if(pr.department && (overwrite || !dr[k + 'Dept'])) dr[k + 'Dept'] = pr.department;
+}
+function pcCcRows(dr){ return PC_DENOMS.map(d => { const q = pcCcQty(dr.counts[String(d)]); return { d, q, amt: pcRound(d * q) }; }); }
+function pcCcSet(field, el){
+  const f = pcCcFund(); if(!f) return; const dr = pcCcDraft(f.id);
+  if(field === 'qty') dr.counts[el.dataset.d] = el.value; else dr[field] = el.value;
+  if(field === 'pName' || field === 'cName'){                              // a known user: take their designation and department from their user details
+    const k = field[0]; pcCcFillPerson(dr, k, true);
+    ['Title', 'Dept'].forEach(suf => { const box = document.getElementById('cc-' + k + suf); if(box) box.value = dr[k + suf] || ''; });
+  }
+  pcCcRecalc();
+}
+function pcCcRecalc(){
+  const f = pcCcFund(); if(!f) return; const dr = pcCcDraft(f.id), rc = pcReconcile(f);
+  let total = 0;
+  pcCcRows(dr).forEach(r => { total += r.amt; const c = document.getElementById('cc-amt-' + String(r.d).replace('.', '_')); if(c) c.textContent = pcMoneyPlain(r.amt); });
+  total = pcRound(total);
+  const bal = pcRound(total + rc.tracked + Math.max(0, vNum(dr.pending))), diff = pcRound(rc.expected - bal);
+  const set = (id, t) => { const e = document.getElementById(id); if(e) e.textContent = t; };
+  set('cc-total', fmtMVR(total)); set('cc-balance', fmtMVR(bal));
+  const el = document.getElementById('cc-diff');
+  if(el){ el.className = 'text-right text-sm font-bold ' + (Math.abs(diff) < 0.005 ? 'text-emerald-600' : 'text-rose-600'); el.textContent = Math.abs(diff) < 0.005 ? 'Balanced ✓' : (diff > 0 ? 'Short ' : 'Over ') + fmtMVR(Math.abs(diff)); }
+}
+function pcCcReset(){
+  const f = pcCcFund(); if(!f) return;
+  const dr = pcCcDraft(f.id); dr.counts = {}; dr.pending = ''; rerenderMain();
+}
+function viewPettyCashCount(){
+  const f = pcCcFund();
+  const actions = f ? vBtnPlain('Export CSV', 'pcCcCsv()') + vBtnPlain('Export PDF', 'pcCcPdf(this)') : '';
+  const head = vHead('Cash Count', 'Month-end cash count for a petty cash fund. Empty quantities count as 0.', actions);
+  if(!f) return head + vEmpty('Add a location first.');
+  const dr = pcCcDraft(f.id), cnt = pcCountOf(f.id), rc = pcReconcile(f), can = pcCanCount(f.id), dis = can ? '' : 'disabled';
+  pcCcFillPerson(dr, 'p', false); pcCcFillPerson(dr, 'c', false);
+  const funds = pcFundList().map(x => `<option value="${esc(x.id)}" ${x.id === f.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+  const people = state.profiles.map(p => `<option value="${esc(p.name || '')}"></option>`).join('');
+  const field = (label, id, key, ph) => `<label class="block"><span class="block text-xs font-semibold text-slate-500 mb-1">${label}</span><input id="${id}" value="${esc(dr[key] || '')}" placeholder="${esc(ph || '')}" oninput="pcCcSet('${key}', this)" ${key.endsWith('Name') ? 'list="cc-people"' : ''} class="${VEH_FIELD}"></label>`;
+  const rows = pcCcRows(dr).map(r => `
+    <tr class="border-t border-slate-100">
+      <td class="py-1.5 pl-5 sm:pl-6 font-semibold text-slate-700 num">${pcCcDenomLabel(r.d)}</td>
+      <td class="py-1.5"><input type="number" min="0" step="1" data-d="${r.d}" value="${esc(dr.counts[String(r.d)] || '')}" placeholder="0" oninput="pcCcSet('qty', this)" ${dis} class="${VEH_FIELD} !py-1.5 max-w-[9rem]"></td>
+      <td class="py-1.5 pr-5 sm:pr-6 text-right num text-slate-700" id="cc-amt-${String(r.d).replace('.', '_')}">${pcMoneyPlain(r.amt)}</td>
+    </tr>`).join('');
+  setTimeout(pcCcRecalc, 0);
+  return head + `
+    <div class="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 mb-5 grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+      <label class="block"><span class="block text-xs font-semibold text-slate-500 mb-1">Location / fund</span>
+        <select onchange="vehUi.ccFund=this.value; rerenderMain();" class="${VEH_INPUT} w-full">${funds}</select></label>
+      <label class="block"><span class="block text-xs font-semibold text-slate-500 mb-1">Date</span>
+        <input type="date" value="${esc(dr.date)}" onchange="pcCcSet('date', this)" class="${VEH_FIELD}"></label>
+      <div class="text-[12px] text-slate-500">${cnt ? `Last saved ${esc(new Date(cnt.countedAt).toLocaleString())}${cnt.countedBy ? ' by ' + esc(cnt.countedBy) : ''}.` : 'Not counted yet.'}${can ? '' : '<br><span class="text-amber-700">Only the petty cash custodian (or an admin) can save a count here. You can still export.</span>'}</div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-6">
+      <div class="lg:col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+          <h2 class="text-sm font-bold text-slate-900">${esc(f.name)} Petty Cash</h2>
+          ${can ? `<button onclick="pcCcReset()" class="text-xs font-semibold text-slate-500 hover:text-rose-600">Clear quantities</button>` : ''}
+        </div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-[11px] uppercase tracking-wider text-slate-400"><th class="py-2 pl-5 sm:pl-6 font-semibold">MVR</th><th class="py-2 font-semibold">Qty</th><th class="py-2 pr-5 sm:pr-6 font-semibold text-right">Amount</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr class="border-t-2 border-slate-200"><td class="py-3 pl-5 sm:pl-6 font-bold text-slate-900" colspan="2">Total</td><td id="cc-total" class="py-3 pr-5 sm:pr-6 text-right font-extrabold text-slate-900 num">MVR 0.00</td></tr></tfoot>
+        </table>
+      </div>
+
+      <div class="lg:col-span-2 flex flex-col gap-5">
+        <div class="bg-white rounded-xl border border-slate-200 p-5">
+          <h2 class="text-sm font-bold text-slate-900 mb-3">Balance check</h2>
+          <div class="grid grid-cols-2 gap-y-2.5 text-sm items-center">
+            <span class="text-slate-700 font-semibold">Pending replenishment<span class="block text-[11px] font-normal text-slate-400">Money waiting to come back (MVR)</span></span>
+            <input type="number" min="0" step="0.01" value="${esc(dr.pending || '')}" placeholder="0.00" oninput="pcCcSet('pending', this)" ${dis} class="${VEH_FIELD} !py-1.5 text-right">
+            ${rc.tracked ? `<span class="text-slate-500 text-[12.5px]">Also tracked by the app</span><span class="text-right num text-[12.5px]">${fmtMVR(rc.tracked)}</span>` : ''}
+            <span class="text-slate-700 font-semibold">Cash balance<span class="block text-[11px] font-normal text-slate-400">cash at hand + pending replenishment</span></span><span id="cc-balance" class="text-right font-bold num">MVR 0.00</span>
+            <span class="text-slate-500">Expected<span class="block text-[11px] text-slate-400">assigned balance − amount used</span></span><span class="text-right num">${fmtMVR(rc.expected)}</span>
+            <span class="text-slate-500">Unbalanced</span><span id="cc-diff" class="text-right"></span>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-5">
+          <h2 class="text-sm font-bold text-slate-900 mb-3">Signatories</h2>
+          <datalist id="cc-people">${people}</datalist>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+            <div class="space-y-2"><div class="text-xs font-bold text-slate-700">Prepared by</div>${field('Name', 'cc-pName', 'pName')}${field('Designation', 'cc-pTitle', 'pTitle')}${field('Department', 'cc-pDept', 'pDept')}</div>
+            <div class="space-y-2"><div class="text-xs font-bold text-slate-700">Checked by</div>${field('Name', 'cc-cName', 'cName')}${field('Designation', 'cc-cTitle', 'cTitle')}${field('Department', 'cc-cDept', 'cDept', 'Accounting & Finance')}</div>
+          </div>
+        </div>
+
+        ${can ? `<button id="cc-save" onclick="pcCcSave()" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">Save cash count</button>` : ''}
+      </div>
+    </div>`;
+}
+async function pcCcSave(){
+  const f = pcCcFund(); if(!f || !pcCanCount(f.id)) return;
+  const dr = pcCcDraft(f.id), counts = {};
+  pcCcRows(dr).forEach(r => { if(r.q) counts[String(r.d)] = r.q; });
+  const total = pcCountTotal(counts), prev = pcCountOf(f.id), rc = pcReconcile(f), manual = Math.max(0, vNum(dr.pending)), diff = pcRound(rc.expected - rc.tracked - manual - total), at = Date.now();
+  const sheet = { date: dr.date, pName: dr.pName, pTitle: dr.pTitle, pDept: dr.pDept, cName: dr.cName, cTitle: dr.cTitle, cDept: dr.cDept };
+  const btn = document.getElementById('cc-save'); if(btn) btn.disabled = true;
+  try{
+    await vehSave('pettyCounts', { id:f.id, counts, total, pendingManual:manual, sheet, countedAt:at, countedBy:authUser ? authUser.name : '', countedByUid:authUser ? authUser.uid : '', log:((prev && prev.log) || []).concat([{ at, by:authUser ? authUser.name : '', total, pendingManual:manual, diff }]).slice(-10) });
+    if(Math.abs(diff) < 0.005) toast('Cash count saved. It balances.'); else toast('Cash count saved. The cash is ' + (diff > 0 ? 'short by ' : 'over by ') + fmtMVR(Math.abs(diff)) + '.', true);
+  } finally { if(btn && btn.isConnected) btn.disabled = false; }
+}
+function pcCcFileBase(f, dr){ return 'Cash_Count_' + String(f.name || 'Fund').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + (dr.date || vToday()); }
+function pcCcCsv(){
+  const f = pcCcFund(); if(!f) return; const dr = pcCcDraft(f.id); pcCcFillPerson(dr, 'p', false); pcCcFillPerson(dr, 'c', false); const rows = pcCcRows(dr), total = pcRound(rows.reduce((a, r) => a + r.amt, 0));
+  const L = [['Month-end Cash Count'], ['Location:', f.name], ['Date:', pcCcDmy(dr.date)], [], [f.name + ' Petty Cash'], ['MVR', 'Qty', 'Amount']];
+  rows.forEach(r => L.push([pcCcDenomLabel(r.d), r.q, r.amt.toFixed(2)]));
+  L.push(['Total', '', total.toFixed(2)], [], ['Prepared by:', '', 'Checked by:'], [dr.pName || '', '', dr.cName || ''], [dr.pTitle || '', '', dr.cTitle || ''], [dr.pDept || '', '', dr.cDept || '']);
+  const nl = String.fromCharCode(13) + String.fromCharCode(10);
+  const blob = new Blob(['﻿' + L.map(r => r.map(csvCell).join(',')).join(nl)], { type:'text/csv;charset=utf-8;' });
+  downloadBlob(blob, pcCcFileBase(f, dr) + '.csv');
+}
+async function buildCashCountPdf(f, dr){
+  const pg = new PdfPage(PCA4_H), rows = pcCcRows(dr), total = pcRound(rows.reduce((a, r) => a + r.amt, 0)), K = [0, 0, 0];
+  const center = (x0, x1, base, t, o) => pg.text(x0 + ((x1 - x0) - pdfTextWidth(t, !!(o && o.bold), (o && o.size) || 9)) / 2, base, t, o);
+  const W = PCA4_W;
+  center(0, W, 150, 'Month-end Cash Count', { bold:true, size:15 });
+  const X = [205, 268, 326, 392];                         // MVR | Qty | Amount
+  pg.text(X[0] + 8, 182, 'Location:', { size:9.5 }); pg.text(X[0] + 58, 182, f.name, { bold:true, size:9.5 });
+  pg.text(X[0] + 8, 197, 'Date:', { size:9.5 });     pg.text(X[0] + 58, 197, pcCcDmy(dr.date), { bold:true, size:9.5 });
+  const RH = 16.5; let y = 222;
+  const hl = yy => pg.line(X[0], yy, X[3], yy, K, 0.6), vl = (xx, y0, y1) => pg.line(xx, y0, xx, y1, K, 0.6);
+  const top = y;
+  center(X[0], X[3], y + 11.8, f.name + ' Petty Cash', { bold:true, size:9 }); hl(y); y += RH; hl(y);
+  [['MVR', 0], ['Qty', 1], ['Amount', 2]].forEach(([t, i]) => center(X[i], X[i + 1], y + 11.8, t, { bold:true, size:9 })); y += RH; hl(y);
+  const colTop = top + RH;
+  rows.forEach(r => {
+    center(X[0], X[1], y + 11.8, pcCcDenomLabel(r.d), { size:9 });
+    center(X[1], X[2], y + 11.8, String(r.q), { size:9 });
+    center(X[2], X[3], y + 11.8, pcMoneyPlain(r.amt), { size:9 });
+    y += RH; hl(y);
+  });
+  vl(X[0], top, y); vl(X[3], top, y); vl(X[1], colTop, y); vl(X[2], colTop, y);
+  center(X[0], X[2], y + 12, 'Total', { size:9 });
+  const tt = pcMoneyPlain(total); center(X[2], X[3], y + 12, tt, { bold:true, size:9 });
+  pg.line(X[2] + 4, y + 15.5, X[3] - 4, y + 15.5, K, 0.6); pg.line(X[2] + 4, y + 17.5, X[3] - 4, y + 17.5, K, 0.6);
+  // signatories
+  const L0 = [150, 300], R0 = [300, 450], sy = y + 62;
+  center(L0[0], L0[1], sy, 'Prepared by:', { bold:true, size:9.5 }); center(R0[0], R0[1], sy, 'Checked by:', { bold:true, size:9.5 });
+  pg.line(L0[0] + 22, sy + 58, L0[1] - 22, sy + 58, [0.6, 0.6, 0.6], 0.5); pg.line(R0[0] + 22, sy + 58, R0[1] - 22, sy + 58, [0.6, 0.6, 0.6], 0.5);
+  [[dr.pName, dr.pTitle, dr.pDept, L0], [dr.cName, dr.cTitle, dr.cDept, R0]].forEach(([n, t, d, c]) => {
+    let b = sy + 74; [n, t, d].forEach(line => { if(line){ pdfWrap(line, true, 9.5, c[1] - c[0] - 6).forEach(w => { center(c[0], c[1], b, w, { bold:true, size:9.5 }); b += 13.5; }); } else b += 13.5; });
+  });
+  return pcPdfFinish([{ ops: pg.ops }], { title:'', number:'', docTitle:'Month-end Cash Count ' + f.name + ' ' + (dr.date || ''), pageNumbers:false });
+}
+async function pcCcPdf(btn){
+  const f = pcCcFund(); if(!f) return; const dr = pcCcDraft(f.id); pcCcFillPerson(dr, 'p', false); pcCcFillPerson(dr, 'c', false);
+  const label = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ downloadBlob(await buildCashCountPdf(f, dr), pcCcFileBase(f, dr) + '.pdf'); toast('Cash count PDF downloaded.'); }
+  catch(e){ console.error(e); toast('Could not create the PDF: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = label; } }
 }
 
 function pcStTab(k){ vehUi.stTab = k; rerenderMain(); }
@@ -4410,12 +4768,14 @@ function render(){
     else if(ui.tab==='assets') el.innerHTML = viewAssets();
     else if(ui.tab==='asset-detail') el.innerHTML = viewAssetDetail();
     else if(ui.tab==='asset-transactions') el.innerHTML = viewAssetTransactions();
+    else if(ui.tab==='asset-report') el.innerHTML = viewAssetReport();
     else if(ui.tab==='purchase-requisitions') el.innerHTML = viewPurchaseRequisitions();
     else if(ui.tab==='handovers') el.innerHTML = viewHandovers();
     else if(ui.tab==='vehicles') el.innerHTML = viewVehicles();
     else if(ui.tab==='petty-cash') el.innerHTML = viewPettyCash();
     else if(ui.tab==='keys') el.innerHTML = viewKeyRegistry();
     else if(ui.tab==='petty-statement') el.innerHTML = viewPettyCashStatement();
+    else if(ui.tab==='petty-count') el.innerHTML = viewPettyCashCount();
     else if(ui.tab==='vehicle-detail') el.innerHTML = viewVehicleDetail();
     else if(ui.tab==='fueling') el.innerHTML = viewFueling();
     else if(ui.tab==='servicing') el.innerHTML = viewServicing();
@@ -4760,64 +5120,110 @@ function lineChartSvg(series, labels, width, height){
 /* =====================================================================
    VIEW: DASHBOARD
 ===================================================================== */
-function viewDashboard(){
-  const low = lowStockProducts();
+/* ---------- Dashboard: one summary card per section of the app ---------- */
+function dashboardModuleSummary(){
+  const month = localDateStr(new Date()).slice(0,7);
+  const inMonth = d => !!d && String(d).slice(0,7) === month;
+  const metric = (value, label) => `<div class="min-w-0"><div class="text-lg font-extrabold text-slate-900 num leading-tight truncate">${value}</div><div class="text-[11px] text-slate-500 mt-0.5 leading-snug">${label}</div></div>`;
+  const note = (text, tone) => {
+    const cls = tone === 'crit' ? 'bg-rose-100 text-rose-700' : tone === 'warn' ? 'bg-amber-100 text-amber-700' : 'text-slate-400';
+    return `<span class="inline-block text-[11px] font-semibold ${tone ? 'px-2 py-0.5 rounded-full ' : ''}${cls}">${text}</span>`;
+  };
+  const card = (tab, icon, title, metrics, notes) => `
+    <button type="button" onclick="goTo('${tab}')" class="group text-left bg-white rounded-xl border border-slate-200 p-4 sm:p-5 hover:border-brand-300 transition-colors flex flex-col">
+      <div class="flex items-center gap-2.5 mb-4">
+        <span class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">${ICONS[icon] || ''}</span>
+        <span class="text-sm font-bold text-slate-900 flex-1 min-w-0 truncate">${title}</span>
+        <span class="text-slate-400 group-hover:text-brand-600 text-sm">→</span>
+      </div>
+      <div class="grid grid-cols-3 gap-3 mb-3">${metrics.join('')}</div>
+      <div class="mt-auto flex flex-wrap gap-1.5 pt-1">${notes.filter(Boolean).join('') || note('All clear')}</div>
+    </button>`;
+  const safe = fn => { try{ return fn(); }catch(e){ console.warn('Dashboard summary card failed', e); return ''; } };
+  const plural = (n, one, many) => fmtNum(n) + ' ' + (n === 1 ? one : (many || one + 's'));
+
+  const cards = [
+    safe(() => {
+      const low = lowStockProducts().length;
+      const mv = state.movements.filter(m => inMonth(m.date));
+      const inQ = mv.filter(m => m.type === 'in').reduce((a, m) => a + (Number(m.quantity)||0), 0);
+      const outQ = mv.filter(m => m.type === 'out').reduce((a, m) => a + (Number(m.quantity)||0), 0);
+      const pend = state.itemTransfers.filter(t => t.status === 'pending').length;
+      return card('products', 'products', 'Stock Inventory',
+        [metric(fmtNum(state.products.length), 'Items'), metric(fmtNum(totalUnits()), 'Units in stock'), metric(fmtNum(low), 'Low stock')],
+        [note('+' + fmtNum(inQ) + ' in · −' + fmtNum(outQ) + ' out this month'), pend ? note(plural(pend, 'transfer') + ' pending', 'warn') : '', low ? note(plural(low, 'item') + ' low', 'warn') : '']);
+    }),
+    safe(() => {
+      const total = state.assets.length, active = state.assets.filter(a => a.status !== 'retired').length;
+      const moved = state.assetTransfers.filter(t => inMonth(t.date)).length;
+      return card('assets', 'assets', 'Assets',
+        [metric(fmtNum(total), 'Total'), metric(fmtNum(active), 'Active'), metric(fmtNum(total - active), 'Retired')],
+        [note(plural(moved, 'movement') + ' this month')]);
+    }),
+    safe(() => {
+      const vs = state.vehicles, al = vehAlerts().filter(a => !a.reqId);
+      const crit = al.filter(a => a.st.k === 'crit').length, warn = al.length - crit;
+      return card('vehicles', 'vehicle', 'Vehicles',
+        [metric(fmtNum(vs.length), 'Vehicles'), metric(fmtNum(vs.filter(v => (v.status || 'Active') === 'Active').length), 'Active'), metric(fmtNum(al.length), 'Alerts')],
+        [crit ? note(fmtNum(crit) + ' expired / overdue', 'crit') : '', warn ? note(fmtNum(warn) + ' due soon', 'warn') : '']);
+    }),
+    safe(() => {
+      const fr = state.fuelRecords.filter(r => inMonth(r.date)), ra = vehReqAlerts();
+      const dep = ra.filter(a => a.st.k === 'crit').length;
+      return card('fueling', 'fuel', 'Fueling',
+        [metric(fmtNum(Math.round(fr.reduce((a, r) => a + vNum(r.litres), 0))), 'Litres this month'), metric(vMoney0(fr.reduce((a, r) => a + vNum(r.total), 0)), 'Cost this month'), metric(fmtNum(fr.length), 'Fill-ups this month')],
+        [dep ? note(plural(dep, 'requisition') + ' depleted', 'crit') : '', ra.length - dep ? note(plural(ra.length - dep, 'requisition') + ' low', 'warn') : '']);
+    }),
+    safe(() => {
+      const sr = state.serviceRecords, mo = sr.filter(r => inMonth(r.date));
+      const open = sr.filter(r => r.kind === 'incident' && r.status !== 'Resolved').length;
+      const due = vehAlerts().filter(a => a.s && a.s.label === 'Periodic service').length;
+      return card('servicing', 'service', 'Servicing',
+        [metric(fmtNum(mo.length), 'Records this month'), metric(vMoney0(mo.reduce((a, r) => a + vNum(r.cost), 0)), 'Cost this month'), metric(fmtNum(open), 'Open issues')],
+        [due ? note(plural(due, 'service') + ' due', 'warn') : '', open ? note(plural(open, 'issue') + ' unresolved', 'warn') : '']);
+    }),
+    safe(() => {
+      const pc = state.pettyCash, mo = pc.filter(r => inMonth(r.date));
+      const st = pc.map(r => pcStatus(r).key);
+      const sign = st.filter(k => k === 'sign').length, inv = st.filter(k => k === 'invoice').length, proc = st.filter(k => k === 'process').length;
+      const mine = authUser ? pc.filter(r => pcCanSign(r) && !pcSigned(r)).length : 0;
+      return card('petty-cash', 'cash', 'Petty Cash',
+        [metric(fmtNum(mo.length), 'Requests this month'), metric(fmtMVR(mo.reduce((a, r) => a + pcTotal(r), 0)).replace('.00', ''), 'Requested this month'), metric(fmtNum(proc), 'To process')],
+        [mine ? note(fmtNum(mine) + ' awaiting your signature', 'crit') : '', sign ? note(fmtNum(sign) + ' awaiting signature', 'warn') : '', inv ? note(fmtNum(inv) + ' awaiting invoice', 'warn') : '']);
+    }),
+    safe(() => {
+      const ho = state.handovers, unsigned = ho.filter(h => !(h.fromSignature && h.fromSignature.image && h.toSignature && h.toSignature.image)).length;
+      return card('handovers', 'handover', 'Handovers',
+        [metric(fmtNum(ho.length), 'Total'), metric(fmtNum(ho.filter(h => inMonth(h.handoverDate)).length), 'This month'), metric(fmtNum(unsigned), 'Not fully signed')],
+        [unsigned ? note(plural(unsigned, 'handover') + ' awaiting signature', 'warn') : '']);
+    }),
+    safe(() => {
+      const kr = state.keyRegistry, keys = kr.filter(r => r.kind !== 'AC Remote'), ac = kr.filter(r => r.kind === 'AC Remote');
+      const sites = new Set(kr.map(r => r.site).filter(Boolean)).size;
+      return card('keys', 'key', 'Key Registry',
+        [metric(fmtNum(keys.reduce((a, r) => a + keyTotal(r), 0)), 'Keys'), metric(fmtNum(keys.reduce((a, r) => a + keyQty(r.qtyBox), 0)), 'In the key box'), metric(fmtNum(ac.reduce((a, r) => a + keyTotal(r), 0)), 'AC remotes')],
+        [note('Across ' + plural(sites, 'site'))]);
+    }),
+    safe(() => {
+      const prs = state.purchaseRequisitions, by = id => prs.filter(p => (p.status || 'open') === id).length;
+      const live = prs.filter(p => (p.status || 'open') !== 'closed');
+      const value = live.reduce((a, p) => a + (p.lineItems || []).reduce((b, l) => b + (Number(l.totalCost) || 0), 0), 0);
+      const pend = by('pending_approval');
+      return card('purchase-requisitions', 'pr', 'Purchase Requisitions',
+        [metric(fmtNum(by('open')), 'Open'), metric(fmtNum(pend), 'Pending approval'), metric(fmtNum(by('released')), 'Released')],
+        [note(fmtMVR(value).replace('.00', '') + ' not yet closed'), pend ? note(fmtNum(pend) + ' awaiting approval', 'warn') : '']);
+    }),
+  ].filter(Boolean);
+  return `<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">${cards.join('')}</div>`;
+}
+
+/* ---------- Stock Report: units on hand by category (moved from the Dashboard) ---------- */
+function stockByCategoryCard(){
   const breakdown = categoryBreakdown();
   const maxUnits = Math.max(1, ...breakdown.map(b=>b.units));
   const barColors = ['bg-brand-500','bg-emerald-500','bg-amber-500','bg-sky-500','bg-fuchsia-500','bg-rose-500','bg-teal-500','bg-orange-500'];
-
-  const recent = [...state.movements].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,8);
-
-  const totalAssets = state.assets.length;
-  const activeAssets = state.assets.filter(a=>a.status!=='retired').length;
-  const retiredAssets = totalAssets - activeAssets;
-  const maxAssetsAtLoc = Math.max(1, ...LOCATIONS.map(l=>assetLocationTotals(l.id)));
-  const assetCatBreakdown = assetCategoryBreakdown();
-  const maxAssetCat = Math.max(1, ...assetCatBreakdown.map(b=>b.count));
-  const recentAssetActivity = [...state.assetTransfers].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,8);
-
   return `
-    <div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-6">
-      <div>
-        <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Dashboard</h1>
-        <p class="text-sm text-slate-500 mt-0.5">An overview of your inventory.</p>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-      ${statCard('Total items', fmtNum(state.products.length), state.products.length + ' active SKUs', 'brand')}
-      ${statCard('Total units in stock', fmtNum(totalUnits()), 'Across ' + distinctCategories().length + ' categories', 'emerald')}
-      ${statCard('Low-stock items', fmtNum(low.length), low.length ? 'At or below reorder level' : 'All items well stocked', low.length ? 'amber' : 'slate')}
-      ${statCard('Locations', fmtNum(LOCATIONS.length), 'Tracking stock across all sites', 'slate')}
-    </div>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-      ${LOCATIONS.map((l,i)=>`
-        <div class="bg-white rounded-xl border border-slate-200 p-5">
-          <div class="flex items-start gap-2 mb-1">
-            <span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style="background:${l.color}"></span>
-            <span class="text-sm font-bold text-slate-900 leading-snug flex-1 min-w-0">${esc(l.name)}</span>
-            <span class="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">${esc(l.code)}</span>
-          </div>
-          ${canManageInventory() ? `
-          <div class="flex items-center justify-end gap-0.5 mb-2 -mt-0.5">
-            <button onclick="moveLocation('${l.id}','up')" ${i===0?'disabled':''} title="Move up" class="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none">
-              <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12l5-5 5 5"/></svg>
-            </button>
-            <button onclick="moveLocation('${l.id}','down')" ${i===LOCATIONS.length-1?'disabled':''} title="Move down" class="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none">
-              <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8l5 5 5-5"/></svg>
-            </button>
-          </div>` : `<div class="mb-3"></div>`}
-          <div class="flex justify-between text-xs text-slate-500 py-0.5"><span>Items in stock</span><span class="num font-semibold text-slate-800">${fmtNum(locationTotalItems(l.id))}</span></div>
-          <div class="flex justify-between text-xs text-slate-500 py-0.5"><span>Total units</span><span class="num font-semibold text-slate-800">${fmtNum(locationTotalUnits(l.id))}</span></div>
-          <div class="flex justify-between text-xs text-slate-500 py-0.5"><span>Assets</span><span class="num font-semibold text-slate-800">${fmtNum(assetLocationTotals(l.id))}</span></div>
-        </div>
-      `).join('')}
-    </div>
-    ${canManageInventory() && LOCATIONS.length>1 ? `<div class="text-[11px] text-slate-400 -mt-4 mb-6">Use the arrows to reorder how locations appear here.</div>` : ''}
-
-    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-6">
-      <div class="lg:col-span-3 bg-white rounded-xl border border-slate-200 p-5 sm:p-6">
+      <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 mb-5">
         <div class="text-sm font-bold text-slate-900 mb-1">Stock by category</div>
         <div class="text-xs text-slate-500 mb-5">Units on hand, grouped by category</div>
         ${breakdown.length ? `
@@ -4834,46 +5240,24 @@ function viewDashboard(){
             </div>
           `).join('')}
         </div>` : `<div class="text-center py-10 text-sm text-slate-400">Add items to see a category breakdown.</div>`}
-      </div>
+      </div>`;
+}
 
-      <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5 sm:p-6">
-        <div class="text-sm font-bold text-slate-900 mb-1">Low-stock alerts</div>
-        <div class="text-xs text-slate-500 mb-4">Items at or below their reorder level</div>
-        ${low.length ? `
-        <ul class="divide-y divide-slate-100">
-          ${low.slice(0,6).map(p=>`
-            <li class="py-2.5 flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <div class="text-sm font-medium text-slate-800 truncate">${esc(displayName(p))}</div>
-                <div class="text-[11px] text-slate-400">${esc(p.sku||'No SKU')}</div>
-              </div>
-              <span class="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 num">${hasPerLocationReorder(p) ? esc(lowStockLocations(p).map(l=>l.code).join(', ')) : fmtNum(productTotalQty(p))+' / '+fmtNum(p.reorderLevel)}</span>
-            </li>
-          `).join('')}
-        </ul>
-        ${low.length>6 ? `<button onclick="goTo('products')" class="mt-3 text-xs font-semibold text-brand-600 hover:underline">View all ${low.length} →</button>` : ''}
-        ` : `<div class="text-center py-10 text-sm text-slate-400">Nothing is low on stock right now.</div>`}
-      </div>
-    </div>
-
-    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div class="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100">
-        <div class="text-sm font-bold text-slate-900">Recent stock movements</div>
-        <button onclick="goTo('movements')" class="text-xs font-semibold text-brand-600 hover:underline">View all →</button>
-      </div>
-      ${recent.length ? `
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
-            <th class="px-5 sm:px-6 py-2.5 font-semibold">Date</th><th class="py-2.5 font-semibold">Type</th><th class="py-2.5 font-semibold">Item</th><th class="py-2.5 font-semibold">Location</th><th class="py-2.5 font-semibold text-right pr-5 sm:pr-6">Qty</th>
-          </tr></thead>
-          <tbody>${recent.map(m=>movementRow(m,true)).join('')}</tbody>
-        </table>
-      </div>` : `<div class="text-center py-10 text-sm text-slate-400">No stock movements logged yet.</div>`}
-    </div>
-
-    <div class="flex items-center justify-between gap-4 flex-wrap mt-8 mb-4">
-      <h2 class="text-lg font-extrabold text-slate-900 tracking-tight">Asset summary</h2>
+/* =====================================================================
+   VIEW: ASSET REPORT (moved from the Dashboard's asset summary)
+===================================================================== */
+function viewAssetReport(){
+  const barColors = ['bg-brand-500','bg-emerald-500','bg-amber-500','bg-sky-500','bg-fuchsia-500','bg-rose-500','bg-teal-500','bg-orange-500'];
+  const totalAssets = state.assets.length;
+  const activeAssets = state.assets.filter(a=>a.status!=='retired').length;
+  const retiredAssets = totalAssets - activeAssets;
+  const maxAssetsAtLoc = Math.max(1, ...LOCATIONS.map(l=>assetLocationTotals(l.id)));
+  const assetCatBreakdown = assetCategoryBreakdown();
+  const maxAssetCat = Math.max(1, ...assetCatBreakdown.map(b=>b.count));
+  const recentAssetActivity = [...state.assetTransfers].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,8);
+  return `
+    <div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-6">
+      <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Asset Report</h1>
       <button onclick="goTo('assets')" class="text-xs font-semibold text-brand-600 hover:underline">View all assets →</button>
     </div>
 
@@ -4945,6 +5329,77 @@ function viewDashboard(){
         ` : `<div class="text-center py-10 text-sm text-slate-400">No asset movements logged yet.</div>`}
       </div>
     </div>
+  `;
+}
+
+function viewDashboard(){
+  const low = lowStockProducts();
+
+  return `
+    <div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-6">
+      <div>
+        <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Dashboard</h1>
+      </div>
+    </div>
+
+    ${dashboardModuleSummary()}
+
+    <div class="flex items-center justify-between gap-4 flex-wrap mt-8 mb-4">
+      <h2 class="text-lg font-extrabold text-slate-900 tracking-tight">Stock summary</h2>
+      <button onclick="goTo('products')" class="text-xs font-semibold text-brand-600 hover:underline">View all items →</button>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      ${statCard('Total items', fmtNum(state.products.length), state.products.length + ' active SKUs', 'brand')}
+      ${statCard('Total units in stock', fmtNum(totalUnits()), 'Across ' + distinctCategories().length + ' categories', 'emerald')}
+      ${statCard('Low-stock items', fmtNum(low.length), low.length ? 'At or below reorder level' : 'All items well stocked', low.length ? 'amber' : 'slate')}
+      ${statCard('Locations', fmtNum(LOCATIONS.length), 'Tracking stock across all sites', 'slate')}
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      ${LOCATIONS.map((l,i)=>`
+        <div class="bg-white rounded-xl border border-slate-200 p-5">
+          <div class="flex items-start gap-2 mb-1">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style="background:${l.color}"></span>
+            <span class="text-sm font-bold text-slate-900 leading-snug flex-1 min-w-0">${esc(l.name)}</span>
+            <span class="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">${esc(l.code)}</span>
+          </div>
+          ${canManageInventory() ? `
+          <div class="flex items-center justify-end gap-0.5 mb-2 -mt-0.5">
+            <button onclick="moveLocation('${l.id}','up')" ${i===0?'disabled':''} title="Move up" class="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none">
+              <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12l5-5 5 5"/></svg>
+            </button>
+            <button onclick="moveLocation('${l.id}','down')" ${i===LOCATIONS.length-1?'disabled':''} title="Move down" class="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none">
+              <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8l5 5 5-5"/></svg>
+            </button>
+          </div>` : `<div class="mb-3"></div>`}
+          <div class="flex justify-between text-xs text-slate-500 py-0.5"><span>Items in stock</span><span class="num font-semibold text-slate-800">${fmtNum(locationTotalItems(l.id))}</span></div>
+          <div class="flex justify-between text-xs text-slate-500 py-0.5"><span>Total units</span><span class="num font-semibold text-slate-800">${fmtNum(locationTotalUnits(l.id))}</span></div>
+          <div class="flex justify-between text-xs text-slate-500 py-0.5"><span>Assets</span><span class="num font-semibold text-slate-800">${fmtNum(assetLocationTotals(l.id))}</span></div>
+        </div>
+      `).join('')}
+    </div>
+    ${canManageInventory() && LOCATIONS.length>1 ? `<div class="text-[11px] text-slate-400 -mt-4 mb-6">Use the arrows to reorder how locations appear here.</div>` : ''}
+
+      <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 mb-6">
+        <div class="text-sm font-bold text-slate-900 mb-1">Low-stock alerts</div>
+        <div class="text-xs text-slate-500 mb-4">Items at or below their reorder level</div>
+        ${low.length ? `
+        <ul class="divide-y divide-slate-100">
+          ${low.slice(0,6).map(p=>`
+            <li class="py-2.5 flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="text-sm font-medium text-slate-800 truncate">${esc(displayName(p))}</div>
+                <div class="text-[11px] text-slate-400">${esc(p.sku||'No SKU')}</div>
+              </div>
+              <span class="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 num">${hasPerLocationReorder(p) ? esc(lowStockLocations(p).map(l=>l.code).join(', ')) : fmtNum(productTotalQty(p))+' / '+fmtNum(p.reorderLevel)}</span>
+            </li>
+          `).join('')}
+        </ul>
+        ${low.length>6 ? `<button onclick="goTo('products')" class="mt-3 text-xs font-semibold text-brand-600 hover:underline">View all ${low.length} →</button>` : ''}
+        ` : `<div class="text-center py-10 text-sm text-slate-400">Nothing is low on stock right now.</div>`}
+      </div>
+
   `;
 }
 
@@ -5489,6 +5944,177 @@ function categoryMonthlyCostSeriesRange(months){
     });
     return { category: cat, ...monthlyCostSeriesForMovements(catMovements, months) };
   }).filter(c => c.purchaseCost.some(v=>v>0) || c.consumptionCost.some(v=>v>0));
+}
+/* ---------- Report by location: units on hand, consumed and transferred ---------- */
+const LOCVAL_COLORS = { stock:'rgb(var(--brand-500))', out:'#f43f5e', tin:'#0ea5e9', tout:'#f59e0b' };
+function productUnitCost(productId){ const p = getProduct(productId); return p ? (Number(p.estimatedCost)||0) : 0; }
+function inDateRange(d, from, to){ return !!d && (!from || d >= from) && (!to || d <= to); }
+function locationValuationData(from, to){
+  const rows = LOCATIONS.map(l => ({ loc:l, stockValue:0, stockUnits:0, outValue:0, outQty:0, tinValue:0, tinQty:0, toutValue:0, toutQty:0 }));
+  const byId = {}; rows.forEach(r => { byId[r.loc.id] = r; });
+  state.products.forEach(p => {
+    const c = Number(p.estimatedCost)||0;
+    LOCATIONS.forEach(l => { const q = qtyAt(p, l.id); if(q > 0){ byId[l.id].stockUnits += q; byId[l.id].stockValue += q * c; } });
+  });
+  state.movements.forEach(m => {
+    if(m.type !== 'out' || !byId[m.locationId] || !inDateRange(m.date, from, to)) return;
+    const q = Number(m.quantity)||0;
+    byId[m.locationId].outQty += q; byId[m.locationId].outValue += q * productUnitCost(m.productId);
+  });
+  const routes = {};
+  state.itemTransfers.forEach(t => {
+    if(t.status === 'rejected' || !inDateRange(t.date, from, to)) return;
+    const q = Number(t.quantity)||0, v = q * productUnitCost(t.productId);
+    if(byId[t.fromLocationId]){ byId[t.fromLocationId].toutQty += q; byId[t.fromLocationId].toutValue += v; }
+    if(byId[t.toLocationId]){ byId[t.toLocationId].tinQty += q; byId[t.toLocationId].tinValue += v; }
+    const k = t.fromLocationId + '>' + t.toLocationId;
+    if(!routes[k]) routes[k] = { from:t.fromLocationId, to:t.toLocationId, qty:0, value:0, count:0 };
+    routes[k].qty += q; routes[k].value += v; routes[k].count++;
+  });
+  return { rows, routes: Object.values(routes).sort((a,b) => b.qty - a.qty) };
+}
+function locationMonthlySeries(locId, months){
+  const idx = {}; months.forEach((m,i) => { idx[m.key] = i; });
+  const out = new Array(months.length).fill(0), tin = out.slice(), tout = out.slice();
+  state.movements.forEach(m => {
+    if(m.type !== 'out' || m.locationId !== locId || !m.date) return;
+    const i = idx[m.date.slice(0,7)]; if(i === undefined) return;
+    out[i] += Number(m.quantity)||0;
+  });
+  state.itemTransfers.forEach(t => {
+    if(t.status === 'rejected' || !t.date) return;
+    const i = idx[t.date.slice(0,7)]; if(i === undefined) return;
+    const v = Number(t.quantity)||0;
+    if(t.toLocationId === locId) tin[i] += v;
+    if(t.fromLocationId === locId) tout[i] += v;
+  });
+  return { out, tin, tout };
+}
+function locValBar(value, max, color){
+  const w = max > 0 && value > 0 ? Math.max(1.5, value / max * 100) : 0;
+  return `<div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full bar-fill" style="width:${w}%;background:${color}"></div></div>`;
+}
+function locValLegend(items){
+  return `<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">${items.map(([label,color]) =>
+    `<span class="flex items-center gap-1.5 text-slate-600"><span class="w-2.5 h-2.5 rounded-sm" style="background:${color}"></span>${label}</span>`).join('')}</div>`;
+}
+function locationValuationSection(){
+  const from = ui.locValDateFrom, to = ui.locValDateTo;
+  const { rows, routes } = locationValuationData(from, to);
+  const C = LOCVAL_COLORS;
+  const stockRows = rows.filter(r => r.stockUnits > 0).sort((a,b) => b.stockUnits - a.stockUnits);
+  const stockTotal = stockRows.reduce((s,r) => s + r.stockUnits, 0);
+  const stockMax = Math.max(0, ...stockRows.map(r => r.stockUnits));
+  const flowRows = rows.filter(r => r.outQty > 0 || r.tinQty > 0 || r.toutQty > 0)
+                       .sort((a,b) => (b.outQty + b.tinQty + b.toutQty) - (a.outQty + a.tinQty + a.toutQty));
+  const flowMax = Math.max(0, ...flowRows.flatMap(r => [r.outQty, r.tinQty, r.toutQty]));
+  const totOut = rows.reduce((s,r) => s + r.outQty, 0), totXfer = rows.reduce((s,r) => s + r.toutQty, 0);
+
+  // location picked for the monthly chart: the user's choice, else the busiest one
+  let selId = ui.locValLocationId;
+  if(!getLocation(selId)) selId = (flowRows[0] || stockRows[0] || { loc: LOCATIONS[0] || {} }).loc.id || '';
+  const months = buildMonthRange(from, to);
+  const series = selId && months.length ? locationMonthlySeries(selId, months) : null;
+  const hasSeries = series && [series.out, series.tin, series.tout].some(a => a.some(v => v > 0));
+  const dateInputs = `
+    <div class="flex flex-wrap items-center gap-2.5">
+      <label class="text-xs font-semibold text-slate-500">From</label>
+      <input type="date" value="${esc(from)}" onchange="ui.locValDateFrom=this.value; rerenderMain();" class="px-3.5 py-2 rounded-lg border border-slate-300 text-sm">
+      <label class="text-xs font-semibold text-slate-500">To</label>
+      <input type="date" value="${esc(to)}" onchange="ui.locValDateTo=this.value; rerenderMain();" class="px-3.5 py-2 rounded-lg border border-slate-300 text-sm">
+    </div>`;
+
+  return `
+    <div class="flex items-end justify-between gap-3 flex-wrap mb-4">
+      <div>
+        <div class="text-base font-extrabold text-slate-900 tracking-tight">By location</div>
+        <div class="text-xs text-slate-500 mt-0.5">Units held at each location, and how many units each one consumed and transferred in the period.</div>
+      </div>
+      ${dateInputs}
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+      <div class="bg-white rounded-xl border border-slate-200 border-l-4 p-4" style="border-left-color:${C.stock}">
+        <div class="text-xs font-medium text-slate-500">Units in stock (now)</div>
+        <div class="text-xl font-extrabold text-slate-900 mt-0.5 num">${fmtNum(stockTotal)}</div>
+      </div>
+      <div class="bg-white rounded-xl border border-slate-200 border-l-4 p-4" style="border-left-color:${C.out}">
+        <div class="text-xs font-medium text-slate-500">Units consumed in period</div>
+        <div class="text-xl font-extrabold text-slate-900 mt-0.5 num">${fmtNum(totOut)}</div>
+      </div>
+      <div class="bg-white rounded-xl border border-slate-200 border-l-4 p-4" style="border-left-color:${C.tin}">
+        <div class="text-xs font-medium text-slate-500">Units transferred between locations</div>
+        <div class="text-xl font-extrabold text-slate-900 mt-0.5 num">${fmtNum(totXfer)}</div>
+      </div>
+    </div>
+
+    ${stockByCategoryCard()}
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+      <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6">
+        <div class="text-sm font-bold text-slate-900 mb-1">Stock on hand by location</div>
+        <div class="text-xs text-slate-500 mb-5">Units currently in stock</div>
+        ${stockRows.length ? `<div class="space-y-3.5">${stockRows.map(r => `
+          <div>
+            <div class="flex justify-between gap-3 text-xs font-medium text-slate-600 mb-1">
+              <span class="flex items-center gap-2 min-w-0"><span class="w-2 h-2 rounded-full shrink-0" style="background:${r.loc.color}"></span><span class="truncate">${esc(r.loc.name)}</span></span>
+              <span class="num shrink-0">${fmtNum(r.stockUnits)} units <span class="text-slate-400">(${stockTotal ? Math.round(r.stockUnits / stockTotal * 100) : 0}%)</span></span>
+            </div>
+            ${locValBar(r.stockUnits, stockMax, C.stock)}
+          </div>`).join('')}</div>` : `<div class="text-center py-10 text-sm text-slate-400">No stock on hand.</div>`}
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-1">
+          <div class="text-sm font-bold text-slate-900">Consumption &amp; transfers by location</div>
+          ${locValLegend([['Consumed', C.out], ['Transferred in', C.tin], ['Transferred out', C.tout]])}
+        </div>
+        <div class="text-xs text-slate-500 mb-5">Units in the selected period. Rejected transfers are left out.</div>
+        ${flowRows.length ? `<div class="space-y-4">${flowRows.map(r => `
+          <button type="button" onclick="ui.locValLocationId='${r.loc.id}'; rerenderMain();" class="block w-full text-left rounded-lg -mx-2 px-2 py-1 hover:bg-slate-50 ${r.loc.id === selId ? 'bg-slate-50' : ''}" title="Show monthly trend for ${esc(r.loc.name)}">
+            <div class="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-1.5"><span class="w-2 h-2 rounded-full shrink-0" style="background:${r.loc.color}"></span><span class="truncate">${esc(r.loc.name)}</span></div>
+            <div class="grid gap-1" style="grid-template-columns:minmax(0,1fr) 5.5rem">
+              ${[[r.outQty, C.out], [r.tinQty, C.tin], [r.toutQty, C.tout]].map(([v,c]) => `
+                <div class="self-center">${locValBar(v, flowMax, c)}</div>
+                <div class="text-[11px] text-right num text-slate-500 whitespace-nowrap">${fmtNum(v)} units</div>`).join('')}
+            </div>
+          </button>`).join('')}</div>` : `<div class="text-center py-10 text-sm text-slate-400">No consumption or transfers in this period.</div>`}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-5 mb-6">
+      <div class="xl:col-span-3 bg-white rounded-xl border border-slate-200 p-5 sm:p-6">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-1">
+          <div class="text-sm font-bold text-slate-900">Monthly trend for a location</div>
+          ${locValLegend([['Consumed', C.out], ['Transferred in', C.tin], ['Transferred out', C.tout]])}
+        </div>
+        <div class="text-xs text-slate-500 mb-4">Units per month. Up to 36 months shown at once.</div>
+        <select onchange="ui.locValLocationId=this.value; rerenderMain();" class="mb-4 px-3.5 py-2 rounded-lg border border-slate-300 text-sm bg-white max-w-full">
+          ${LOCATIONS.map(l => `<option value="${l.id}" ${l.id === selId ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}
+        </select>
+        ${hasSeries ? `<div class="w-full overflow-x-auto"><div class="min-w-[420px]">${lineChartSvg([
+            { name:'Consumed', color:C.out, values:series.out },
+            { name:'Transferred in', color:C.tin, values:series.tin },
+            { name:'Transferred out', color:C.tout, values:series.tout },
+          ], months.map(m => m.label), 640, 220)}</div></div>`
+          : `<div class="text-center py-10 text-sm text-slate-400">No consumption or transfers at this location in the period.</div>`}
+      </div>
+
+      <div class="xl:col-span-2 bg-white rounded-xl border border-slate-200 p-5 sm:p-6">
+        <div class="text-sm font-bold text-slate-900 mb-1">Top transfer routes</div>
+        <div class="text-xs text-slate-500 mb-4">Where stock moved, by units in the period</div>
+        ${routes.length ? (() => { const rmax = Math.max(...routes.map(r => r.qty)); return `<div class="space-y-3">${routes.slice(0,10).map(r => {
+          const f = getLocation(r.from), t = getLocation(r.to);
+          return `<div>
+            <div class="flex justify-between gap-3 text-xs mb-1">
+              <span class="text-slate-700 font-medium truncate">${esc(f ? f.name : '?')} <span class="text-slate-400">→</span> ${esc(t ? t.name : '?')}</span>
+              <span class="num shrink-0 text-slate-500">${fmtNum(r.qty)} units</span>
+            </div>
+            ${locValBar(r.qty, rmax, C.tin)}
+            <div class="text-[11px] text-slate-400 mt-0.5">${r.count} transfer${r.count === 1 ? '' : 's'}</div>
+          </div>`; }).join('')}</div>`; })() : `<div class="text-center py-10 text-sm text-slate-400">No transfers in this period.</div>`}
+      </div>
+    </div>`;
 }
 function hasActiveMovementFilters(){
   const f = ui.movementsFilter;
@@ -6083,6 +6709,7 @@ function viewMovements(mode){
   const locOptions = LOCATIONS.map(l=>`<option value="${l.id}" ${f.locationId===l.id?'selected':''}>${esc(l.name)}</option>`).join('');
   const acqOptions = ACQUISITION_TYPES.map(a=>`<option value="${esc(a)}" ${f.acquisition===a?'selected':''}>${esc(a)}</option>`).join('');
   const isValuation = report && ui.reportView==='valuation';
+  const isLocationReport = report && !isValuation;   // the Report page no longer repeats the movement log (that lives on Stock Movements)
   const isTransfers = !report && ui.movementsView==='transfers';
   const pendingTransferCount = state.itemTransfers.filter(t=>t.status==='pending').length;
   const transferList = isTransfers ? [...state.itemTransfers].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)) : [];
@@ -6099,10 +6726,10 @@ function viewMovements(mode){
     <div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-6">
       <div>
         <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${report ? 'Stock Report' : 'Stock Movements'}</h1>
-        <p class="text-sm text-slate-500 mt-0.5">${report ? 'Stock movements for any period, and what consumption has cost.' : 'Log stock coming in and going out.'}</p>
+        <p class="text-sm text-slate-500 mt-0.5">${report ? 'Stock on hand, consumption and transfers by location, and what consumption has cost.' : 'Log stock coming in and going out.'}</p>
       </div>
       <div class="flex gap-2.5 flex-wrap">
-        ${!isValuation ? `<button onclick="exportMovementsCSV()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export report (CSV)</button>` : ''}
+        ${!report ? `<button onclick="exportMovementsCSV()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export report (CSV)</button>` : ''}
         ${report ? '' : `<button onclick="openMovementForm('in')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">+ Stock In</button>
         <button onclick="openMovementForm('out')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-rose-600 text-white hover:bg-rose-700 shadow-sm">+ Stock Out</button>
         <button onclick="openItemTransferForm()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Stock Transfer</button>`}
@@ -6111,13 +6738,13 @@ function viewMovements(mode){
 
     <div class="inline-flex rounded-lg border border-slate-200 bg-white p-1 mb-6">
       ${report ? `
-      <button onclick="ui.reportView='log'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors ${!isValuation?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Movement Report</button>
+      <button onclick="ui.reportView='location'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors ${!isValuation?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">By Location</button>
       <button onclick="ui.reportView='valuation'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors ${isValuation?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Cost Valuation</button>` : `
       <button onclick="ui.movementsView='log'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors ${!isTransfers?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Movement Log</button>
       <button onclick="ui.movementsView='transfers'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors relative ${isTransfers?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Transfers${pendingTransferCount>0?` <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${isTransfers?'bg-white text-brand-600':'bg-rose-500 text-white'} ml-1">${pendingTransferCount}</span>`:''}</button>`}
     </div>
 
-    ${isTransfers ? viewItemTransfersTab(transferList) : isValuation ? `
+    ${isTransfers ? viewItemTransfersTab(transferList) : isLocationReport ? locationValuationSection() : isValuation ? `
     <div class="bg-white rounded-xl border border-slate-200 border-l-4 border-l-brand-500 p-4 mb-6 max-w-xs">
       <div class="text-xs font-medium text-slate-500">Total consumption expense</div>
       <div class="text-xl font-extrabold text-slate-900 mt-0.5 num">${fmtMVR(valuationGrandTotal)}</div>
@@ -8782,10 +9409,26 @@ function sigPadCancel(){
 
 // ---- signing a handover
 // a person's designation: what was typed on the handover, otherwise the one in their user profile (matched by name)
+// Matching is forgiving, because staff names on handovers are often written in full while a user may be saved
+// with a short name (e.g. "Amjad Shujau" on the handover, user "Amjad" with email amjad.shujau@…):
+//   1. the same name; 2. the name spelled by the email (amjad.shujau → "amjad shujau");
+//   3. every word of one name found in the other — used only when exactly one user fits, so it never guesses.
+function hoNameWords(s){ return String(s || '').toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').split(/\s+/).filter(Boolean); }
+function hoFindProfile(name){
+  const words = hoNameWords(name); if(!words.length) return null;
+  const people = state.profiles.slice();
+  if(authUser && !people.some(x => x.uid && x.uid === authUser.uid)) people.push(authUser);
+  const exact = people.find(x => hoSameName(x.name, name)); if(exact) return exact;
+  const emailName = x => hoNameWords(String(x.email || '').split('@')[0].replace(/[._-]+/g, ' ')).join(' ');
+  const joined = words.join(' ');
+  const byEmail = people.filter(x => x.email && emailName(x) === joined); if(byEmail.length === 1) return byEmail[0];
+  const contains = (a, b) => a.length && a.every(w => b.includes(w));
+  const loose = people.filter(x => { const pw = hoNameWords(x.name); return contains(pw, words) || contains(words, pw); });
+  return loose.length === 1 ? loose[0] : null;
+}
 function hoProfileDesignation(name){
-  const p = state.profiles.find(x => hoSameName(x.name, name));
-  if(p && p.designation) return p.designation;
-  return (authUser && hoSameName(authUser.name, name) && authUser.designation) ? authUser.designation : '';
+  const p = hoFindProfile(name);
+  return p && p.designation ? p.designation : '';
 }
 const hoDesignationOf = (h, side) => (side === 'from' ? h.fromDesignation : h.toDesignation) || hoProfileDesignation(side === 'from' ? h.fromStaffName : h.toStaffName);
 let hoAutoDesig = { from:'', to:'' };

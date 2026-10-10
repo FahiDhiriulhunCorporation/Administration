@@ -7,7 +7,7 @@
 // device is genuinely offline — we don't want stale stock numbers served from cache
 // while online.
 
-const CACHE_NAME = 'fdc-inventory-shell-v1';
+const CACHE_NAME = 'admin-database-shell-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

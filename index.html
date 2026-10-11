@@ -1619,7 +1619,7 @@ function currentNav(){
     { section:'Stock Inventory' },
     { id:'products', label:'Items', icon:'products' },
     { id:'levels', label:'Stock Levels', icon:'levels' },
-    { id:'movements', label:'Stock Movements', icon:'movements' },
+    { id:'movements', label:'Stock Movements', icon:'movements', badge:(()=>{ try{ return stockRequestsAwaitingMe().length; }catch(e){ return 0; } })(), tone:'warn' },
     { id:'stock-report', label:'Report', icon:'chart' },
     { section:'Asset Management' },
     { id:'assets', label:'Assets', icon:'assets' },
@@ -1766,6 +1766,7 @@ const VEH_COLS = {
   pettyStatements:  { collection:'fdc_inventory_petty_cash_statements', label:'petty cash statements', one:'petty cash statement' },
   pettyCounts:      { collection:'fdc_inventory_petty_cash_counts',     label:'petty cash counts', one:'petty cash count' },
   keyRegistry:      { collection:'fdc_inventory_keys',                  label:'keys', one:'key' },
+  stockRequests:    { collection:'fdc_inventory_stock_requests',        label:'stock requests', one:'stock request' },
 };
 const vehRefs = {}, vehUnsubs = {};
 let vehSettingsUnsub = null;
@@ -4945,6 +4946,10 @@ function saveItemTransfer(){
     }
   }
 
+  if(!canFinalizeStock(fromLocationId)){                         // not the source location's custodian: send it for approval, nothing leaves yet
+    submitStockRequest({ kind:'transfer', locationId:fromLocationId, toLocationId, date, reason, lines: lines.map(l=>({ productId:l.p.id, qty:l.qty })) });
+    return;
+  }
   const touchedProducts = new Map();
   const createdTransfers = [];
   lines.forEach(({p, qty})=>{
@@ -5151,7 +5156,7 @@ function dashboardModuleSummary(){
       const pend = state.itemTransfers.filter(t => t.status === 'pending').length;
       return card('products', 'products', 'Stock Inventory',
         [metric(fmtNum(state.products.length), 'Items'), metric(fmtNum(totalUnits()), 'Units in stock'), metric(fmtNum(low), 'Low stock')],
-        [note('+' + fmtNum(inQ) + ' in · −' + fmtNum(outQ) + ' out this month'), pend ? note(plural(pend, 'transfer') + ' pending', 'warn') : '', low ? note(plural(low, 'item') + ' low', 'warn') : '']);
+        [note('+' + fmtNum(inQ) + ' in · −' + fmtNum(outQ) + ' out this month'), stockRequestsAwaitingMe().length ? note(plural(stockRequestsAwaitingMe().length, 'stock request') + ' to approve', 'crit') : '', state.stockRequests.filter(r => r.status === 'pending').length ? note(plural(state.stockRequests.filter(r => r.status === 'pending').length, 'request') + ' pending approval', 'warn') : '', pend ? note(plural(pend, 'transfer') + ' pending', 'warn') : '', low ? note(plural(low, 'item') + ' low', 'warn') : '']);
     }),
     safe(() => {
       const total = state.assets.length, active = state.assets.filter(a => a.status !== 'retired').length;
@@ -6711,6 +6716,8 @@ function viewMovements(mode){
   const isValuation = report && ui.reportView==='valuation';
   const isLocationReport = report && !isValuation;   // the Report page no longer repeats the movement log (that lives on Stock Movements)
   const isTransfers = !report && ui.movementsView==='transfers';
+  const isRequests = !report && ui.movementsView==='requests';
+  const requestsToApprove = stockRequestsAwaitingMe().length;
   const pendingTransferCount = state.itemTransfers.filter(t=>t.status==='pending').length;
   const transferList = isTransfers ? [...state.itemTransfers].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)) : [];
   const valuation = isValuation ? costValuationByItem() : [];
@@ -6740,11 +6747,12 @@ function viewMovements(mode){
       ${report ? `
       <button onclick="ui.reportView='location'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors ${!isValuation?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">By Location</button>
       <button onclick="ui.reportView='valuation'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors ${isValuation?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Cost Valuation</button>` : `
-      <button onclick="ui.movementsView='log'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors ${!isTransfers?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Movement Log</button>
-      <button onclick="ui.movementsView='transfers'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors relative ${isTransfers?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Transfers${pendingTransferCount>0?` <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${isTransfers?'bg-white text-brand-600':'bg-rose-500 text-white'} ml-1">${pendingTransferCount}</span>`:''}</button>`}
+      <button onclick="ui.movementsView='log'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors ${!isTransfers&&!isRequests?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Movement Log</button>
+      <button onclick="ui.movementsView='transfers'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors relative ${isTransfers?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Transfers${pendingTransferCount>0?` <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${isTransfers?'bg-white text-brand-600':'bg-rose-500 text-white'} ml-1">${pendingTransferCount}</span>`:''}</button>
+      <button onclick="ui.movementsView='requests'; rerenderMain();" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors relative ${isRequests?'bg-brand-600 text-white':'text-slate-600 hover:text-slate-900'}">Requests${requestsToApprove>0?` <span class="inline-flex items-center justify-center min-w-[1rem] h-4 px-1 rounded-full text-[10px] font-bold ${isRequests?'bg-white text-brand-600':'bg-rose-500 text-white'} ml-1">${requestsToApprove}</span>`:''}</button>`}
     </div>
 
-    ${isTransfers ? viewItemTransfersTab(transferList) : isLocationReport ? locationValuationSection() : isValuation ? `
+    ${isRequests ? viewStockRequestsTab() : isTransfers ? viewItemTransfersTab(transferList) : isLocationReport ? locationValuationSection() : isValuation ? `
     <div class="bg-white rounded-xl border border-slate-200 border-l-4 border-l-brand-500 p-4 mb-6 max-w-xs">
       <div class="text-xs font-medium text-slate-500">Total consumption expense</div>
       <div class="text-xl font-extrabold text-slate-900 mt-0.5 num">${fmtMVR(valuationGrandTotal)}</div>
@@ -7435,6 +7443,10 @@ function saveMovement(type){
     }
   }
 
+  if(type==='out' && !canFinalizeStock(locationId)){          // not the location's custodian: send it for approval, nothing is deducted yet
+    submitStockRequest({ kind:'out', locationId, date, reason, department, staffName, lines: lines.map(l=>({ productId:l.p.id, qty:l.qty, acquisition:l.acquisition })) });
+    return;
+  }
   const touchedProducts = new Map();
   const createdMovements = [];
   lines.forEach(({p, qty, acquisition})=>{
@@ -7458,6 +7470,157 @@ function saveMovement(type){
   toast(lines.length>1 ? `${lines.length} stock movements logged.` : 'Stock movement logged.');
   rerenderMain();
 }
+/* =====================================================================
+   STOCK REQUESTS — a Stock Out or Stock Transfer entered by anyone other than the location's custodian
+   (or an admin) is saved as a request. Nothing is deducted until the custodian approves it; approving
+   re-checks the stock and then logs the stock out / sends the transfer exactly as if the custodian had
+   entered it. The custodian can also reject it with a note, and the requester can cancel it while pending.
+===================================================================== */
+function canFinalizeStock(locationId){ return canAcceptTransferForLocation(locationId); }     // an admin, or the location's custodian
+function stockRequestsAwaitingMe(){ return (state.stockRequests || []).filter(r => r.status === 'pending' && canFinalizeStock(r.locationId)); }
+function stockRequestLocName(id){ const l = getLocation(id); return l ? l.name : '(removed location)'; }
+async function submitStockRequest(o){
+  const loc = getLocation(o.locationId);
+  const year = new Date().getFullYear(), seq = (state.stockRequests || []).filter(r => String(r.number || '').startsWith('SR-' + year + '-')).length + 1;
+  const rec = Object.assign({}, o, {
+    number: 'SR-' + year + '-' + String(seq).padStart(3, '0'), status: 'pending',
+    requestedByName: authUser ? authUser.name : '', requestedByUid: authUser ? authUser.uid : '', requestedByEmail: authUser ? authUser.email : '',
+    requestedAt: Date.now(),
+  });
+  closeModal();
+  await vehSave('stockRequests', rec);
+  toast(`${o.kind === 'transfer' ? 'Transfer' : 'Stock out'} request sent — ${loc && loc.custodianName ? loc.custodianName + ' (custodian of ' + loc.name + ')' : 'an admin'} has to approve it before stock is deducted.`);
+  ui.movementsView = 'requests';
+  rerenderMain();
+}
+// what would block approval right now (stock used up since the request was made)
+function stockRequestProblems(r){
+  const out = [], byProd = {}, bySrc = {};
+  (r.lines || []).forEach(l => { byProd[l.productId] = (byProd[l.productId] || 0) + Number(l.qty || 0); if(r.kind === 'out'){ const k = l.productId + '|' + l.acquisition; bySrc[k] = (bySrc[k] || 0) + Number(l.qty || 0); } });
+  Object.keys(byProd).forEach(pid => {
+    const p = getProduct(pid);
+    if(!p){ out.push('An item on this request has been deleted.'); return; }
+    const have = qtyAt(p, r.locationId);
+    if(byProd[pid] > have) out.push(`Only ${fmtNum(have)} of ${displayName(p)} left at ${stockRequestLocName(r.locationId)}.`);
+  });
+  if(r.kind === 'out') Object.keys(bySrc).forEach(k => {
+    const [pid, acq] = k.split('|'), p = getProduct(pid); if(!p) return;
+    const bal = acquisitionBalance(pid, acq);
+    if(bySrc[k] > bal) out.push(`Only ${fmtNum(bal)} of ${displayName(p)} remain from ${acq}.`);
+  });
+  if(r.kind === 'transfer' && !getLocation(r.toLocationId)) out.push('The destination location has been removed.');
+  return out;
+}
+async function approveStockRequest(id){
+  const r = (state.stockRequests || []).find(x => x.id === id);
+  if(!r || r.status !== 'pending') return;
+  if(!canFinalizeStock(r.locationId)){ toast("Only the location's custodian (or an admin) can approve this request.", true); return; }
+  const problems = stockRequestProblems(r);
+  if(problems.length){ toast('Cannot approve: ' + problems[0], true); return; }
+  const me = authUser ? authUser.name : null, touched = new Map(), movementIds = [], transferIds = [];
+  (r.lines || []).forEach(l => {
+    const p = getProduct(l.productId), qty = Number(l.qty) || 0, have = qtyAt(p, r.locationId);
+    if(!p.stock) p.stock = {};
+    p.stock[r.locationId] = have - qty;
+    if(r.kind === 'out'){
+      const m = { id: uid(), type:'out', productId:p.id, locationId:r.locationId, quantity:qty, date:r.date, reason:r.reason || '', acquisition:l.acquisition, department:r.department || '', staffName:r.staffName || '',
+        createdAt: nowISO(), loggedByName: r.requestedByName || null, loggedByEmail: r.requestedByEmail || null, approvedByName: me, requestId: r.id, requestNumber: r.number };
+      state.movements.push(m); persistMovementDoc(m); movementIds.push(m.id);
+    } else {
+      const t = { id: uid(), productId:p.id, fromLocationId:r.locationId, toLocationId:r.toLocationId, quantity:qty, date:r.date, reason:r.reason || '', status:'pending',
+        initiatedByName: r.requestedByName || null, initiatedByEmail: r.requestedByEmail || null, approvedByName: me, requestId: r.id, requestNumber: r.number, createdAt: nowISO() };
+      state.itemTransfers.push(t); persistItemTransferDoc(t); transferIds.push(t.id);
+    }
+    touched.set(p.id, p);
+  });
+  touched.forEach(p => persistItemDoc(p));
+  await vehSave('stockRequests', { id: r.id, status:'approved', decidedByName: me, decidedByUid: authUser ? authUser.uid : '', decidedAt: Date.now(), movementIds, transferIds });
+  touched.forEach(p => checkLowStockAndNotify(p, r.locationId));
+  toast(r.kind === 'transfer' ? `Approved — transfer sent, awaiting acceptance at ${stockRequestLocName(r.toLocationId)}.` : 'Approved — stock out logged and stock deducted.');
+  rerenderMain();
+}
+function openRejectStockRequest(id){
+  const r = (state.stockRequests || []).find(x => x.id === id); if(!r) return;
+  openModal('Reject request ' + (r.number || ''), `
+    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Reason (shown to ${esc(r.requestedByName || 'the requester')})</label>
+    <textarea id="sr-reject-note" rows="3" class="${VEH_FIELD}" placeholder="e.g. Not enough stock, issue from Apollo Tower instead"></textarea>
+    <div class="flex justify-end gap-2.5 mt-5">
+      <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Cancel</button>
+      <button type="button" onclick="rejectStockRequest('${esc(id)}')" class="px-4 py-2 rounded-lg text-sm font-semibold bg-rose-600 text-white hover:bg-rose-700">Reject request</button>
+    </div>`);
+}
+async function rejectStockRequest(id){
+  const r = (state.stockRequests || []).find(x => x.id === id);
+  if(!r || r.status !== 'pending' || !canFinalizeStock(r.locationId)) return;
+  const note = (document.getElementById('sr-reject-note') || {}).value || '';
+  closeModal();
+  await vehSave('stockRequests', { id, status:'rejected', decisionNote: note.trim(), decidedByName: authUser ? authUser.name : '', decidedByUid: authUser ? authUser.uid : '', decidedAt: Date.now() });
+  toast('Request rejected. No stock was deducted.');
+  rerenderMain();
+}
+function cancelStockRequest(id){
+  const r = (state.stockRequests || []).find(x => x.id === id);
+  if(!r || r.status !== 'pending') return;
+  confirmAction('Cancel request ' + (r.number || '') + '?', async () => {
+    await vehSave('stockRequests', { id, status:'cancelled', decidedByName: authUser ? authUser.name : '', decidedAt: Date.now() });
+    toast('Request cancelled.'); rerenderMain();
+  });
+}
+function stockRequestCard(r){
+  const mine = authUser && r.requestedByUid === authUser.uid, canDecide = r.status === 'pending' && canFinalizeStock(r.locationId);
+  const problems = r.status === 'pending' ? stockRequestProblems(r) : [];
+  const loc = getLocation(r.locationId);
+  const badge = { pending:'bg-amber-100 text-amber-700', approved:'bg-emerald-100 text-emerald-700', rejected:'bg-rose-100 text-rose-700', cancelled:'bg-slate-200 text-slate-600' }[r.status] || 'bg-slate-200 text-slate-600';
+  const kindPill = r.kind === 'transfer' ? '<span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">Transfer</span>' : '<span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Stock Out</span>';
+  const rows = (r.lines || []).map(l => {
+    const p = getProduct(l.productId), have = p ? qtyAt(p, r.locationId) : 0, short = r.status === 'pending' && p && Number(l.qty) > have;
+    return `<tr class="border-t border-slate-100"><td class="py-2 pr-3 text-slate-800">${p ? esc(displayName(p)) : '<span class="text-slate-400">Deleted item</span>'}</td>
+      <td class="py-2 pr-3 text-right num font-semibold">${fmtNum(l.qty)}</td>
+      ${r.kind === 'out' ? `<td class="py-2 pr-3 text-slate-500">${esc(l.acquisition || '')}</td>` : ''}
+      ${r.status === 'pending' ? `<td class="py-2 text-right num ${short ? 'text-rose-600 font-semibold' : 'text-slate-500'}">${fmtNum(have)}</td>` : ''}</tr>`;
+  }).join('');
+  const decided = r.status !== 'pending' && r.decidedAt ? `<div class="text-xs text-slate-500 mt-3">${r.status === 'approved' ? 'Approved' : r.status === 'rejected' ? 'Rejected' : 'Cancelled'} by ${esc(r.decidedByName || '—')} on ${esc(new Date(r.decidedAt).toLocaleString())}${r.decisionNote ? ` — “${esc(r.decisionNote)}”` : ''}</div>` : '';
+  return `
+  <div class="bg-white rounded-xl border border-slate-200 p-5 ${r.status === 'pending' ? 'border-l-4 border-l-amber-500' : ''}">
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+      <div>
+        <div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-extrabold text-slate-900">${esc(r.number || 'Request')}</span>${kindPill}<span class="text-xs font-semibold px-2 py-0.5 rounded-full ${badge} capitalize">${esc(r.status === 'pending' ? 'Awaiting approval' : r.status)}</span></div>
+        <div class="text-xs text-slate-500 mt-1">${fmtDate(r.date)} · requested by <span class="font-semibold text-slate-700">${esc(r.requestedByName || '—')}</span> ${r.requestedAt ? 'on ' + esc(new Date(r.requestedAt).toLocaleString()) : ''}</div>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        ${canDecide ? `<button onclick="openRejectStockRequest('${r.id}')" class="px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-rose-600 hover:bg-rose-50">Reject</button>
+          <button onclick="approveStockRequest('${r.id}')" ${problems.length ? 'disabled title="' + esc(problems.join(' ')) + '"' : ''} class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed">Approve${r.kind === 'transfer' ? ' & send' : ' & deduct'}</button>` : ''}
+        ${!canDecide && mine && r.status === 'pending' ? `<button onclick="cancelStockRequest('${r.id}')" class="px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50">Cancel request</button>` : ''}
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm mb-3">
+      <div><div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">${r.kind === 'transfer' ? 'From' : 'Location'}</div><div class="text-slate-800">${loc ? locTag(loc.id) + ' ' + esc(loc.name) : '—'}</div><div class="text-[11px] text-slate-400">Custodian: ${esc((loc && loc.custodianName) || 'not assigned (admins approve)')}</div></div>
+      ${r.kind === 'transfer' ? `<div><div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">To</div><div class="text-slate-800">${esc(stockRequestLocName(r.toLocationId))}</div></div>`
+        : `<div><div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Issued to</div><div class="text-slate-800">${esc(r.staffName || '—')}</div><div class="text-[11px] text-slate-400">${esc(r.department || '')}</div></div>`}
+      <div><div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Reason / reference</div><div class="text-slate-800">${esc(r.reason || '—')}</div></div>
+    </div>
+    <table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="py-1.5 font-semibold">Item</th><th class="py-1.5 font-semibold text-right pr-3">Qty</th>${r.kind === 'out' ? '<th class="py-1.5 font-semibold">Consumption from</th>' : ''}${r.status === 'pending' ? '<th class="py-1.5 font-semibold text-right">In stock now</th>' : ''}</tr></thead><tbody>${rows}</tbody></table>
+    ${problems.length && canDecide ? `<div class="mt-3 text-xs font-semibold text-rose-600">${problems.map(esc).join('<br>')}</div>` : ''}
+    ${decided}
+  </div>`;
+}
+function viewStockRequestsTab(){
+  const all = [...(state.stockRequests || [])].sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0));
+  const toMe = all.filter(r => r.status === 'pending' && canFinalizeStock(r.locationId));
+  const myPending = all.filter(r => r.status === 'pending' && !canFinalizeStock(r.locationId) && authUser && r.requestedByUid === authUser.uid);
+  const otherPending = all.filter(r => r.status === 'pending' && !toMe.includes(r) && !myPending.includes(r));
+  const history = all.filter(r => r.status !== 'pending').slice(0, 40);
+  const section = (title, hint, list, empty) => `
+    <div class="mb-7"><div class="flex items-baseline justify-between gap-3 mb-3"><h2 class="text-sm font-bold text-slate-900">${title} <span class="text-slate-400 font-semibold">${list.length}</span></h2><span class="text-xs text-slate-400">${hint}</span></div>
+    ${list.length ? `<div class="space-y-3">${list.map(stockRequestCard).join('')}</div>` : `<div class="bg-white rounded-xl border border-slate-200 text-center py-8 text-sm text-slate-400">${empty}</div>`}</div>`;
+  return `
+    <div class="text-xs text-slate-500 mb-5">A stock out or transfer entered by someone other than the location's custodian comes here first. Stock is only deducted when the custodian (or an admin) approves it.</div>
+    ${section('Awaiting your approval', 'You are the custodian (or an admin)', toMe, 'Nothing waiting for you.')}
+    ${myPending.length ? section('Your requests', 'Waiting for the custodian', myPending, '') : ''}
+    ${otherPending.length ? section('Other pending requests', '', otherPending, '') : ''}
+    ${section('History', 'Last 40', history, 'No decided requests yet.')}`;
+}
+
 function deleteMovement(id){
   if(!canManageInventory()){ toast('Only admins can delete stock movements.', true); return; }
   const m = state.movements.find(x=>x.id===id);

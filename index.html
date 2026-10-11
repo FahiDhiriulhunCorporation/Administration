@@ -4722,28 +4722,62 @@ function keyCell(qty, names){
   if(!qty && !keyNames(names).length) return '<span class="text-slate-300">—</span>';
   return `<div class="font-bold text-slate-800 num">${qty}</div>${keyNames(names).map(n => `<div class="text-[11.5px] text-slate-500 leading-snug">${esc(n)}</div>`).join('')}`;
 }
+// sites are matched to the app's locations (by name or code) so they carry the location's colour and code
+function keySiteLocation(site){
+  const n = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''), k = n(site); if(!k) return null;
+  return LOCATIONS.find(l => n(l.name) === k || n(l.code) === k) || LOCATIONS.find(l => n(l.name).startsWith(k) || k.startsWith(n(l.name))) || null;
+}
+function keySiteStats(rows){
+  const keys = rows.filter(r => r.kind !== 'AC Remote'), ac = rows.filter(r => r.kind === 'AC Remote'), sum = (list, f) => list.reduce((t, r) => t + keyQty(r[f]), 0);
+  return { items: rows.length, keys: keys.reduce((t, r) => t + keyTotal(r), 0), keyItems: keys.length, box: sum(keys, 'qtyBox'), admin: sum(rows, 'adminQty'), other: sum(rows, 'otherQty'), copies: sum(keys, 'copiesQty'), remotes: ac.reduce((t, r) => t + keyTotal(r), 0), remoteItems: ac.length };
+}
+function keyToggleSite(site){ vehUi.keySite = vehUi.keySite === site ? '' : site; rerenderMain(); }
+function keyToggleCollapse(site){ const c = new Set(vehUi.keyCollapsed || []); if(c.has(site)) c.delete(site); else c.add(site); vehUi.keyCollapsed = [...c]; rerenderMain(); }
 function viewKeyRegistry(){
-  const all = state.keyRegistry, sites = [...new Set(all.map(r => r.site).filter(Boolean))].sort(), admin = canManageInventory();
+  const all = state.keyRegistry, admin = canManageInventory();
+  const sites = [...new Set(all.map(r => r.site).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric:true }));
   const list = all.filter(r => (!vehUi.keySite || r.site === vehUi.keySite) && (!vehUi.keyKind || r.kind === vehUi.keyKind) && vMatch(vehUi.keyQ, [r.site, r.kind, r.details, r.adminHolders, r.otherHolders, r.copiesHolders, r.notes, r.no]))
-    .sort((a, b) => String(a.site).localeCompare(String(b.site)) || KEY_KINDS.indexOf(a.kind) - KEY_KINDS.indexOf(b.kind) || vNum(a.no) - vNum(b.no) || String(a.details).localeCompare(String(b.details)));
-  const keys = list.filter(r => r.kind !== 'AC Remote'), sum = (rows, f) => rows.reduce((s, r) => s + keyQty(r[f]), 0);
-  const groupTotals = {}; list.forEach(r => { const g = r.site + '|' + r.kind; (groupTotals[g] = groupTotals[g] || { n:0, t:0 }); groupTotals[g].n++; groupTotals[g].t += keyTotal(r); });
-  let last = '';
-  const rows = list.map(r => {
-    const g = r.site + '|' + r.kind, ac = r.kind === 'AC Remote';
-    const head = g !== last ? `<tr class="bg-slate-50"><td colspan="8" class="py-2.5 px-5 sm:px-6 text-xs font-bold text-slate-600 uppercase tracking-wider">${esc(r.site)} · ${ac ? 'AC remotes' : 'Keys'} <span class="font-normal normal-case tracking-normal text-slate-400 ml-2">${groupTotals[g].n} item${groupTotals[g].n === 1 ? '' : 's'} · ${groupTotals[g].t} total</span></td></tr>` : '';
-    last = g;
-    return head + `<tr class="${vTr} align-top">${vTd(esc(String(r.no || '')), { first:1 })}${vTd(`<div class="font-semibold text-slate-800">${esc(r.details)}</div>${r.notes ? `<div class="text-[11.5px] text-slate-400">${esc(r.notes)}</div>` : ''}`)}${vTd(ac ? '<span class="text-slate-300">—</span>' : keyCell(r.qtyBox, ''))}${vTd(keyCell(r.adminQty, r.adminHolders))}${vTd(keyCell(r.otherQty, r.otherHolders))}${vTd(ac ? '<span class="text-slate-300">—</span>' : keyCell(r.copiesQty, r.copiesHolders))}${vTd(`<b class="num">${keyTotal(r)}</b>`, { n:1 })}${vTd(`<button onclick="openKeyForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">Edit</button>${admin ? `<button onclick="deleteKey('${r.id}')" class="text-xs font-semibold text-rose-600 hover:underline">Delete</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`;
+    .sort((a, b) => KEY_KINDS.indexOf(a.kind) - KEY_KINDS.indexOf(b.kind) || vNum(a.no) - vNum(b.no) || String(a.details).localeCompare(String(b.details)));
+  const T = keySiteStats(list);
+  const dot = site => { const l = keySiteLocation(site); return `<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${l ? esc(l.color) : '#94a3b8'}"></span>`; };
+  const code = site => { const l = keySiteLocation(site); return l && l.code ? `<span class="shrink-0 text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">${esc(l.code)}</span>` : ''; };
+  const keyRow = r => { const ac = r.kind === 'AC Remote'; return `<tr class="${vTr} align-top">${vTd(esc(String(r.no || '')), { first:1 })}${vTd(`<div class="font-semibold text-slate-800">${esc(r.details)}</div>${r.notes ? `<div class="text-[11.5px] text-slate-400">${esc(r.notes)}</div>` : ''}`)}${vTd(ac ? '<span class="text-slate-300">—</span>' : keyCell(r.qtyBox, ''))}${vTd(keyCell(r.adminQty, r.adminHolders))}${vTd(keyCell(r.otherQty, r.otherHolders))}${vTd(ac ? '<span class="text-slate-300">—</span>' : keyCell(r.copiesQty, r.copiesHolders))}${vTd(`<b class="num">${keyTotal(r)}</b>`, { n:1 })}${vTd(`<button onclick="openKeyForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">Edit</button>${admin ? `<button onclick="deleteKey('${r.id}')" class="text-xs font-semibold text-rose-600 hover:underline">Delete</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; };
+  const kindTable = (rows, ac) => rows.length ? `
+      <div class="px-5 sm:px-6 pt-4 pb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">${ac ? 'AC remotes' : 'Keys'}<span class="font-normal normal-case tracking-normal text-slate-400">${rows.length} item${rows.length === 1 ? '' : 's'} · ${rows.reduce((t, r) => t + keyTotal(r), 0)} total</span></div>
+      <div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'#' }, { t:'Details' }, { t:ac ? '' : 'In key box' }, { t:'With admin staff' }, { t:'With other departments' }, { t:ac ? '' : 'Copies with other staff' }, { t:'Total', n:1 }, { t:'' }])}<tbody>${rows.map(keyRow).join('')}</tbody></table></div>` : '';
+  // one card per site: its own totals, keys and AC remotes listed separately, can be folded away
+  const siteNames = sites.filter(st => list.some(r => r.site === st));
+  const sitePanels = siteNames.map(st => {
+    const rows = list.filter(r => r.site === st), x = keySiteStats(rows), shut = (vehUi.keyCollapsed || []).includes(st), l = keySiteLocation(st);
+    const chip = (label, v, cls) => `<span class="text-[11.5px] px-2 py-0.5 rounded-full ${cls || 'bg-slate-100 text-slate-600'}"><b class="num">${v}</b> ${label}</span>`;
+    return `<div class="bg-white rounded-xl border border-slate-200 mb-5 overflow-hidden" ${l ? `style="border-left:4px solid ${esc(l.color)}"` : ''}>
+      <button type="button" onclick="keyToggleCollapse('${esc(st).replace(/'/g, '&#39;')}')" class="w-full text-left px-5 sm:px-6 py-4 flex items-center justify-between gap-3 flex-wrap hover:bg-slate-50">
+        <div class="flex items-center gap-2.5 min-w-0">${dot(st)}<span class="text-base font-extrabold text-slate-900 truncate">${esc(st)}</span>${code(st)}${l && l.name !== st ? `<span class="text-xs text-slate-400 truncate">${esc(l.name)}</span>` : ''}</div>
+        <div class="flex items-center gap-1.5 flex-wrap">${chip('keys', x.keys)}${chip('in box', x.box, 'bg-emerald-100 text-emerald-700')}${chip('with staff', x.admin + x.other, 'bg-amber-100 text-amber-700')}${x.copies ? chip('copies', x.copies) : ''}${x.remoteItems ? chip('AC remotes', x.remotes, 'bg-sky-100 text-sky-700') : ''}<span class="text-slate-400 text-sm ml-1">${shut ? '▸' : '▾'}</span></div>
+      </button>
+      ${shut ? '' : `<div class="border-t border-slate-100 pb-2">${kindTable(rows.filter(r => r.kind !== 'AC Remote'), false)}${kindTable(rows.filter(r => r.kind === 'AC Remote'), true)}</div>`}
+    </div>`;
   }).join('');
+  // site overview: a card per site, click to show just that site
+  const overview = sites.length > 0 ? `<div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
+      <button type="button" onclick="vehUi.keySite=''; rerenderMain();" class="text-left rounded-xl border p-3.5 transition-colors ${!vehUi.keySite ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-slate-200 hover:border-brand-300'}">
+        <div class="text-xs font-semibold ${!vehUi.keySite ? 'text-white/80' : 'text-slate-500'}">All sites</div><div class="text-xl font-extrabold num ${!vehUi.keySite ? 'text-white' : 'text-slate-900'}">${sites.length}</div><div class="text-[11px] ${!vehUi.keySite ? 'text-white/70' : 'text-slate-400'}">${all.length} items</div></button>
+      ${sites.map(st => { const x = keySiteStats(all.filter(r => r.site === st)), on = vehUi.keySite === st; return `
+      <button type="button" onclick="keyToggleSite('${esc(st).replace(/'/g, '&#39;')}')" class="text-left rounded-xl border p-3.5 transition-colors ${on ? 'bg-white border-brand-500 ring-2 ring-brand-500' : 'bg-white border-slate-200 hover:border-brand-300'}">
+        <div class="flex items-center gap-2 min-w-0">${dot(st)}<span class="text-sm font-bold text-slate-900 truncate">${esc(st)}</span></div>
+        <div class="text-xl font-extrabold text-slate-900 num mt-1">${x.keys}<span class="text-xs font-semibold text-slate-400"> keys</span></div>
+        <div class="text-[11px] text-slate-400">${x.box} in box · ${x.admin + x.other} with staff${x.remoteItems ? ' · ' + x.remotes + ' remotes' : ''}</div></button>`; }).join('')}
+    </div>` : '';
   return `
-    ${vHead('Key Registry', 'Where every key and AC remote is: in the key box, with admin staff, with other departments, or as a copy.',
+    ${vHead('Key Registry', 'Where every key and AC remote is, site by site: in the key box, with admin staff, with other departments, or as a copy.',
       (admin ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">Import from Excel<input type="file" id="key-file" accept=".xlsx" class="hidden" onchange="keyImportFile(this)"></label>` : '') + (all.length ? vBtnPlain('Export CSV', 'keyExportCsv()') : '') + vBtnPrimary('+ Add', 'openKeyForm()'))}
-    ${vKpis(statCard('Total keys', fmtNum(keys.reduce((s, r) => s + keyTotal(r), 0)), keys.length + ' key item' + (keys.length === 1 ? '' : 's') + ' · originals and copies', 'brand') + statCard('In the key box', fmtNum(sum(keys, 'qtyBox')), 'Kept at the office', 'emerald') +
-      statCard('With staff', fmtNum(sum(list, 'adminQty') + sum(list, 'otherQty')), 'Admin ' + sum(list, 'adminQty') + ' · other departments ' + sum(list, 'otherQty'), 'amber') + statCard('Copies with other staff', fmtNum(sum(keys, 'copiesQty')), 'Duplicates handed out', 'slate'))}
-    <div class="flex flex-wrap gap-2.5 mb-5">${vSearch('key-q', 'keyQ', 'Search a door, a person, a note…')}${vSelect('keySite', sites, vehUi.keySite, 'All sites')}${vSelect('keyKind', [['Key', 'Keys'], ['AC Remote', 'AC remotes']], vehUi.keyKind, 'Keys and remotes')}</div>
+    ${vKpis(statCard('Total keys', fmtNum(T.keys), (vehUi.keySite ? esc(vehUi.keySite) + ' · ' : '') + T.keyItems + ' key item' + (T.keyItems === 1 ? '' : 's') + ' · originals and copies', 'brand') + statCard('In the key box', fmtNum(T.box), 'Kept at the office', 'emerald') +
+      statCard('With staff', fmtNum(T.admin + T.other), 'Admin ' + T.admin + ' · other departments ' + T.other, 'amber') + statCard('Copies with other staff', fmtNum(T.copies), 'Duplicates handed out', 'slate'))}
+    ${overview}
+    <div class="flex flex-wrap gap-2.5 mb-5">${vSearch('key-q', 'keyQ', 'Search a door, a person, a note…')}${vSelect('keyKind', [['Key', 'Keys'], ['AC Remote', 'AC remotes']], vehUi.keyKind, 'Keys and remotes')}${siteNames.length > 1 ? `<button onclick="vehUi.keyCollapsed = ${JSON.stringify(siteNames).replace(/"/g, '&quot;')}; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Fold all</button><button onclick="vehUi.keyCollapsed = []; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Unfold all</button>` : ''}</div>
     ${!all.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No keys recorded yet.<div class="mt-4 flex flex-wrap justify-center gap-2.5">' + (admin ? vBtnPrimary('Import the UD T15 keys', 'keyImportSeed()') : '') + vBtnPlain('+ Add a key', 'openKeyForm()') + '</div>' + (admin ? '<div class="text-xs text-slate-400 mt-3">The UD T15 keys and AC remotes come from UD_T15_Keys.xlsx. You can also import any sheet in the same layout with "Import from Excel".</div>' : ''))}</div>`
       : !list.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('Nothing matches these filters.')}</div>`
-      : vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'#' }, { t:'Details' }, { t:'In key box' }, { t:'With admin staff' }, { t:'With other departments' }, { t:'Copies with other staff' }, { t:'Total', n:1 }, { t:'' }])}<tbody>${rows}</tbody></table>`)}`;
+      : sitePanels}`;
 }
 function keyKindChanged(sel){ const ac = sel.value === 'AC Remote'; ['key-box-row', 'key-copies-row'].forEach(id => { document.getElementById(id).style.display = ac ? 'none' : ''; }); }
 function openKeyForm(id){

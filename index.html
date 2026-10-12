@@ -376,6 +376,8 @@ function refreshAppearanceModal(){
   html[data-theme="dark"] .vh-tip{ background:rgb(var(--s-tip)); border:1px solid rgb(var(--s-raised)); }
   @media print{
     .no-print{ display:none !important; }
+    #sidebar, #app-root > header, #toast-wrap{ display:none !important; }
+    .rh-section{ break-inside: avoid; }
     body{ background:#fff; }
   }
 </style>
@@ -950,7 +952,7 @@ async function initCloudIfConfigured(){
     firebaseAuth = firebase.auth();
     firebaseAuth.onAuthStateChanged(user=>{
       if(user){
-        isUserBlocked(user.uid).then(blocked=>{
+        isUserBlocked(user.uid, user.email).then(blocked=>{
           if(blocked){
             firebaseAuth.signOut();
             toast('Your access has been revoked. Contact an administrator.', true);
@@ -1028,15 +1030,34 @@ function listenToOwnProfile(user){
     renderApp();
   }, err=>{ /* profile is a nice-to-have on top of auth; a failure here shouldn't block the app */ });
 }
-async function isUserBlocked(uid){
+// A removed member's uid goes on the blocked list. If an admin later adds the same email again (it then shows as
+// "Pending"), that re-admits them: the block no longer applies, and it is cleared from the list once they sign in.
+async function isUserBlocked(uid, email){
   if(!firestoreDb) return false;
   try{
     const doc = await firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers').get();
-    const uids = doc.exists && Array.isArray(doc.data().uids) ? doc.data().uids : [];
-    return uids.includes(uid);
+    const d = doc.exists ? doc.data() : {}, uids = Array.isArray(d.uids) ? d.uids : [];
+    if(!uids.includes(uid)) return false;
+    if(email){
+      try{
+        const pmDoc = await firestoreDb.collection('fdc_inventory_meta').doc('pendingMembers').get();
+        const pm = pmDoc.exists && pmDoc.data().list ? pmDoc.data().list[pmKey(email)] : null;
+        const blockedAt = d.info && d.info[uid] && d.info[uid].at;
+        if(pm && (!blockedAt || !pm.addedAt || pm.addedAt > blockedAt)) return false;       // re-added by an admin after the removal
+      }catch(e){}
+    }
+    return true;
   }catch(e){ return false; }
 }
-async function ensureOwnProfileDoc(user, extra){ if(!firestoreProfilesRef || !firestoreDb) return; try{ if(await isUserBlocked(user.uid)) return; let assignedRole = null; let pm = null; try{ const pmDoc = await firestoreDb.collection('fdc_inventory_meta').doc('pendingMembers').get(); const lst = pmDoc.exists && pmDoc.data() && pmDoc.data().list; pm = lst ? (lst[pmKey(user.email)] || null) : null; }catch(e){} const metaRef = firestoreDb.collection('fdc_inventory_meta').doc('adminStatus'); await firestoreDb.runTransaction(async (tx) => { const ref = firestoreProfilesRef.doc(user.uid); const snap = await tx.get(ref); if(snap.exists) return; const metaSnap = await tx.get(metaRef); const alreadyHasAdmin = metaSnap.exists && metaSnap.data().assigned; const role = alreadyHasAdmin ? 'member' : 'admin'; const data = Object.assign({ uid:user.uid, email:user.email, name:(pm&&pm.name)||user.displayName||user.email, role, designation:(pm&&pm.designation)||'', department:(pm&&pm.department)||'', createdAt: Date.now() }, extra||{}); tx.set(ref, data); if(!alreadyHasAdmin) tx.set(metaRef, { assigned:true }); assignedRole = role; }); if(assignedRole && authUser && authUser.uid===user.uid){ authUser.role = assignedRole; renderApp(); } }catch(e){ } }
+async function unblockUid(uid){
+  const metaRef = firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers');
+  await firestoreDb.runTransaction(async tx => {
+    const snap = await tx.get(metaRef); if(!snap.exists) return;
+    const d = snap.data(), uids = (Array.isArray(d.uids) ? d.uids : []).filter(x => x !== uid), info = Object.assign({}, d.info || {}); delete info[uid];
+    tx.set(metaRef, { uids, info });
+  });
+}
+async function ensureOwnProfileDoc(user, extra){ if(!firestoreProfilesRef || !firestoreDb) return; try{ if(await isUserBlocked(user.uid, user.email)) return; try{ const bd = await firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers').get(); if(bd.exists && Array.isArray(bd.data().uids) && bd.data().uids.includes(user.uid)) unblockUid(user.uid).catch(() => {}); }catch(e){} let assignedRole = null; let pm = null; try{ const pmDoc = await firestoreDb.collection('fdc_inventory_meta').doc('pendingMembers').get(); const lst = pmDoc.exists && pmDoc.data() && pmDoc.data().list; pm = lst ? (lst[pmKey(user.email)] || null) : null; }catch(e){} const metaRef = firestoreDb.collection('fdc_inventory_meta').doc('adminStatus'); await firestoreDb.runTransaction(async (tx) => { const ref = firestoreProfilesRef.doc(user.uid); const snap = await tx.get(ref); if(snap.exists) return; const metaSnap = await tx.get(metaRef); const alreadyHasAdmin = metaSnap.exists && metaSnap.data().assigned; const role = alreadyHasAdmin ? 'member' : 'admin'; const data = Object.assign({ uid:user.uid, email:user.email, name:(pm&&pm.name)||user.displayName||user.email, role, designation:(pm&&pm.designation)||'', department:(pm&&pm.department)||'', createdAt: Date.now() }, extra||{}); tx.set(ref, data); if(!alreadyHasAdmin) tx.set(metaRef, { assigned:true }); assignedRole = role; }); if(assignedRole && authUser && authUser.uid===user.uid){ authUser.role = assignedRole; renderApp(); } }catch(e){ } }
 let lastCloudErrorToastAt = 0;
 function handleCloudSyncError(err, collectionLabel){
   cloudStatus = 'error';
@@ -1621,6 +1642,7 @@ function currentNav(){
   let utAl = []; try{ utAl = utAlerts(); }catch(e){}
   const nav = [
     { id:'dashboard', label:'Dashboard', icon:'dashboard' },
+    { id:'reports', label:'Reports', icon:'statement' },
     { section:'Stock' },
     { id:'products', label:'Items', icon:'products' },
     { id:'levels', label:'Stock Levels', icon:'levels' },
@@ -4740,6 +4762,136 @@ function viewPettyCashStatement(){
 
 
 /* =====================================================================
+   REPORTS — one page that compiles a summary of every part of the app for a chosen period,
+   with links to each detailed report, a combined CSV and a printable view.
+===================================================================== */
+function rhRange(){
+  if(!vehUi.rhFrom) vehUi.rhFrom = vToday().slice(0, 8) + '01';
+  if(!vehUi.rhTo) vehUi.rhTo = vToday();
+  let from = vehUi.rhFrom, to = vehUi.rhTo; if(from > to){ const x = from; from = to; to = x; }
+  return { from, to, inR: d => !!d && String(d).slice(0, 10) >= from && String(d).slice(0, 10) <= to, inM: ym => !!ym && ym >= from.slice(0, 7) && ym <= to.slice(0, 7) };
+}
+function rhPreset(k){
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  if(k === 'month'){ vehUi.rhFrom = vIso(new Date(t.getFullYear(), t.getMonth(), 1)); vehUi.rhTo = vIso(t); }
+  else if(k === 'last'){ vehUi.rhFrom = vIso(new Date(t.getFullYear(), t.getMonth() - 1, 1)); vehUi.rhTo = vIso(new Date(t.getFullYear(), t.getMonth(), 0)); }
+  else if(k === 'quarter'){ const q = Math.floor(t.getMonth() / 3) * 3; vehUi.rhFrom = vIso(new Date(t.getFullYear(), q, 1)); vehUi.rhTo = vIso(t); }
+  else { vehUi.rhFrom = vIso(new Date(t.getFullYear(), 0, 1)); vehUi.rhTo = vIso(t); }
+  rerenderMain();
+}
+// every section returns { key, title, icon, link, linkLabel, rows:[[label, value, note?]], lists:[{ title, items:[[label, value]] }] }
+function rhSections(){
+  const R = rhRange(), out = [], cnt = (n, w) => fmtNum(n) + ' ' + w + (n === 1 ? '' : 's');
+  const top = (map, n) => Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, n || 5);
+  const safe = fn => { try{ const x = fn(); if(x) out.push(x); }catch(e){ console.warn('Report section failed', e); } };
+  safe(() => {
+    const mv = state.movements.filter(m => R.inR(m.date)), ins = mv.filter(m => m.type === 'in'), outs = mv.filter(m => m.type === 'out');
+    const q = l => l.reduce((t, m) => t + (Number(m.quantity) || 0), 0), cost = outs.reduce((t, m) => t + (Number(m.quantity) || 0) * productUnitCost(m.productId), 0);
+    const byItem = {}; outs.forEach(m => { const p = getProduct(m.productId); if(p){ const k = displayName(p); byItem[k] = (byItem[k] || 0) + (Number(m.quantity) || 0); } });
+    const byDept = {}; outs.forEach(m => { const k = m.department || 'Not given'; byDept[k] = (byDept[k] || 0) + (Number(m.quantity) || 0) * productUnitCost(m.productId); });
+    const xf = state.itemTransfers.filter(t => R.inR(t.date) && t.status !== 'rejected');
+    const pendReq = (state.stockRequests || []).filter(r => r.status === 'pending').length;
+    return { key:'stock', title:'Stock', icon:'products', link:'stock-report', linkLabel:'Stock Report',
+      rows:[['Items', fmtNum(state.products.length)], ['Units in stock now', fmtNum(totalUnits())], ['Low-stock items', fmtNum(lowStockProducts().length)],
+        ['Stock in', fmtNum(q(ins)) + ' units', cnt(ins.length, 'entry').replace('entrys', 'entries')], ['Stock out', fmtNum(q(outs)) + ' units', cnt(outs.length, 'entry').replace('entrys', 'entries')],
+        ['Consumption value', fmtMVR(cost), 'at estimated cost'], ['Transfers', cnt(xf.length, 'transfer'), fmtNum(xf.reduce((t, x) => t + (Number(x.quantity) || 0), 0)) + ' units'], ['Stock requests pending', fmtNum(pendReq)]],
+      lists:[{ title:'Most consumed items', items: top(byItem).map(([k, v]) => [k, fmtNum(v) + ' units']) }, { title:'Consumption by department', items: top(byDept).map(([k, v]) => [k, fmtMVR(v)]) }] };
+  });
+  safe(() => {
+    const total = state.assets.length, active = state.assets.filter(a => a.status !== 'retired').length;
+    const mv = state.assetTransfers.filter(t => R.inR(t.date)), ho = state.handovers.filter(h => R.inR(h.handoverDate));
+    const unsigned = state.handovers.filter(h => !hoFullySigned(h)).length;
+    const byCat = {}; state.assets.forEach(a => { const k = a.category || 'Uncategorized'; byCat[k] = (byCat[k] || 0) + 1; });
+    return { key:'assets', title:'Assets & Handovers', icon:'assets', link:'asset-report', linkLabel:'Asset Report',
+      rows:[['Assets', fmtNum(total)], ['Active', fmtNum(active)], ['Retired', fmtNum(total - active)], ['Asset movements', fmtNum(mv.length)], ['Handovers', fmtNum(ho.length), fmtNum(ho.reduce((t, h) => t + hoLines(h).reduce((a, l) => a + (Number(l.quantity) || 0), 0), 0)) + ' items handed over'],
+        ['Handovers not fully signed', fmtNum(unsigned), 'all time'], ['Keys in the registry', fmtNum(state.keyRegistry.filter(r => r.kind !== 'AC Remote').reduce((t, r) => t + keyTotal(r), 0))]],
+      lists:[{ title:'Assets by category', items: top(byCat, 6).map(([k, v]) => [k, fmtNum(v)]) }] };
+  });
+  safe(() => {
+    const fr = state.fuelRecords.filter(r => R.inR(r.date)), sr = state.serviceRecords.filter(r => R.inR(r.date));
+    const al = vehAlerts(), crit = al.filter(a => a.st.k === 'crit').length;
+    const byVeh = {}; fr.forEach(r => { const v = vehById(r.vehicleId); const k = v ? vLabel(v) : 'Unknown'; byVeh[k] = (byVeh[k] || 0) + vNum(r.total); });
+    const fuelBy = t => fr.filter(r => r.fuelType === t);
+    return { key:'fleet', title:'Fleet', icon:'vehicle', link:'vehicle-reports', linkLabel:'Fleet Report',
+      rows:[['Vehicles', fmtNum(state.vehicles.length), fmtNum(state.vehicles.filter(v => (v.status || 'Active') === 'Active').length) + ' active'],
+        ['Fuel', fmtNum(Math.round(fr.reduce((t, r) => t + vNum(r.litres), 0))) + ' L', cnt(fr.length, 'fill-up')], ['Fuel cost', vMoney(fr.reduce((t, r) => t + vNum(r.total), 0)), 'Petrol ' + vMoney0(fuelBy('Petrol').reduce((t, r) => t + vNum(r.total), 0)) + ' · Diesel ' + vMoney0(fuelBy('Diesel').reduce((t, r) => t + vNum(r.total), 0))],
+        ['Service & repair records', fmtNum(sr.length), sr.filter(r => r.kind === 'incident').length + ' incidents'], ['Service & repair cost', vMoney(sr.reduce((t, r) => t + vNum(r.cost), 0))],
+        ['Open issues', fmtNum(state.serviceRecords.filter(r => r.kind === 'incident' && r.status !== 'Resolved').length), 'all time'], ['Alerts now', fmtNum(al.length), crit ? crit + ' expired / overdue' : 'none overdue']],
+      lists:[{ title:'Fuel cost by vehicle', items: top(byVeh).map(([k, v]) => [k, vMoney0(v)]) }] };
+  });
+  safe(() => {
+    const prs = state.purchaseRequisitions, inP = prs.filter(p => R.inR(p.requisitionDate || (p.createdAt ? localDateStr(new Date(p.createdAt)) : '')));
+    const val = p => (p.lineItems || []).reduce((t, l) => t + (Number(l.totalCost) || 0), 0);
+    const byStatus = {}; PR_STATUSES.forEach(st => { byStatus[st.label] = inP.filter(p => (p.status || 'open') === st.id).length; });
+    const byCode = {}; inP.forEach(p => (p.lineItems || []).forEach(l => { const k = prLineBudgetCode(p, l) || 'No budget code'; byCode[k] = (byCode[k] || 0) + (Number(l.totalCost) || 0); }));
+    const byDept = {}; inP.forEach(p => { const k = p.department || 'Not given'; byDept[k] = (byDept[k] || 0) + val(p); });
+    return { key:'pr', title:'Purchase Requisitions', icon:'pr', link:'purchase-requisitions', linkLabel:'Purchase Requisitions',
+      rows:[['Requisitions raised', fmtNum(inP.length)], ['Total value', fmtMVR(inP.reduce((t, p) => t + val(p), 0))], ...PR_STATUSES.map(st => [st.label, fmtNum(byStatus[st.label])]),
+        ['Open across all time', fmtNum(prs.filter(p => (p.status || 'open') !== 'closed').length), fmtMVR(prs.filter(p => (p.status || 'open') !== 'closed').reduce((t, p) => t + val(p), 0)) + ' not yet closed']],
+      lists:[{ title:'Value by budget code', items: top(byCode, 6).map(([k, v]) => [k, fmtMVR(v)]) }, { title:'Value by department', items: top(byDept).map(([k, v]) => [k, fmtMVR(v)]) }] };
+  });
+  safe(() => {
+    const pc = state.pettyCash.filter(r => R.inR(r.date)), sum = l => l.reduce((t, r) => t + pcTotal(r), 0);
+    const st = {}; pc.forEach(r => { const k = pcStatus(r).label; st[k] = (st[k] || 0) + 1; });
+    const byFund = {}; pc.forEach(r => { const k = pcLocName(r.locationId); byFund[k] = (byFund[k] || 0) + pcTotal(r); });
+    const byCat = {}; pc.forEach(r => { const k = r.category || 'Not given'; byCat[k] = (byCat[k] || 0) + pcTotal(r); });
+    const closed = state.pettyStatements.filter(x => x.status === 'closed' && R.inR(x.closedDate));
+    const pendRepl = pcFundList().reduce((t, f) => t + pcStatements(f.id).reduce((a, x) => a + pcStmtPending(x), 0), 0);
+    const counts = pcFundList().map(f => pcReconcile(f)).filter(rc => rc.counted), unbal = counts.filter(rc => Math.abs(rc.diff) >= 0.005).length;
+    return { key:'petty', title:'Petty Cash', icon:'cash', link:'petty-statement', linkLabel:'Statements',
+      rows:[['Requests', fmtNum(pc.length)], ['Amount requested', fmtMVR(sum(pc))], ['Prior requests', fmtMVR(sum(pc.filter(r => r.option === 'Prior Request')))], ['Reimbursements', fmtMVR(sum(pc.filter(r => r.option === 'Reimbursement')))],
+        ...Object.entries(st).map(([k, v]) => [k, fmtNum(v)]), ['Statements closed', fmtNum(closed.length), fmtMVR(closed.reduce((t, x) => { const s2 = pcStatements(x.locationId).find(y => y.no === x.no); return t + (s2 ? s2.total : 0); }, 0))],
+        ['Pending replenishment now', fmtMVR(pendRepl)], ['Funds counted', fmtNum(counts.length), unbal ? unbal + ' not balancing' : 'all balance']],
+      lists:[{ title:'By location / fund', items: top(byFund, 6).map(([k, v]) => [k, fmtMVR(v)]) }, { title:'By category', items: top(byCat).map(([k, v]) => [k, fmtMVR(v)]) }] };
+  });
+  safe(() => {
+    const bills = state.utilityBills.filter(b => R.inM(b.period)), unpaid = state.utilityBills.filter(b => !b.paidDate), od = unpaid.filter(b => utStatus(b).k === 'crit');
+    const byLoc = {}; bills.forEach(b => { const k = utLocName((utAcc(b.accountId) || {}).locationId); byLoc[k] = (byLoc[k] || 0) + vNum(b.amount); });
+    return { key:'utilities', title:'Utilities', icon:'bolt', link:'utility-report', linkLabel:'Utility Report',
+      rows:[['Total utility cost', fmtMVR(bills.reduce((t, b) => t + vNum(b.amount), 0)), cnt(bills.length, 'invoice')],
+        ...UT_TYPE_LIST.map(t => { const tb = bills.filter(b => (utAcc(b.accountId) || {}).type === t), u = tb.reduce((a, b) => a + utUnits(b), 0); return [t, fmtMVR(tb.reduce((a, b) => a + vNum(b.amount), 0)), u ? fmtNum(Math.round(u)) + ' ' + UT_TYPES[t].unit : cnt(tb.length, 'invoice')]; }),
+        ['Unpaid invoices now', fmtNum(unpaid.length), fmtMVR(unpaid.reduce((t, b) => t + vNum(b.amount), 0))], ['Overdue now', fmtNum(od.length), fmtMVR(od.reduce((t, b) => t + vNum(b.amount), 0))]],
+      lists:[{ title:'Cost by location', items: top(byLoc, 6).map(([k, v]) => [k, fmtMVR(v)]) }] };
+  });
+  return out;
+}
+function viewReportsHub(){
+  const R = rhRange(), secs = rhSections(), only = vehUi.rhOnly || '';
+  const head = vHead('Reports', 'A compiled summary of every part of the app for the selected period, with links to each detailed report.',
+    vBtnPlain('Export CSV', 'rhExportCsv()') + vBtnPlain('Print / PDF', 'window.print()'));
+  const filters = `<div class="no-print flex flex-wrap items-end gap-3 mb-5">
+    <label class="text-xs font-semibold text-slate-600">From<input type="date" value="${esc(R.from)}" onchange="vehSet('rhFrom', this.value)" class="${VEH_INPUT} block mt-1"></label>
+    <label class="text-xs font-semibold text-slate-600">To<input type="date" value="${esc(R.to)}" onchange="vehSet('rhTo', this.value)" class="${VEH_INPUT} block mt-1"></label>
+    <div class="flex gap-1.5 pb-0.5 flex-wrap">${[['month', 'This month'], ['last', 'Last month'], ['quarter', 'This quarter'], ['year', 'This year']].map(([k, t]) => `<button onclick="rhPreset('${k}')" class="px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50">${t}</button>`).join('')}</div></div>
+    <div class="no-print flex flex-wrap gap-1.5 mb-6">${[['', 'All']].concat(secs.map(x => [x.key, x.title])).map(([k, t]) => `<button onclick="vehSet('rhOnly', '${k}')" class="px-3 py-1.5 rounded-full text-xs font-semibold border ${only === k ? 'bg-brand-600 border-brand-600 text-white' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}">${esc(t)}</button>`).join('')}</div>
+    <div class="hidden print:block text-sm text-slate-600 mb-4">Period: ${vDate(R.from)} – ${vDate(R.to)}</div>`;
+  const body = secs.filter(x => !only || x.key === only).map(x => `
+    <div class="rh-section bg-white rounded-xl border border-slate-200 mb-6 overflow-hidden">
+      <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center">${ICONS[x.icon] || ''}</span><h2 class="text-base font-extrabold text-slate-900">${esc(x.title)}</h2></div>
+        <button onclick="goTo('${x.link}')" class="no-print text-xs font-semibold text-brand-600 hover:underline">Open ${esc(x.linkLabel)} →</button>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-5">
+        <div class="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 gap-px bg-slate-100">
+          ${x.rows.map(([l, v, n]) => `<div class="bg-white px-5 py-3.5"><div class="text-[11px] font-medium text-slate-500">${esc(l)}</div><div class="text-lg font-extrabold text-slate-900 num leading-tight mt-0.5">${v}</div>${n ? `<div class="text-[11px] text-slate-400 mt-0.5">${esc(n)}</div>` : ''}</div>`).join('')}
+        </div>
+        <div class="lg:col-span-2 border-t lg:border-t-0 lg:border-l border-slate-100 px-5 sm:px-6 py-4 space-y-4">
+          ${(x.lists || []).map(L => `<div><div class="text-xs font-bold text-slate-700 mb-2">${esc(L.title)}</div>${L.items.length ? `<ul class="space-y-1.5">${L.items.map(([k, v]) => `<li class="flex justify-between gap-3 text-[13px]"><span class="text-slate-600 truncate">${esc(k)}</span><span class="num font-semibold text-slate-800 shrink-0">${v}</span></li>`).join('')}</ul>` : '<div class="text-xs text-slate-400">Nothing in this period.</div>'}</div>`).join('')}
+        </div>
+      </div>
+    </div>`).join('');
+  return head + filters + body;
+}
+function rhExportCsv(){
+  const R = rhRange(), rows = [];
+  rhSections().forEach(x => {
+    x.rows.forEach(([l, v, n]) => rows.push([x.title, 'Summary', l, String(v).replace(/<[^>]+>/g, ''), n || '']));
+    (x.lists || []).forEach(L => L.items.forEach(([k, v]) => rows.push([x.title, L.title, k, String(v).replace(/<[^>]+>/g, ''), ''])));
+  });
+  downloadCSV('reports-summary_' + R.from + '_to_' + R.to + '.csv', ['Section', 'Group', 'Item', 'Value', 'Note'], rows);
+}
+
+/* =====================================================================
    FACILITIES — ELECTRICITY & WATER: a utility account (meter) per location and type,
    its monthly bills with meter readings, consumption and payment, and a report of cost and use over time.
 ===================================================================== */
@@ -5319,6 +5471,7 @@ function render(){
     else if(ui.tab==='utilities') el.innerHTML = viewUtilities('Electricity');
     else if(/^utility-/.test(ui.tab) && utTypeBySlug(ui.tab.slice(8))) el.innerHTML = viewUtilities(utTypeBySlug(ui.tab.slice(8)));
     else if(ui.tab==='utility-report') el.innerHTML = viewUtilityReport();
+    else if(ui.tab==='reports') el.innerHTML = viewReportsHub();
     else if(ui.tab==='vehicle-detail') el.innerHTML = viewVehicleDetail();
     else if(ui.tab==='fueling') el.innerHTML = viewFueling();
     else if(ui.tab==='servicing') el.innerHTML = viewServicing();
@@ -6749,8 +6902,37 @@ function viewAdmin(){
         <p class="text-sm text-slate-500 max-w-sm mx-auto">If this doesn't update, make sure Firestore rules allow admins to read the fdc_inventory_profiles collection.</p>
       </div>`}
     </div>
+    ${blockedUsersPanel()}
     ${viewLowStockNotificationSettings()}
   `;
+}
+let blockedUsersCache = null, blockedUsersLoading = false;
+function loadBlockedUsers(){
+  if(blockedUsersLoading || !firestoreDb) return; blockedUsersLoading = true;
+  firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers').get().then(doc => {
+    const d = doc.exists ? doc.data() : {}; blockedUsersCache = { uids: Array.isArray(d.uids) ? d.uids : [], info: d.info || {} };
+  }).catch(() => { blockedUsersCache = { uids: [], info: {}, error: true }; }).finally(() => { blockedUsersLoading = false; if(ui.tab === 'admin') rerenderMain(); });
+}
+function blockedUsersPanel(){
+  if(!firestoreDb || !authUser || authUser.role !== 'admin') return '';
+  if(!blockedUsersCache){ loadBlockedUsers(); return ''; }
+  const list = blockedUsersCache.uids;
+  if(!list.length) return '';
+  const rows = list.map(uid => { const i = blockedUsersCache.info[uid] || {}; return `<tr class="border-b border-slate-100 last:border-0">
+    <td class="px-5 sm:px-6 py-3"><div class="font-semibold text-slate-800">${esc(i.name || 'Removed member')}</div><div class="text-[11px] text-slate-400">${esc(i.email || 'email not recorded (removed before this was tracked)')}</div></td>
+    <td class="py-3 text-xs text-slate-500">${i.at ? esc(new Date(i.at).toLocaleString()) + (i.by ? ' by ' + esc(i.by) : '') : '—'}</td>
+    <td class="py-3 text-[11px] text-slate-400 font-mono">${esc(uid)}</td>
+    <td class="py-3 pr-5 sm:pr-6 text-right"><button onclick="adminUnblock('${esc(uid)}')" class="text-xs font-semibold text-brand-600 hover:underline">Unblock</button></td></tr>`; }).join('');
+  return `<div class="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
+    <div class="px-5 sm:px-6 py-4 border-b border-slate-100"><h2 class="text-sm font-bold text-slate-900">Blocked sign-ins</h2><p class="text-xs text-slate-500 mt-0.5">People removed from the app. A blocked person is signed out a few seconds after signing in. Unblock them (or add them again) to let them back in.</p></div>
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100"><th class="px-5 sm:px-6 py-3 font-semibold">Person</th><th class="py-3 font-semibold">Removed</th><th class="py-3 font-semibold">Sign-in ID</th><th class="py-3"></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function adminUnblock(uid){
+  const i = (blockedUsersCache && blockedUsersCache.info[uid]) || {};
+  confirmAction('Unblock ' + (i.name || i.email || 'this sign-in') + '? They can sign in again; the first time they do, they become a member again.', async () => {
+    try{ await unblockUid(uid); blockedUsersCache = null; toast('Unblocked. They can sign in now.'); rerenderMain(); }
+    catch(e){ toast(syncErrorMessage(e, 'fdc_inventory_meta (blockedUsers doc)', 'save'), true); }
+  });
 }
 function viewLowStockNotificationSettings(){
   const s = notificationSettings;
@@ -6984,7 +7166,8 @@ function removeMember(uid, name){
   if(!authUser || authUser.role!=='admin'){ toast('Only admins can remove members.', true); return; }
   if(authUser.uid===uid){ toast('You cannot remove your own account.', true); return; }
   if(!firestoreProfilesRef || !firestoreDb){ toast('Removing members requires cloud sync to be connected.', true); return; }
-  confirmAction(`Remove ${name}? They will lose access immediately. Their old sign-in will keep failing until an admin removes them from the blocked list, since this app has no backend to delete the underlying account.`, async ()=>{
+  const removedProfile = state.profiles.find(p => p.uid === uid) || {};
+  confirmAction(`Remove ${name}? They will lose access immediately. Their sign-in stays blocked until an admin adds them again or unblocks them in the Admin Panel.`, async ()=>{
     const isPermissionError = e => e && (e.code==='permission-denied' || (e.message||'').toLowerCase().includes('permission'));
     try{
       await firestoreProfilesRef.doc(uid).delete();
@@ -6999,8 +7182,9 @@ function removeMember(uid, name){
       await firestoreDb.runTransaction(async (tx)=>{
         const snap = await tx.get(metaRef);
         const uids = snap.exists && Array.isArray(snap.data().uids) ? snap.data().uids : [];
+        const info = Object.assign({}, (snap.exists && snap.data().info) || {}, { [uid]: { email: removedProfile.email || '', name: removedProfile.name || name || '', at: Date.now(), by: authUser ? authUser.name : '' } });
         if(!uids.includes(uid)) uids.push(uid);
-        tx.set(metaRef, { uids });
+        tx.set(metaRef, { uids, info });
       });
     }catch(e){
       toast(isPermissionError(e)
@@ -7141,6 +7325,8 @@ async function addMemberAlreadyHasSignIn(m, mode){
   const reset = () => { addingMember = false; if(btn){ btn.disabled = false; btn.textContent = 'Add member'; } };
   try{ await savePendingMember(Object.assign({ addedBy: authUser ? authUser.uid : null, addedAt: Date.now() }, m)); }
   catch(e){ reset(); errEl.textContent = 'That email already has a sign-in account, but their details could not be saved: ' + syncErrorMessage(e, 'fdc_inventory_meta (pendingMembers doc)', 'save'); errEl.classList.remove('hidden'); return; }
+  try{ const bd = await firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers').get(); const info = (bd.exists && bd.data().info) || {};
+       for(const u of Object.keys(info)) if(String(info[u].email || '').toLowerCase() === m.email.toLowerCase()) await unblockUid(u); }catch(e){}
   let mailed = false;
   if(mode === 'link'){ try{ await firebaseAuth.sendPasswordResetEmail(m.email); mailed = true; }catch(e){} }
   reset(); closeModal();

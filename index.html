@@ -1595,6 +1595,10 @@ const ICONS = {
   locations:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 4.5 7 3l6 2 4.5-1.5v11L13 16l-6-2-4.5 1.5z"/><path d="M7 3v11M13 5v11"/></svg>',
   pr:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5.5 2.5h7l3 3v12h-10z"/><path d="M12.5 2.5v3h3"/><path d="M7 10.5h6M7 13h6M7 8h3"/></svg>',
   key:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6.5" cy="10" r="3.2"/><path stroke-linecap="round" d="M9.7 10H17M14.5 10v2.8M17 10v2"/></svg>',
+  wifi:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 7.5a11 11 0 0 1 15 0M5 10.4a7.2 7.2 0 0 1 10 0M7.6 13.2a3.4 3.4 0 0 1 4.8 0"/><circle cx="10" cy="16" r="1" fill="currentColor" stroke="none"/></svg>',
+  trash:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 5.5h13M8 5.5V3.8h4v1.7M5 5.5l.9 11h8.2l.9-11M8.5 8.5v5.5M11.5 8.5v5.5"/></svg>',
+  drop:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 2.5s-5.5 6-5.5 9.6a5.5 5.5 0 0 0 11 0C15.5 8.5 10 2.5 10 2.5z"/></svg>',
+  bolt:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M11 2 4.5 11H10l-1 7 6.5-9H10z"/></svg>',
   coins:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="8" cy="5.5" rx="5" ry="2.2"/><path d="M3 5.5v3c0 1.2 2.2 2.2 5 2.2s5-1 5-2.2v-3M3 8.5v3c0 1.2 2.2 2.2 5 2.2"/><ellipse cx="13" cy="13" rx="4.5" ry="2"/><path d="M8.5 13v2.5c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V13"/></svg>',
   cash:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/><path d="M5 8.2v3.6M15 8.2v3.6"/></svg>',
   statement:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 2.5h7l3.5 3.5V17a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z"/><path d="M12 2.5V6h3.5"/><path d="M7 10h6M7 13h6"/></svg>',
@@ -1614,43 +1618,71 @@ function currentNav(){
   let vAlerts = [], rAlerts = [], pcAwaiting = 0;
   try{ vAlerts = vehAlerts(); rAlerts = vehReqAlerts(); pcAwaiting = authUser ? state.pettyCash.filter(r => pcCanSign(r) && !pcSigned(r)).length : 0; }catch(e){}
   const tone = list => list.some(a=>a.st.k==='crit') ? 'crit' : 'warn';
+  let utAl = []; try{ utAl = utAlerts(); }catch(e){}
   const nav = [
     { id:'dashboard', label:'Dashboard', icon:'dashboard' },
-    { section:'Stock Inventory' },
+    { section:'Stock' },
     { id:'products', label:'Items', icon:'products' },
     { id:'levels', label:'Stock Levels', icon:'levels' },
     { id:'movements', label:'Stock Movements', icon:'movements', badge:(()=>{ try{ return stockRequestsAwaitingMe().length; }catch(e){ return 0; } })(), tone:'warn' },
-    { id:'stock-report', label:'Report', icon:'chart' },
-    { section:'Asset Management' },
+    { id:'stock-report', label:'Stock Report', icon:'chart' },
+    { section:'Assets' },
     { id:'assets', label:'Assets', icon:'assets' },
     { id:'asset-transactions', label:'Asset Movements', icon:'assettx' },
-    { id:'asset-report', label:'Report', icon:'chart' },
-    { section:'Vehicle Management' },
+    { id:'handovers', label:'Handovers', icon:'handover' },
+    { id:'keys', label:'Key Registry', icon:'key' },
+    { id:'asset-report', label:'Asset Report', icon:'chart' },
+    { section:'Fleet' },
     { id:'vehicles', label:'Vehicles', icon:'vehicle', badge:vAlerts.length, tone:tone(vAlerts) },
     { id:'fueling', label:'Fueling', icon:'fuel', badge:rAlerts.length, tone:tone(rAlerts) },
     { id:'servicing', label:'Servicing', icon:'service' },
-    { id:'vehicle-reports', label:'Report', icon:'chart' },
-    { section:'Petty Cash Management' },
-    { id:'petty-cash', label:'Petty Cash Request', icon:'cash', badge:pcAwaiting, tone:'warn' },
-    { id:'petty-statement', label:'Statement', icon:'statement' },
-    { id:'petty-count', label:'Cash Count', icon:'coins' },
-    { section:'Manage' },
-    { id:'handovers', label:'Handovers', icon:'handover' },
-    { id:'keys', label:'Key Registry', icon:'key' },
+    { id:'vehicle-reports', label:'Fleet Report', icon:'chart' },
+    { section:'Facilities' },
+    ...UT_TYPE_LIST.map(t => ({ id:'utility-' + UT_TYPES[t].slug, label:t, icon:UT_TYPES[t].icon, badge:utAl.filter(a=>a.type===t).length, tone:utAl.some(a=>a.type===t && a.st.k==='crit') ? 'crit' : 'warn' })),
+    { id:'utility-report', label:'Report', icon:'chart' },
+    { section:'Finance' },
     { id:'purchase-requisitions', label:'Purchase Requisitions', icon:'pr' },
+    { id:'petty-cash', label:'Petty Cash Requests', icon:'cash', badge:pcAwaiting, tone:'warn' },
+    { id:'petty-statement', label:'Statements', icon:'statement' },
+    { id:'petty-count', label:'Cash Count', icon:'coins' },
   ];
+  if(canManageInventory() || (authUser && authUser.role==='admin')) nav.push({ section:'Settings' });
   if(canManageInventory()) nav.push({ id:'locations', label:'Locations', icon:'locations' });
   if(authUser && authUser.role==='admin') nav.push({ id:'admin', label:'Admin Panel', icon:'admin' });
   return nav;
 }
 
+const NAV_COLLAPSE_KEY = 'fdc_inventory_nav_collapsed';
+function navCollapsed(){ try{ return JSON.parse(localStorage.getItem(NAV_COLLAPSE_KEY) || '[]'); }catch(e){ return []; } }
+function toggleNavSection(name){
+  const c = new Set(navCollapsed()); if(c.has(name)) c.delete(name); else c.add(name);
+  try{ localStorage.setItem(NAV_COLLAPSE_KEY, JSON.stringify([...c])); }catch(e){}
+  renderNav();
+}
+function navIsActive(n){ return ui.tab===n.id || (n.id==='assets' && ui.tab==='asset-detail') || (n.id==='products' && ui.tab==='item-detail') || (n.id==='vehicles' && ui.tab==='vehicle-detail'); }
+// sections fold open/closed (remembered per browser); the section holding the open page always stays open,
+// and a folded section shows the total of its badges so nothing waiting is hidden
 function renderNav(){
-  document.getElementById('nav-list').innerHTML = currentNav().map(n=> n.section ? `<div class="px-3 pt-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">${n.section}</div>` : `
+  const nav = currentNav(), collapsed = new Set(navCollapsed()), groups = [];
+  nav.forEach(n => {
+    if(n.section){ groups.push({ name:n.section, items:[] }); return; }
+    if(!groups.length) groups.push({ name:null, items:[] });               // items before the first section (Dashboard)
+    groups[groups.length - 1].items.push(n);
+  });
+  const item = n => `
     <a href="#" onclick="goTo('${n.id}');return false;"
-       class="flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors ${(ui.tab===n.id || (n.id==='assets' && ui.tab==='asset-detail') || (n.id==='products' && ui.tab==='item-detail') || (n.id==='vehicles' && ui.tab==='vehicle-detail')) ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors ${navIsActive(n) ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
       ${ICONS[n.icon]}<span class="flex-1">${n.label}</span>${n.badge ? `<span class="ml-auto min-w-[1.25rem] text-center px-1.5 py-0.5 rounded-full text-[10.5px] font-bold ${n.tone==='crit' ? 'bg-rose-500 text-white' : 'bg-amber-400 text-slate-900'}">${n.badge}</span>` : ''}
-    </a>
-  `).join('');
+    </a>`;
+  document.getElementById('nav-list').innerHTML = groups.map(g => {
+    if(!g.name) return g.items.map(item).join('');
+    const active = g.items.some(navIsActive), shut = collapsed.has(g.name) && !active;
+    const badge = g.items.reduce((t, n) => t + (Number(n.badge) || 0), 0), crit = g.items.some(n => n.badge && n.tone === 'crit');
+    return `<button type="button" onclick="toggleNavSection('${g.name}')" class="w-full flex items-center gap-2 px-3 pt-3.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300">
+        <span class="flex-1 text-left">${g.name}</span>${shut && badge ? `<span class="min-w-[1.1rem] text-center px-1.5 rounded-full text-[10px] font-bold normal-case tracking-normal ${crit ? 'bg-rose-500 text-white' : 'bg-amber-400 text-slate-900'}">${badge}</span>` : ''}
+        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" class="transition-transform ${shut ? '-rotate-90' : ''}"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8l5 5 5-5"/></svg>
+      </button>${shut ? '' : g.items.map(item).join('')}`;
+  }).join('');
 }
 function goTo(tab){
   ui.tab = tab;
@@ -1767,6 +1799,8 @@ const VEH_COLS = {
   pettyCounts:      { collection:'fdc_inventory_petty_cash_counts',     label:'petty cash counts', one:'petty cash count' },
   keyRegistry:      { collection:'fdc_inventory_keys',                  label:'keys', one:'key' },
   stockRequests:    { collection:'fdc_inventory_stock_requests',        label:'stock requests', one:'stock request' },
+  utilityAccounts:  { collection:'fdc_inventory_utility_accounts',      label:'utility accounts', one:'utility account' },
+  utilityBills:     { collection:'fdc_inventory_utility_bills',         label:'utility bills', one:'utility bill' },
 };
 const vehRefs = {}, vehUnsubs = {};
 let vehSettingsUnsub = null;
@@ -4706,6 +4740,307 @@ function viewPettyCashStatement(){
 
 
 /* =====================================================================
+   FACILITIES — ELECTRICITY & WATER: a utility account (meter) per location and type,
+   its monthly bills with meter readings, consumption and payment, and a report of cost and use over time.
+===================================================================== */
+const UT_TYPES = {
+  'Electricity':      { slug:'electricity', icon:'bolt',  emoji:'⚡', unit:'kWh', color:'#f59e0b', provider:'STELCO',   meterLabel:'Meter number', meterReq:true, readings:true,
+                        planLabel:'', desc:'Electricity accounts (STELCO meters) for each location, and their monthly invoices.' },
+  'Water':            { slug:'water',       icon:'drop',  emoji:'💧', unit:'m³',  color:'#0ea5e9', provider:'MWSC',     meterLabel:'Meter number', meterReq:true, readings:true,
+                        planLabel:'', desc:'Water accounts (MWSC meters) for each location, and their monthly invoices.' },
+  'Internet':         { slug:'internet',    icon:'wifi',  emoji:'🌐', unit:'GB',  color:'#8b5cf6', provider:'Dhiraagu', meterLabel:'Service / circuit ID', meterReq:false, readings:false,
+                        planLabel:'Package / speed', usageLabel:'Data used (GB, optional)', desc:'Internet connections for each location (package, service ID), and their monthly invoices.' },
+  'Waste Collection': { slug:'waste',       icon:'trash', emoji:'🗑️', unit:'pickups', color:'#16a34a', provider:'WAMCO', meterLabel:'Customer / bin ID', meterReq:false, readings:false,
+                        planLabel:'Bins / collection schedule', usageLabel:'Collections in the month (optional)', desc:'Waste collection accounts for each location (bins, schedule), and their monthly invoices.' },
+};
+const UT_TYPE_LIST = Object.keys(UT_TYPES);
+const utTypeBySlug = slug => UT_TYPE_LIST.find(t => UT_TYPES[t].slug === slug);
+UT_TYPE_LIST.forEach(t => { window['utTab_' + UT_TYPES[t].slug] = k => { vehUi['utTab' + UT_TYPES[t].slug] = k; rerenderMain(); }; });
+const UT_PAY_VIA = ['Bank transfer', 'Online payment', 'Cheque', 'PR', 'Petty Cash'];
+const utAcc = id => state.utilityAccounts.find(a => a.id === id) || null;
+const utLocName = id => { const l = getLocation(id); return l ? l.name : '(removed location)'; };
+const utAccLabel = a => a ? utLocName(a.locationId) + ' · ' + a.type + (a.accountNo ? ' · ' + a.accountNo : '') + (a.label ? ' (' + a.label + ')' : '') : '(removed account)';
+const utUnit = a => (UT_TYPES[a && a.type] || {}).unit || '';
+const utBillsOf = accId => state.utilityBills.filter(b => b.accountId === accId).sort((x, y) => String(y.period).localeCompare(String(x.period)) || String(y.billDate || '').localeCompare(String(x.billDate || '')));
+const utUnits = b => b.units !== '' && b.units != null && !isNaN(parseFloat(b.units)) ? vNum(b.units) : (b.currReading !== '' && b.currReading != null && b.prevReading !== '' && b.prevReading != null ? Math.max(0, vNum(b.currReading) - vNum(b.prevReading)) : 0);
+const utMonthLabel = ym => { const m = /^(\d{4})-(\d{2})$/.exec(ym || ''); return m ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m[2]-1] + ' ' + m[1] : (ym || '—'); };
+function utStatus(b){
+  if(b.paidDate) return { k:'good', t:'Paid' };
+  if(!b.dueDate) return { k:'acc', t:'Unpaid' };
+  const d = Math.round((new Date(b.dueDate + 'T00:00:00') - new Date(vToday() + 'T00:00:00')) / 86400000);
+  if(d < 0) return { k:'crit', t:'Overdue ' + (-d) + 'd', d };
+  if(d <= 7) return { k:'warn', t:d === 0 ? 'Due today' : 'Due in ' + d + 'd', d };
+  return { k:'acc', t:'Unpaid', d };
+}
+function utAlerts(){ return state.utilityBills.filter(b => !b.paidDate).map(b => ({ b, st:utStatus(b), type:(utAcc(b.accountId) || {}).type })).filter(x => x.st.k === 'crit' || x.st.k === 'warn'); }
+const utTypePill = t => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold" style="background:${(UT_TYPES[t] || {}).color || '#94a3b8'}22;color:${(UT_TYPES[t] || {}).color || '#64748b'}">${(UT_TYPES[t] || {}).emoji || ''} ${esc(t || '')}</span>`;
+function utTab(k){ vehUi.utTab = k; rerenderMain(); }
+
+function viewUtilities(type){
+  const T = UT_TYPES[type], tab = vehUi['utTab' + T.slug] || 'invoices', month = localDateStr(new Date()).slice(0, 7);
+  const accs = state.utilityAccounts.filter(a => a.type === type), ids = new Set(accs.map(a => a.id));
+  const inv = state.utilityBills.filter(b => ids.has(b.accountId)), mb = inv.filter(b => b.period === month);
+  const unpaid = inv.filter(b => !b.paidDate), overdue = unpaid.filter(b => utStatus(b).k === 'crit');
+  const prevM = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return localDateStr(d).slice(0, 7); })(), pb = inv.filter(b => b.period === prevM);
+  const head = vHead(type, T.desc,
+    (inv.length ? vBtnPlain('Export CSV', `utExportCsv('${type}')`) : '') + vBtnPlain('+ Account', `openUtAccount(null, null, '${type}')`) + (accs.length ? vBtnPrimary('+ Invoice', `openUtBill(null, null, '${type}')`) : ''));
+  const kpis = vKpis(
+    statCard(utMonthLabel(month), vMoney0(mb.reduce((t, b) => t + vNum(b.amount), 0)), fmtNum(Math.round(mb.reduce((t, b) => t + utUnits(b), 0))) + ' ' + T.unit + ' · ' + mb.length + ' invoice' + (mb.length === 1 ? '' : 's'), 'brand') +
+    statCard(utMonthLabel(prevM), vMoney0(pb.reduce((t, b) => t + vNum(b.amount), 0)), fmtNum(Math.round(pb.reduce((t, b) => t + utUnits(b), 0))) + ' ' + T.unit + ' · ' + pb.length + ' invoice' + (pb.length === 1 ? '' : 's'), 'slate') +
+    statCard('Unpaid invoices', fmtNum(unpaid.length), vMoney0(unpaid.reduce((t, b) => t + vNum(b.amount), 0)) + ' outstanding', unpaid.length ? 'amber' : 'emerald') +
+    statCard('Overdue', fmtNum(overdue.length), overdue.length ? vMoney0(overdue.reduce((t, b) => t + vNum(b.amount), 0)) + ' past the due date' : 'Nothing overdue', overdue.length ? 'rose' : 'emerald'));
+  const tabs = `<div class="mb-5">${vTabs([['invoices', 'Monthly invoices'], ['accounts', 'Accounts by location']], tab, 'utTab_' + T.slug)}</div>`;
+  if(!accs.length) return head + kpis + `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No ' + type.toLowerCase() + ' accounts yet. Add one for each location with its account number and meter number, then record the monthly invoices.<div class="mt-4">' + vBtnPrimary('+ Add the first account', `openUtAccount(null, null, '${type}')`) + '</div>')}</div>` + utAccountsHtml(type);
+  return head + kpis + tabs + (tab === 'accounts' ? utAccountsHtml(type) : utBillsHtml(type));
+}
+function utBillsHtml(type){
+  const accs = state.utilityAccounts.filter(a => a.type === type);
+  const locs = [...new Set(accs.map(a => a.locationId))].map(id => [id, utLocName(id)]).sort((a, b) => a[1].localeCompare(b[1]));
+  const list = state.utilityBills.filter(b => {
+    const a = utAcc(b.accountId) || {}, st = utStatus(b);
+    if(a.type !== type) return false;
+    if(vehUi.utLoc && a.locationId !== vehUi.utLoc) return false;
+    if(vehUi.utMonth && b.period !== vehUi.utMonth) return false;
+    if(vehUi.utStatusF === 'unpaid' && b.paidDate) return false;
+    if(vehUi.utStatusF === 'overdue' && st.k !== 'crit') return false;
+    if(vehUi.utStatusF === 'paid' && !b.paidDate) return false;
+    return vMatch(vehUi.utQ, [utAccLabel(a), a.meterNo, a.provider, b.billNo, b.notes, b.paidRef, utMonthLabel(b.period)]);
+  }).sort((x, y) => String(y.period).localeCompare(String(x.period)) || utLocName((utAcc(x.accountId) || {}).locationId).localeCompare(utLocName((utAcc(y.accountId) || {}).locationId)));
+  const filters = `<div class="flex flex-wrap gap-2.5 mb-5">${vSearch('ut-q', 'utQ', 'Search location, account, invoice no…')}
+    ${vSelect('utLoc', locs, vehUi.utLoc, 'All locations')}
+    ${vSelect('utStatusF', [['unpaid', 'Unpaid'], ['overdue', 'Overdue'], ['paid', 'Paid']], vehUi.utStatusF, 'Any status')}
+    <input type="month" value="${esc(vehUi.utMonth || '')}" onchange="vehSet('utMonth', this.value)" class="${VEH_INPUT}" title="Billing month">${vehUi.utMonth ? `<button onclick="vehSet('utMonth','')" class="text-xs font-semibold text-brand-600 hover:underline">All months</button>` : ''}</div>`;
+  const tot = list.reduce((t, b) => t + vNum(b.amount), 0), totU = list.reduce((t, b) => t + utUnits(b), 0), unit = UT_TYPES[type].unit;
+  const rows = list.map(b => {
+    const a = utAcc(b.accountId) || {}, st = utStatus(b), hasR = b.currReading !== '' && b.currReading != null;
+    return `<tr class="${vTr} align-top">
+      ${vTd(`<span class="font-semibold">${utMonthLabel(b.period)}</span>${b.billNo ? `<div class="text-[11px] text-slate-400">Inv. ${esc(b.billNo)}</div>` : ''}${b.billDate ? `<div class="text-[11px] text-slate-400">${vDate(b.billDate)}</div>` : ''}`, { first:1 })}
+      ${vTd(`<div class="font-semibold text-slate-800">${esc(utLocName(a.locationId))}</div><div class="text-[11px] text-slate-400">${esc([a.accountNo && 'A/C ' + a.accountNo, a.meterNo && 'Meter ' + a.meterNo].filter(Boolean).join(' · ') || a.provider || '')}</div>`)}
+      ${vTd(hasR ? `<span class="num text-xs text-slate-500">${fmtNum(vNum(b.prevReading))} → ${fmtNum(vNum(b.currReading))}</span>` : '<span class="text-slate-300">—</span>')}
+      ${vTd(fmtNum(Math.round(utUnits(b) * 100) / 100) + ' ' + unit, { n:1 })}
+      ${vTd('<b>' + fmtMVR(b.amount) + '</b>', { n:1 })}
+      ${vTd(b.dueDate ? vDate(b.dueDate) : '—')}
+      ${vTd(vPill(st.k, st.t) + (b.paidDate ? `<div class="text-[11px] text-slate-400 mt-0.5">${vDate(b.paidDate)}${b.paidVia ? ' · ' + esc(b.paidVia) : ''}</div>` : ''))}
+      ${vTd((b.docUrl ? vLink(b.docUrl, 'Invoice') + '<br>' : '') + (!b.paidDate ? `<button onclick="openUtPay('${b.id}')" class="text-xs font-semibold text-emerald-600 hover:underline mr-2.5">Mark paid</button>` : '') + `<button onclick="openUtBill('${b.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right whitespace-nowrap' })}
+    </tr>`;
+  }).join('');
+  return filters + (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Month / invoice' }, { t:'Location / account' }, { t:'Readings' }, { t:'Usage', n:1 }, { t:'Amount', n:1 }, { t:'Due' }, { t:'Status' }, { t:'' }])}<tbody>${rows}
+      <tr class="bg-slate-50"><td colspan="3" class="py-2.5 pl-5 sm:pl-6 text-right text-xs font-bold text-slate-600 pr-3">Total (${list.length} invoice${list.length === 1 ? '' : 's'})</td><td class="py-2.5 pr-3 text-right num font-bold">${fmtNum(Math.round(totU))} ${unit}</td><td class="py-2.5 pr-3 text-right num font-extrabold">${fmtMVR(tot)}</td><td colspan="3"></td></tr></tbody></table>`)
+    : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(state.utilityBills.some(b => (utAcc(b.accountId) || {}).type === type) ? 'No invoices match these filters.' : 'No invoices recorded yet. Use "+ Invoice" to add the first one.')}</div>`);
+}
+// every location is listed, with its account(s) of this type or a button to link one
+function utAccountsHtml(type){
+  const unit = UT_TYPES[type].unit;
+  const rows = LOCATIONS.slice().sort((x, y) => x.name.localeCompare(y.name)).map(l => {
+    const accs = state.utilityAccounts.filter(a => a.type === type && a.locationId === l.id);
+    const locCell = `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${esc(l.color)}"></span><span class="font-semibold text-slate-800">${esc(l.name)}</span>${l.code ? `<span class="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">${esc(l.code)}</span>` : ''}</div>`;
+    if(!accs.length) return `<tr class="${vTr}">${vTd(locCell, { first:1 })}<td colspan="6" class="py-3 pr-3 text-xs text-slate-400">No ${type.toLowerCase()} account linked</td>${vTd(`<button onclick="openUtAccount(null, '${esc(l.id)}', '${type}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Link account</button>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`;
+    return accs.map((a, i) => {
+      const bills = utBillsOf(a.id), last = bills[0], six = bills.slice(0, 6), avg = six.length ? six.reduce((t, b) => t + vNum(b.amount), 0) / six.length : 0, avgU = six.length ? six.reduce((t, b) => t + utUnits(b), 0) / six.length : 0;
+      const unpaid = bills.filter(b => !b.paidDate);
+      return `<tr class="${vTr} align-top ${a.active === false ? 'opacity-60' : ''}">
+        ${vTd(i === 0 ? locCell : '', { first:1 })}
+        ${vTd(`<div class="font-semibold num">${esc(a.accountNo || '—')}</div>${a.label ? `<div class="text-[11px] text-slate-400">${esc(a.label)}</div>` : ''}${a.active === false ? vPill('', 'Closed') : ''}`)}
+        ${vTd(`<span class="num">${esc(a.meterNo || '—')}</span><div class="text-[11px] text-slate-400">${esc([a.provider, a.plan].filter(Boolean).join(' · '))}</div>`)}
+        ${vTd(last ? `${utMonthLabel(last.period)}<div class="text-[11px] text-slate-400">${fmtMVR(last.amount)}</div>` : '—')}
+        ${vTd(last && last.currReading !== '' && last.currReading != null ? fmtNum(vNum(last.currReading)) : '—', { n:1 })}
+        ${vTd(six.length ? vMoney0(avg) + `<div class="text-[11px] text-slate-400">${fmtNum(Math.round(avgU))} ${unit}</div>` : '—', { n:1 })}
+        ${vTd(unpaid.length ? vPill(unpaid.some(b => utStatus(b).k === 'crit') ? 'crit' : 'warn', unpaid.length + ' unpaid') : (bills.length ? '<span class="text-[11px] text-emerald-600 font-semibold">All paid</span>' : '<span class="text-[11px] text-slate-400">No invoices</span>'))}
+        ${vTd(`<button onclick="openUtBill(null, '${a.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">+ Invoice</button><button onclick="openUtAccount('${a.id}')" class="text-xs font-semibold text-slate-500 hover:text-brand-600 hover:underline">Edit</button>${i === accs.length - 1 ? `<button onclick="openUtAccount(null, '${esc(l.id)}', '${type}')" class="block ml-auto text-[11px] text-slate-400 hover:text-brand-600 hover:underline mt-1">+ another meter</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}
+      </tr>`;
+    }).join('');
+  }).join('');
+  return vPanel(type + ' accounts by location', 'Each location with its account number and ' + UT_TYPES[type].meterLabel.toLowerCase(), `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Location' }, { t:'Account no.' }, { t:UT_TYPES[type].meterLabel.replace(' number', ' no.') }, { t:'Last invoice' }, { t:'Last reading', n:1 }, { t:'Avg / month (6)', n:1 }, { t:'Status' }, { t:'' }])}<tbody>${rows}</tbody></table></div>`);
+}
+function utAccTypeChanged(sel){
+  const T = UT_TYPES[sel.value], f = sel.form, p = f.provider;
+  if(!p.value || UT_TYPE_LIST.some(t => UT_TYPES[t].provider === p.value)) p.value = T.provider;
+  const mw = document.getElementById('ut-meter-wrap'); if(mw){ const lab = mw.querySelector('label'); if(lab) lab.innerHTML = T.meterLabel + (T.meterReq ? vReqStar : ''); }
+  const pw = document.getElementById('ut-plan-wrap'); if(pw){ pw.style.display = T.planLabel ? '' : 'none'; const lab = pw.querySelector('label'); if(lab) lab.textContent = T.planLabel || 'Package'; }
+}
+function openUtAccount(id, locId, type){
+  const a = id ? utAcc(id) : null; if(id && !a) return;
+  const t0 = type || 'Electricity', d = a || { type:t0, locationId: locId || (LOCATIONS[0] || {}).id, provider:UT_TYPES[t0].provider, active:true };
+  openModal(a ? 'Edit ' + d.type.toLowerCase() + ' account' : 'Link a ' + d.type.toLowerCase() + ' account to a location', vFormOpen + vGrid(2,
+    vS('Type', 'type', UT_TYPE_LIST, d.type, null, { req:1, attrs:` onchange="utAccTypeChanged(this)"` }) +
+    vS('Location', 'locationId', LOCATIONS.map(l => [l.id, l.name]), d.locationId, null, { req:1 }) +
+    vF('Account number', 'accountNo', d.accountNo, 'text', { req:1 }) + `<div id="ut-meter-wrap">${vF(UT_TYPES[d.type].meterLabel, 'meterNo', d.meterNo, 'text', { req:UT_TYPES[d.type].meterReq })}</div>` + vF('Provider', 'provider', d.provider) + `<div id="ut-plan-wrap" ${UT_TYPES[d.type].planLabel ? '' : 'style="display:none"'}>${vF(UT_TYPES[d.type].planLabel || 'Package', 'plan', d.plan)}</div>` + vF('Name (optional)', 'label', d.label, 'text', { attrs:' placeholder="e.g. Ground floor, Pantry"' }) +
+    vS('Status', 'active', [['1', 'Active'], ['0', 'Closed']], d.active === false ? '0' : '1') + vTa('Notes', 'notes', d.notes, { rows:2 })) +
+    vFoot(a ? 'Save changes' : 'Add account', `saveUtAccount('${id || ''}')`, a && canManageInventory() ? `deleteUtAccount('${id}')` : ''), true);
+}
+async function saveUtAccount(id){
+  const o = vehFormObj(document.getElementById('vform'));
+  if(!getLocation(o.locationId)) return vFail('Choose the location.');
+  if(!String(o.accountNo || '').trim()) return vFail('Enter the account number.');
+  if(UT_TYPES[o.type].meterReq && !String(o.meterNo || '').trim()) return vFail('Enter the ' + UT_TYPES[o.type].meterLabel.toLowerCase() + '.');
+  const rec = { type:o.type, locationId:o.locationId, provider:String(o.provider || '').trim(), accountNo:String(o.accountNo || '').trim(), meterNo:String(o.meterNo || '').trim(), plan:UT_TYPES[o.type].planLabel ? String(o.plan || '').trim() : '', label:String(o.label || '').trim(), active:o.active !== '0', notes:String(o.notes || '').trim() };
+  const dup = rec.accountNo && state.utilityAccounts.find(x => x.id !== id && x.type === rec.type && String(x.accountNo).toLowerCase() === rec.accountNo.toLowerCase());
+  if(dup) return vFail('Account ' + rec.accountNo + ' is already set up (' + utAccLabel(dup) + ').');
+  if(id) rec.id = id;
+  await vehSave('utilityAccounts', rec); closeModal(); rerenderMain(); toast(id ? 'Account updated.' : 'Account added. You can now record its bills.');
+}
+function deleteUtAccount(id){
+  const a = utAcc(id); if(!a || !canManageInventory()) return;
+  const n = utBillsOf(id).length;
+  closeModal(); confirmAction('Delete ' + utAccLabel(a) + (n ? ' and its ' + n + ' bill' + (n === 1 ? '' : 's') : '') + '?', async () => {
+    for(const b of utBillsOf(id)) await vehDelete('utilityBills', b.id);
+    await vehDelete('utilityAccounts', id); rerenderMain(); toast('Account deleted.');
+  });
+}
+function utBillAccChanged(sel){
+  const f = sel.form, last = utBillsOf(sel.value)[0], a = utAcc(sel.value);
+  if(last && last.currReading !== '' && last.currReading != null && !f.prevReading.value) f.prevReading.value = last.currReading;
+  const u = document.getElementById('ut-unit'); if(u) u.textContent = utUnit(a) ? '(' + utUnit(a) + ')' : '';
+  utBillCalc(f);
+}
+function utBillCalc(f){
+  const hint = document.getElementById('ut-calc'); if(!hint) return;
+  const p = f.prevReading.value, c = f.currReading.value;
+  hint.textContent = (p !== '' && c !== '') ? 'From the readings: ' + fmtNum(Math.round(Math.max(0, vNum(c) - vNum(p)) * 100) / 100) + ' — leave blank to use this' : '';
+}
+function openUtBill(id, accId, type){
+  const b = id ? state.utilityBills.find(x => x.id === id) : null; if(id && !b) return;
+  const tp = type || (b ? (utAcc(b.accountId) || {}).type : accId ? (utAcc(accId) || {}).type : '');
+  const accs = state.utilityAccounts.filter(a => (a.active !== false || (b && a.id === b.accountId)) && (!tp || a.type === tp)).sort((x, y) => utAccLabel(x).localeCompare(utAccLabel(y)));
+  const d = b || { accountId: accId || (accs[0] || {}).id, period: localDateStr(new Date()).slice(0, 7) };
+  const last = !b && d.accountId ? utBillsOf(d.accountId)[0] : null;
+  if(last && d.prevReading == null && last.currReading != null) d.prevReading = last.currReading;
+  const a = utAcc(d.accountId);
+  openModal((b ? 'Edit ' : 'Add ') + (tp ? tp.toLowerCase() + ' ' : '') + 'invoice', vFormOpen +
+    vGrid(2, vS('Account', 'accountId', accs.map(x => [x.id, utAccLabel(x)]), d.accountId, null, { req:1, span:'sm:col-span-2', attrs:' onchange="utBillAccChanged(this)"' }) +
+      vF('Billing month', 'period', d.period, 'month', { req:1 }) + vF('Invoice number', 'billNo', d.billNo) + vF('Invoice date', 'billDate', d.billDate, 'date', { req:1 }) + vF('Due date', 'dueDate', d.dueDate, 'date') + vF('Usage from', 'useFrom', d.useFrom, 'date') + vF('Usage to', 'useTo', d.useTo, 'date')) +
+    (!tp || UT_TYPES[tp].readings ? vSec('Usage — meter readings <span id="ut-unit" class="normal-case font-semibold">' + (utUnit(a) ? '(' + utUnit(a) + ')' : '') + '</span>') +
+    vGrid(3, vF('Previous reading', 'prevReading', d.prevReading, 'number', { attrs:' oninput="utBillCalc(this.form)"' }) + vF('Current reading', 'currReading', d.currReading, 'number', { attrs:' oninput="utBillCalc(this.form)"' }) + vF('Usage (units)', 'units', d.units, 'number')) +
+    '<div id="ut-calc" class="text-[11.5px] text-slate-400 mt-1.5"></div>'
+    : vSec('Usage') + vGrid(2, vF(UT_TYPES[tp].usageLabel || 'Usage', 'units', d.units, 'number') + '<input type="hidden" name="prevReading" value=""><input type="hidden" name="currReading" value="">')) +
+    vSec('Amount and payment') +
+    vGrid(2, vF('Amount (MVR)', 'amount', d.amount, 'number', { req:1 }) + vF('Link to the invoice (optional)', 'docUrl', d.docUrl, 'url') +
+      vF('Paid on', 'paidDate', d.paidDate, 'date') + vS('Paid via', 'paidVia', UT_PAY_VIA, d.paidVia, '—') + vF('Payment reference', 'paidRef', d.paidRef, 'text', { attrs:' placeholder="Transfer ref, PR no., voucher no."' }) + vTa('Notes', 'notes', d.notes, { rows:2 })) +
+    vFoot(b ? 'Save changes' : 'Save invoice', `saveUtBill('${id || ''}')`, b ? `deleteUtBill('${id}')` : ''), true);
+  setTimeout(() => { const f = document.getElementById('vform'); if(f && f.prevReading) utBillCalc(f); }, 0);
+}
+async function saveUtBill(id){
+  const o = vehFormObj(document.getElementById('vform'));
+  if(!utAcc(o.accountId)) return vFail('Choose the account.');
+  if(!/^\d{4}-\d{2}$/.test(o.period || '')) return vFail('Choose the billing month.');
+  if(!o.billDate) return vFail('Enter the invoice date.');
+  if(o.useFrom && o.useTo && o.useTo < o.useFrom) return vFail('The usage period ends before it starts.');
+  if(!(vNum(o.amount) >= 0) || o.amount === '') return vFail('Enter the amount.');
+  if(o.prevReading !== '' && o.currReading !== '' && vNum(o.currReading) < vNum(o.prevReading)) return vFail('The current reading is lower than the previous one.');
+  const url = o.docUrl ? vSafeUrl(o.docUrl) : ''; if(o.docUrl && !url) return vFail('Enter a full web link starting with https://');
+  const dup = state.utilityBills.find(x => x.id !== id && x.accountId === o.accountId && x.period === o.period && (!o.billNo || !x.billNo || x.billNo === o.billNo));
+  if(dup && !id) return vFail('There is already an invoice for this account for ' + utMonthLabel(o.period) + '. Edit that one instead.');
+  const num = v => v === '' || v == null ? '' : vNum(v);
+  const rec = { accountId:o.accountId, period:o.period, billNo:String(o.billNo || '').trim(), billDate:o.billDate || '', dueDate:o.dueDate || '', useFrom:o.useFrom || '', useTo:o.useTo || '', prevReading:num(o.prevReading), currReading:num(o.currReading), units:num(o.units), amount:pcRound(vNum(o.amount)), paidDate:o.paidDate || '', paidVia:o.paidVia || '', paidRef:String(o.paidRef || '').trim(), docUrl:url, notes:String(o.notes || '').trim() };
+  if(id) rec.id = id;
+  await vehSave('utilityBills', rec); closeModal(); rerenderMain(); toast(id ? 'Invoice updated.' : 'Invoice saved.');
+}
+function deleteUtBill(id){
+  const b = state.utilityBills.find(x => x.id === id); if(!b) return;
+  if(!canManageInventory()){ vFail('Only an admin can delete an invoice.'); return; }
+  closeModal(); confirmAction('Delete the ' + utMonthLabel(b.period) + ' invoice for ' + utAccLabel(utAcc(b.accountId)) + '?', async () => { await vehDelete('utilityBills', id); rerenderMain(); toast('Invoice deleted.'); });
+}
+function openUtPay(id){
+  const b = state.utilityBills.find(x => x.id === id); if(!b) return;
+  openModal('Mark invoice paid', vFormOpen + `<p class="text-sm text-slate-500 mb-4">${esc(utAccLabel(utAcc(b.accountId)))} · ${utMonthLabel(b.period)} · <b class="text-slate-800">${fmtMVR(b.amount)}</b></p>` +
+    vGrid(2, vF('Paid on', 'paidDate', vToday(), 'date', { req:1 }) + vS('Paid via', 'paidVia', UT_PAY_VIA, b.paidVia || 'Bank transfer') + vF('Payment reference', 'paidRef', b.paidRef, 'text', { span:'sm:col-span-2' })) +
+    vFoot('Mark paid', `saveUtPay('${id}')`));
+}
+async function saveUtPay(id){
+  const o = vehFormObj(document.getElementById('vform')); if(!o.paidDate) return vFail('Enter the payment date.');
+  await vehSave('utilityBills', { id, paidDate:o.paidDate, paidVia:o.paidVia || '', paidRef:String(o.paidRef || '').trim() }); closeModal(); rerenderMain(); toast('Invoice marked paid.');
+}
+function utExportCsv(type){
+  const rows = state.utilityBills.filter(b => !type || (utAcc(b.accountId) || {}).type === type).slice().sort((x, y) => String(y.period).localeCompare(String(x.period))).map(b => { const a = utAcc(b.accountId) || {}; return [
+    b.period, utLocName(a.locationId), a.type || '', a.provider || '', a.accountNo || '', a.meterNo || '', a.label || '', b.billNo || '', b.billDate || '', b.useFrom || '', b.useTo || '', b.dueDate || '',
+    b.prevReading, b.currReading, utUnits(b), utUnit(a), vNum(b.amount).toFixed(2), utStatus(b).t, b.paidDate || '', b.paidVia || '', b.paidRef || '', b.docUrl || '', b.notes || '']; });
+  downloadCSV((type ? type.toLowerCase() : 'utility') + '-invoices_' + vToday() + '.csv', ['Billing Month', 'Location', 'Type', 'Provider', 'Account No.', 'Meter No.', 'Account Name', 'Invoice No.', 'Invoice Date', 'Usage From', 'Usage To', 'Due Date', 'Previous Reading', 'Current Reading', 'Usage', 'Unit', 'Amount (MVR)', 'Status', 'Paid On', 'Paid Via', 'Payment Ref.', 'Invoice Link', 'Notes'], rows);
+}
+
+/* ---------- Utility Report: cost and consumption over time, per location ---------- */
+function viewUtilityReport(){
+  const now = localDateStr(new Date()).slice(0, 7);
+  if(!vehUi.utrTo) vehUi.utrTo = now;
+  if(!vehUi.utrFrom){ const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 11); vehUi.utrFrom = localDateStr(d).slice(0, 7); }
+  let from = vehUi.utrFrom, to = vehUi.utrTo; if(from > to){ const x = from; from = to; to = x; }
+  const months = buildMonthRange(from + '-01', to + '-01'), labels = months.map(m => m.label);
+  const bills = state.utilityBills.filter(b => b.period >= from && b.period <= to && (!vehUi.utrLoc || (utAcc(b.accountId) || {}).locationId === vehUi.utrLoc) && (!vehUi.utrType || (utAcc(b.accountId) || {}).type === vehUi.utrType));
+  const types = UT_TYPE_LIST.filter(t => !vehUi.utrType || t === vehUi.utrType);
+  const byType = t => bills.filter(b => (utAcc(b.accountId) || {}).type === t);
+  const amt = b => vNum(b.amount), sumA = l => l.reduce((t, b) => t + amt(b), 0), sumU = l => l.reduce((t, b) => t + utUnits(b), 0);
+  const series = (t, f) => months.map(m => byType(t).filter(b => b.period === m.key).reduce((a, b) => a + f(b), 0));
+  const locOf = b => (utAcc(b.accountId) || {}).locationId;
+  const locs = [...new Set(state.utilityAccounts.map(a => a.locationId))].map(id => [id, utLocName(id)]).sort((a, b) => a[1].localeCompare(b[1]));
+  const head = vHead('Utility Report', 'Electricity, water, internet and waste collection: cost and usage for each location, month by month, with totals for the selected period.', bills.length ? vBtnPlain('Export CSV', 'utReportCsv()') : '');
+  const filters = `<div class="flex flex-wrap items-end gap-3 mb-5">
+    <label class="text-xs font-semibold text-slate-600">From<input type="month" value="${esc(from)}" onchange="vehSet('utrFrom', this.value)" class="${VEH_INPUT} block mt-1"></label>
+    <label class="text-xs font-semibold text-slate-600">To<input type="month" value="${esc(to)}" onchange="vehSet('utrTo', this.value)" class="${VEH_INPUT} block mt-1"></label>
+    <label class="text-xs font-semibold text-slate-600">Utility${vSelect('utrType', UT_TYPE_LIST, vehUi.utrType, 'All utilities', 'block mt-1')}</label>
+    <label class="text-xs font-semibold text-slate-600">Location${vSelect('utrLoc', locs, vehUi.utrLoc, 'All locations', 'block mt-1')}</label>
+    <div class="flex gap-1.5 pb-0.5 flex-wrap">${[['3', 'Last 3 months'], ['6', 'Last 6 months'], ['12', 'Last 12 months'], ['year', 'This year']].map(([k, t]) => `<button onclick="utrPreset('${k}')" class="px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50">${t}</button>`).join('')}</div></div>`;
+  const total = sumA(bills);
+  const kpis = `<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-${Math.min(5, types.length + 1)} gap-4 mb-6">
+    ${statCard('Total utilities', vMoney0(total), bills.length + ' invoice' + (bills.length === 1 ? '' : 's') + ' · avg ' + vMoney0(months.length ? total / months.length : 0) + ' / month', 'slate')}
+    ${types.map(t => { const tb = byType(t), c = sumA(tb), u = sumU(tb), U = UT_TYPES[t]; return statCard(U.emoji + ' ' + t, vMoney0(c), (u ? fmtNum(Math.round(u)) + ' ' + U.unit + (U.readings ? ' · ' + (c / u).toFixed(2) + ' MVR/' + U.unit : '') : tb.length + ' invoice' + (tb.length === 1 ? '' : 's')), 'brand'); }).join('')}</div>`;
+  if(!bills.length) return head + filters + kpis + `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No utility invoices in this period.')}</div>`;
+  const th = 'py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400 text-right whitespace-nowrap';
+  const money = v => v ? vMoney0(v) : '<span class="text-slate-300">—</span>';
+  // 1. every month, each utility and the total
+  const both = vPanel('Total utility cost — each month', 'All selected utilities', `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-slate-100"><th class="py-2.5 pl-5 sm:pl-6 pr-3"></th>${months.map(m => `<th class="${th}">${m.label}</th>`).join('')}<th class="${th} pr-5 text-slate-600">Total</th></tr></thead><tbody>
+    ${types.filter(t => byType(t).length).map(t => `<tr class="${vTr}"><td class="py-2.5 pl-5 sm:pl-6 pr-3 font-semibold whitespace-nowrap">${UT_TYPES[t].emoji} ${t}</td>${series(t, amt).map(v => `<td class="py-2.5 px-3 text-right num">${money(v)}</td>`).join('')}<td class="py-2.5 px-3 pr-5 text-right num font-bold">${vMoney0(sumA(byType(t)))}</td></tr>`).join('')}
+    <tr class="bg-slate-50 font-bold"><td class="py-2.5 pl-5 sm:pl-6 pr-3">Total</td>${months.map(m => `<td class="py-2.5 px-3 text-right num">${vMoney0(sumA(bills.filter(b => b.period === m.key)))}</td>`).join('')}<td class="py-2.5 px-3 pr-5 text-right num font-extrabold">${vMoney0(total)}</td></tr></tbody></table></div>`);
+  // 2. each utility: locations x months
+  const matrix = t => {
+    const U = UT_TYPES[t], tb = byType(t); if(!tb.length) return '';
+    const lids = [...new Set(tb.map(locOf))].sort((x, y) => utLocName(x).localeCompare(utLocName(y)));
+    const cell = (lid, m) => tb.filter(b => locOf(b) === lid && (!m || b.period === m));
+    const td = (l, bold) => l.length ? `<td class="py-2.5 px-3 text-right num whitespace-nowrap ${bold ? 'font-bold' : ''}">${vMoney0(sumA(l))}${sumU(l) ? `<div class="text-[10.5px] text-slate-400 font-normal">${fmtNum(Math.round(sumU(l)))} ${U.unit}</div>` : ''}</td>` : '<td class="py-2.5 px-3 text-right text-slate-300">—</td>';
+    return vPanel(`<span style="color:${U.color}">${U.emoji}</span> ${t} — each month by location`, 'Invoiced amount' + (U.readings ? ', with usage underneath' : ''), `<div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead><tr class="border-b border-slate-100"><th class="py-2.5 pl-5 sm:pl-6 pr-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400 sticky left-0 bg-white">Location</th>${months.map(m => `<th class="${th}">${m.label}</th>`).join('')}<th class="${th} text-slate-600">Total</th></tr></thead>
+      <tbody>${lids.map(lid => `<tr class="${vTr}"><td class="py-2.5 pl-5 sm:pl-6 pr-3 font-semibold text-slate-800 whitespace-nowrap sticky left-0 bg-white">${esc(utLocName(lid))}</td>${months.map(m => td(cell(lid, m.key))).join('')}${td(cell(lid), true)}</tr>`).join('')}
+      <tr class="bg-slate-50 font-bold"><td class="py-2.5 pl-5 sm:pl-6 pr-3 text-slate-700 sticky left-0 bg-slate-50">Total</td>${months.map(m => td(tb.filter(b => b.period === m.key), true)).join('')}${td(tb, true)}</tr></tbody></table></div>`);
+  };
+  // 3. charts
+  const legend = items => `<div class="flex items-center gap-4 text-xs flex-wrap">${items.map(([t, c]) => `<span class="flex items-center gap-1.5 text-slate-600"><span class="w-2.5 h-0.5 rounded-full" style="background:${c}"></span>${t}</span>`).join('')}</div>`;
+  const chartCard = (title, sub, inner, lg) => `<div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6"><div class="flex items-center justify-between gap-3 flex-wrap mb-1"><div class="text-sm font-bold text-slate-900">${title}</div>${lg || ''}</div><div class="text-xs text-slate-500 mb-4">${sub}</div><div class="w-full overflow-x-auto"><div class="min-w-[420px]">${inner}</div></div></div>`;
+  const withData = types.filter(t => byType(t).length), usageTypes = withData.filter(t => sumU(byType(t)) > 0);
+  const charts = `<div class="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-6">
+    ${chartCard('Monthly cost', 'MVR invoiced each month', lineChartSvg(withData.map(t => ({ name:t, color:UT_TYPES[t].color, values:series(t, amt) })), labels, 640, 220), legend(withData.map(t => [t, UT_TYPES[t].color])))}
+    ${usageTypes.map(t => chartCard(t + ' usage', UT_TYPES[t].unit + ' each month', lineChartSvg([{ name:UT_TYPES[t].unit, color:UT_TYPES[t].color, values:series(t, utUnits) }], labels, 640, 160))).join('')}
+  </div>`;
+  // 4. totals by location over the whole period
+  const lids = [...new Set(bills.map(locOf))];
+  const lrows = lids.map(id => ({ id, c: Object.fromEntries(types.map(t => [t, sumA(byType(t).filter(b => locOf(b) === id))])) })).map(r => Object.assign(r, { tot: types.reduce((a, t) => a + r.c[t], 0) })).sort((x, y) => y.tot - x.tot);
+  const maxT = Math.max(1, ...lrows.map(r => r.tot));
+  const table = vPanel('Totals by location', 'Cost over the whole selected period', `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Location' }, ...withData.map(t => ({ t, n:1 })), { t:'Total', n:1 }, { t:'' }])}<tbody>${lrows.map(r => `<tr class="${vTr}">
+    ${vTd(`<span class="font-semibold">${esc(utLocName(r.id))}</span>`, { first:1 })}${withData.map(t => vTd(money(r.c[t]), { n:1 })).join('')}${vTd('<b>' + vMoney0(r.tot) + '</b>', { n:1 })}
+    ${vTd(`<div class="flex h-2 w-32 rounded-full overflow-hidden bg-slate-100">${withData.map(t => `<div title="${esc(t)}" style="width:${r.c[t] / maxT * 100}%;background:${UT_TYPES[t].color}"></div>`).join('')}</div>`, { last:1 })}</tr>`).join('')}
+    <tr class="bg-slate-50 font-bold"><td class="py-2.5 pl-5 sm:pl-6 pr-3">Total</td>${withData.map(t => `<td class="py-2.5 pr-3 text-right num">${vMoney0(sumA(byType(t)))}</td>`).join('')}<td class="py-2.5 pr-3 text-right num font-extrabold">${vMoney0(total)}</td><td></td></tr></tbody></table></div>`);
+  return head + filters + kpis + both + table + types.map(matrix).join('') + charts;
+}
+function utrPreset(k){
+  const d = new Date(), to = localDateStr(d).slice(0, 7);
+  if(k === 'year') vehUi.utrFrom = to.slice(0, 4) + '-01'; else { const x = new Date(); x.setDate(1); x.setMonth(x.getMonth() - (+k - 1)); vehUi.utrFrom = localDateStr(x).slice(0, 7); }
+  vehUi.utrTo = to; rerenderMain();
+}
+function utReportCsv(){
+  let from = vehUi.utrFrom, to = vehUi.utrTo; if(from > to){ const x = from; from = to; to = x; }
+  const months = buildMonthRange(from + '-01', to + '-01'), rows = [];
+  const bills = state.utilityBills.filter(b => b.period >= from && b.period <= to && (!vehUi.utrLoc || (utAcc(b.accountId) || {}).locationId === vehUi.utrLoc) && (!vehUi.utrType || (utAcc(b.accountId) || {}).type === vehUi.utrType));
+  UT_TYPE_LIST.forEach(t => {
+    const tb = bills.filter(b => (utAcc(b.accountId) || {}).type === t); if(!tb.length) return;
+    const lids = [...new Set(tb.map(b => (utAcc(b.accountId) || {}).locationId))].sort((x, y) => utLocName(x).localeCompare(utLocName(y)));
+    lids.forEach(lid => {
+      const lb = tb.filter(b => (utAcc(b.accountId) || {}).locationId === lid), accNos = [...new Set(lb.map(b => (utAcc(b.accountId) || {}).accountNo).filter(Boolean))].join('; ');
+      rows.push([t, utLocName(lid), accNos, ...months.map(m => { const c = lb.filter(b => b.period === m.key); return c.length ? c.reduce((a, b) => a + vNum(b.amount), 0).toFixed(2) : ''; }), lb.reduce((a, b) => a + vNum(b.amount), 0).toFixed(2), lb.reduce((a, b) => a + utUnits(b), 0), UT_TYPES[t].unit]);
+    });
+    rows.push([t, 'TOTAL', '', ...months.map(m => tb.filter(b => b.period === m.key).reduce((a, b) => a + vNum(b.amount), 0).toFixed(2)), tb.reduce((a, b) => a + vNum(b.amount), 0).toFixed(2), tb.reduce((a, b) => a + utUnits(b), 0), UT_TYPES[t].unit]);
+  });
+  rows.push(['All utilities', 'GRAND TOTAL', '', ...months.map(m => bills.filter(b => b.period === m.key).reduce((a, b) => a + vNum(b.amount), 0).toFixed(2)), bills.reduce((a, b) => a + vNum(b.amount), 0).toFixed(2), '', '']);
+  downloadCSV('utility-report_' + from + '_to_' + to + '.csv', ['Type', 'Location', 'Account No.', ...months.map(m => m.label + ' (MVR)'), 'Total (MVR)', 'Total Usage', 'Unit'], rows);
+}
+
+/* =====================================================================
    KEY REGISTRY — where every key and AC remote is: in the key box, with admin staff, with other departments, or as a copy
 ===================================================================== */
 const KEY_KINDS = ['Key', 'AC Remote'];
@@ -4981,6 +5316,9 @@ function render(){
     else if(ui.tab==='keys') el.innerHTML = viewKeyRegistry();
     else if(ui.tab==='petty-statement') el.innerHTML = viewPettyCashStatement();
     else if(ui.tab==='petty-count') el.innerHTML = viewPettyCashCount();
+    else if(ui.tab==='utilities') el.innerHTML = viewUtilities('Electricity');
+    else if(/^utility-/.test(ui.tab) && utTypeBySlug(ui.tab.slice(8))) el.innerHTML = viewUtilities(utTypeBySlug(ui.tab.slice(8)));
+    else if(ui.tab==='utility-report') el.innerHTML = viewUtilityReport();
     else if(ui.tab==='vehicle-detail') el.innerHTML = viewVehicleDetail();
     else if(ui.tab==='fueling') el.innerHTML = viewFueling();
     else if(ui.tab==='servicing') el.innerHTML = viewServicing();
@@ -5412,6 +5750,14 @@ function dashboardModuleSummary(){
       return card('keys', 'key', 'Key Registry',
         [metric(fmtNum(keys.reduce((a, r) => a + keyTotal(r), 0)), 'Keys'), metric(fmtNum(keys.reduce((a, r) => a + keyQty(r.qtyBox), 0)), 'In the key box'), metric(fmtNum(ac.reduce((a, r) => a + keyTotal(r), 0)), 'AC remotes')],
         [note('Across ' + plural(sites, 'site'))]);
+    }),
+    safe(() => {
+      const month = localDateStr(new Date()).slice(0,7), bills = state.utilityBills.filter(b => b.period === month);
+      const cost = t => bills.filter(b => !t || (utAcc(b.accountId) || {}).type === t).reduce((a, b) => a + vNum(b.amount), 0);
+      const unpaid = state.utilityBills.filter(b => !b.paidDate), al = utAlerts(), od = al.filter(a => a.st.k === 'crit').length;
+      return card('utility-report', 'bolt', 'Utilities',
+        [metric(vMoney0(cost('')), 'All utilities this month'), metric(vMoney0(cost('Electricity')), 'Electricity this month'), metric(fmtNum(unpaid.length), 'Unpaid invoices')],
+        [od ? note(plural(od, 'invoice') + ' overdue', 'crit') : '', al.length - od ? note(plural(al.length - od, 'invoice') + ' due within a week', 'warn') : '', !state.utilityAccounts.length ? note('No accounts set up yet') : '']);
     }),
     safe(() => {
       const prs = state.purchaseRequisitions, by = id => prs.filter(p => (p.status || 'open') === id).length;

@@ -3315,6 +3315,7 @@ function pcInvoiceRowHtml(inv){
     <input type="date" data-f="date" value="${esc(inv.date || '')}" class="${VEH_FIELD}">
     <input type="number" data-f="amount" value="${esc(inv.amount == null ? '' : inv.amount)}" min="0" step="0.01" placeholder="Amount" oninput="pcInvoiceRecalc()" class="${VEH_FIELD}">
     <button type="button" onclick="pcRemoveInvoice(this)" class="text-slate-400 hover:text-rose-600 pt-2.5" title="Remove this invoice">✕</button>
+    <input type="text" data-f="description" value="${esc(inv.description || '')}" placeholder="Description for the statement, e.g. PETROL 3.577 Lt, 13.98 MVR/Lt (50.00)" class="sm:col-span-5 ${VEH_FIELD}">
     <input type="text" data-f="link" value="${esc(inv.link || '')}" placeholder="Link to the invoice document, e.g. SharePoint (optional)" inputmode="url" autocomplete="off" class="veh-link sm:col-span-5 ${VEH_FIELD}">
     <div class="sm:col-span-5 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs -mt-0.5"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcRowFileChosen(this)"><span class="pc-att-act">📎 Attach the invoice file (PDF or photo)</span></label><span class="pc-att-info text-slate-500"></span><button type="button" onclick="pcRowAttachRemove(this)" class="pc-att-rm text-slate-400 hover:text-rose-600 hidden">Remove file</button></div></div>`;
 }
@@ -3326,8 +3327,8 @@ function pcAttachRefresh(row){
 }
 function pcRowAttachRemove(btn){ const row = btn.closest('.pc-irow'); delete pcAttach[row.dataset.key]; row.dataset.fid = ''; row.dataset.pages = '0'; row.dataset.fname = ''; pcAttachRefresh(row); }
 function pcReadInvoices(){
-  return [...document.querySelectorAll('#pc-invoices .pc-irow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); return { key:row.dataset.key, supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
-    .filter(i => i.supplier || i.number || i.date || i.amount || i.link || i.fileId || pcAttach[i.key]);
+  return [...document.querySelectorAll('#pc-invoices .pc-irow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); return { key:row.dataset.key, supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
+    .filter(i => i.supplier || i.number || i.date || i.amount || i.description || i.link || i.fileId || pcAttach[i.key]);
 }
 function pcInvoiceRecalc(){ const el = document.getElementById('pc-inv-total'); if(el) el.textContent = fmtMVR(pcRound(pcReadInvoices().reduce((s, i) => s + vNum(i.amount), 0))); }
 function pcAddInvoice(inv){
@@ -3519,7 +3520,7 @@ async function savePcForm(id){
     if(!(vNum(inv.amount) > 0)) return vFail('Invoice ' + (i + 1) + ': enter the invoice amount.');
     const link = inv.link ? normalizeWebUrl(inv.link) : '';
     if(link === null) return vFail('Invoice ' + (i + 1) + ': the document link must be a web address (starting with https://).');
-    invoices.push({ supplier:inv.supplier, number:inv.number, date:inv.date, amount:vNum(inv.amount), link, fileId:inv.fileId || '', filePages:inv.filePages || 0, fileName:inv.fileName || '', _key:inv.key });
+    invoices.push({ supplier:inv.supplier, number:inv.number, date:inv.date, amount:vNum(inv.amount), description:inv.description || '', link, fileId:inv.fileId || '', filePages:inv.filePages || 0, fileName:inv.fileName || '', _key:inv.key });
   }
   const oldFileIds = old ? pcInvoices(old).map(i => i.fileId).filter(Boolean) : [];
   const formLinkRaw = (document.getElementById('pc-form-link').value || '').trim(), formLink = formLinkRaw ? normalizeWebUrl(formLinkRaw) : '';
@@ -4055,8 +4056,15 @@ function pcStatementNoProblem(no, exceptNo){
   return '';
 }
 function pcStatementRow(r){
-  const inv = pcInvoices(r), dates = inv.map(i => i.date).filter(Boolean).sort();
-  return { supplier:[...new Set(inv.map(i => i.supplier).filter(Boolean))].join(' / '), date:pcOrdinalDate(dates[0] || r.date), bill:inv.map(i => i.number).filter(Boolean).join(', '), voucher:r.number || '', details:r.purpose || '', dept:r.department || '', category:r.category, amount:pcInvoiceTotal(r) };
+  const inv = pcInvoices(r).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  const NL = String.fromCharCode(10), descs = inv.map(i => String(i.description || '').trim()).filter(Boolean);
+  const dates = [...new Set(inv.map(i => i.date).filter(Boolean))];
+  return { supplier:[...new Set(inv.map(i => i.supplier).filter(Boolean))].join(' / '),
+    date: dates.length > 1 ? dates.map(pcOrdinalDate).join(NL) : pcOrdinalDate(dates[0] || r.date),
+    bill: inv.map(i => i.number).filter(Boolean).join(NL),
+    voucher:r.number || '',
+    details: descs.length ? descs.join(NL) : (r.purpose || ''),           // each invoice's description on its own line, as in the finance statements
+    dept:r.department || '', category:r.category, amount:pcInvoiceTotal(r) };
 }
 function pcYellowStyles(xml){
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
@@ -4094,13 +4102,13 @@ function pcFillStatementSheet(xml, s, ctx){
   }
   setStr('A1', 'Statement of Petty Cash  Reimbursed – ' + ctx.loc.name);
   const colTot = {}; PC_CAT_COLS.forEach(c => { colTot[c] = 0; }); let grand = 0;
-  const wrapN = (t, chars) => Math.max(1, Math.ceil(String(t || '').length / chars)), hods = {};
+  const wrapN = (t, chars) => Math.max(1, String(t || '').split(String.fromCharCode(10)).reduce((n, ln) => n + Math.max(1, Math.ceil(ln.length / chars)), 0)), hods = {};
   s.list.slice(0, PC_STATEMENT_ROWS).forEach((r, i) => {
     const row = 5 + i, d = pcStatementRow(r), col = PC_CAT_COLS[PC_CATEGORIES.indexOf(d.category)];
     setStr('B' + row, d.supplier); setStr('C' + row, d.date); setStr('D' + row, d.bill); setStr('E' + row, d.voucher); setStr('F' + row, d.details); setStr('G' + row, d.dept);
     if(col){ setNum(col + row, d.amount); const ys = catS(col).yellow; if(ys != null) cell(col + row).setAttribute('s', ys); colTot[col] = pcRound(colTot[col] + d.amount); }
     setCached('T' + row, d.amount); grand = pcRound(grand + d.amount);
-    const lines = Math.max(wrapN(d.supplier, 22), wrapN(d.bill, 24), wrapN(d.details, 36), wrapN(d.dept, 14)), re = doc.querySelector('row[r="' + row + '"]');
+    const lines = Math.max(wrapN(d.supplier, 22), wrapN(d.date, 18), wrapN(d.bill, 24), wrapN(d.details, 36), wrapN(d.dept, 14)), re = doc.querySelector('row[r="' + row + '"]');
     re.setAttribute('ht', String(Math.max(36, lines * 22 + 10))); re.setAttribute('customHeight', '1');
     if(r.hodName) hods[r.hodName] = (hods[r.hodName] || 0) + 1;
   });
@@ -4137,7 +4145,16 @@ async function buildPettyCashStatementXlsx(locId, yy){
   let stylesXml = await tpl.file('xl/styles.xml').async('string');
   stylesXml = stylesXml.replace(/<fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"\/>(?:<bgColor [^>]*\/>)?<\/patternFill><\/fill>/g, '<fill><patternFill patternType="none"/></fill>');     // no yellow highlighting anywhere
   if(!/<dxfs/.test(stylesXml)){ const dxf = '<dxfs count="1"><dxf><font><b/><color rgb="FFFFFFFF"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFC00000"/><bgColor rgb="FFC00000"/></patternFill></fill></dxf></dxfs>'; stylesXml = /<tableStyles/.test(stylesXml) ? stylesXml.replace('<tableStyles', dxf + '<tableStyles') : stylesXml.replace('</cellStyles>', '</cellStyles>' + dxf); }   // the red used for an unbalanced amount
-  const sheetXml = await tpl.file('xl/worksheets/sheet1.xml').async('string'), yellow = pcYellowStyles(stylesXml);
+  const sheetXml = await tpl.file('xl/worksheets/sheet1.xml').async('string');
+  { // the voucher rows (columns B-G) wrap their text, so several invoices in one voucher show one per line
+    const wrapIdx = new Set(); for(let r = 5; r <= 27; r++) ['B', 'C', 'D', 'E', 'F', 'G'].forEach(L => { const m = new RegExp('<c r="' + L + r + '"[^>]*\\ss="(\\d+)"').exec(sheetXml); if(m) wrapIdx.add(+m[1]); });
+    let k = -1;
+    stylesXml = stylesXml.replace(/<cellXfs[^>]*>[\s\S]*?<\/cellXfs>/, block => block.replace(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g, xf => { k++; if(!wrapIdx.has(k)) return xf;
+      if(/wrapText="(?:false|0)"/.test(xf)) return xf.replace(/wrapText="(?:false|0)"/, 'wrapText="true"');
+      if(/<alignment\b/.test(xf)) return /wrapText=/.test(xf) ? xf : xf.replace(/<alignment\b/, '<alignment wrapText="true"');
+      return xf.endsWith('/>') ? xf.replace(/\/>$/, ' applyAlignment="1"><alignment vertical="center" wrapText="true"/></xf>') : xf.replace(/<\/xf>$/, '<alignment vertical="center" wrapText="true"/></xf>'); }));
+  }
+  const yellow = pcYellowStyles(stylesXml);
   let wbXml = await tpl.file('xl/workbook.xml').async('string'), rels = await tpl.file('xl/_rels/workbook.xml.rels').async('string'), ct = await tpl.file('[Content_Types].xml').async('string');
   const out = new JSZip(), skip = ['xl/worksheets/sheet1.xml', 'xl/styles.xml', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', '[Content_Types].xml'];
   for(const name of Object.keys(tpl.files)){ const f = tpl.files[name]; if(!f.dir && !skip.includes(name)) out.file(name, await f.async('uint8array'), { createFolders:false }); }
@@ -4727,8 +4744,8 @@ function viewPcStatementsExcel(){
   const can = pcCanStatement(locId), elig = pcEligible(locId), sel = new Set(pcStSelection(locId)), need = pcNeedsInvoice(locId), cust = pcPerson(loc.pettyCashCustodianUid, loc.pettyCashCustodianName), rc = pcReconcile(loc), room = pcStRoom(locId);
   const selTotal = pcRound(elig.filter(r => sel.has(r.id)).reduce((s, r) => s + pcInvoiceTotal(r), 0));
   const readyRows = elig.map(r => { const d = pcStatementRow(r); return `<tr class="${vTr} cursor-pointer" onclick="pcStToggle('${r.id}')">
-    ${vTd(`<input type="checkbox" ${sel.has(r.id) ? 'checked' : ''} class="pointer-events-none">`, { first:1 })}${vTd(`<span class="font-semibold">${esc(d.voucher)}</span>`)}${vTd(esc(d.date))}${vTd(esc(d.supplier || '—'))}${vTd(esc(d.bill || '—'))}${vTd(`<div class="max-w-[16rem] truncate" title="${esc(d.details)}">${esc(d.details)}</div>`)}${vTd(esc(d.category || '—'))}${vTd(`<b>${fmtMVR(d.amount)}</b>`, { n:1, last:1 })}</tr>`; }).join('');
-  const openRows = open ? open.list.map(r => { const d = pcStatementRow(r); return `<tr class="${vTr}">${vTd(`<span class="font-semibold">${esc(d.voucher)}</span>`, { first:1 })}${vTd(esc(d.supplier || '—'))}${vTd(esc(d.bill || '—'))}${vTd(`<div class="max-w-[14rem] truncate" title="${esc(d.details)}">${esc(d.details)}</div>`)}${vTd(esc(d.category || '—'))}${vTd(r.processedDate ? '<span class="text-emerald-600 font-semibold">✓</span>' : '<span class="text-slate-300">—</span>')}${vTd(`<b>${fmtMVR(d.amount)}</b>`, { n:1 })}${vTd(can ? `<button onclick="pcRemoveFromStatement('${r.id}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Remove</button>` : '', { last:1, cls:'text-right' })}</tr>`; }).join('') : '';
+    ${vTd(`<input type="checkbox" ${sel.has(r.id) ? 'checked' : ''} class="pointer-events-none">`, { first:1 })}${vTd(`<span class="font-semibold">${esc(d.voucher)}</span>`)}${vTd(esc(d.date).replace(/\n/g, '<br>'))}${vTd(esc(d.supplier || '—'))}${vTd(esc(d.bill || '—').replace(/\n/g, '<br>'))}${vTd(`<div class="max-w-[16rem] truncate" title="${esc(d.details).replace(/\n/g, '<br>')}">${esc(d.details).replace(/\n/g, '<br>')}</div>`)}${vTd(esc(d.category || '—'))}${vTd(`<b>${fmtMVR(d.amount)}</b>`, { n:1, last:1 })}</tr>`; }).join('');
+  const openRows = open ? open.list.map(r => { const d = pcStatementRow(r); return `<tr class="${vTr}">${vTd(`<span class="font-semibold">${esc(d.voucher)}</span>`, { first:1 })}${vTd(esc(d.supplier || '—'))}${vTd(esc(d.bill || '—').replace(/\n/g, '<br>'))}${vTd(`<div class="max-w-[14rem] truncate" title="${esc(d.details).replace(/\n/g, '<br>')}">${esc(d.details).replace(/\n/g, '<br>')}</div>`)}${vTd(esc(d.category || '—'))}${vTd(r.processedDate ? '<span class="text-emerald-600 font-semibold">✓</span>' : '<span class="text-slate-300">—</span>')}${vTd(`<b>${fmtMVR(d.amount)}</b>`, { n:1 })}${vTd(can ? `<button onclick="pcRemoveFromStatement('${r.id}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Remove</button>` : '', { last:1, cls:'text-right' })}</tr>`; }).join('') : '';
   const unprocOpen = open ? open.list.filter(r => !r.processedDate).length : 0, bad = rc.counted && Math.abs(rc.diff) >= 0.005;
   const kpis = vKpis(statCard('Ready for a statement', fmtNum(elig.length), fmtMVR(pcRound(elig.reduce((s, r) => s + pcInvoiceTotal(r), 0))), 'emerald') + statCard('Waiting for an invoice', fmtNum(need.length), need.length ? 'Add the invoice to include them' : 'None', need.length ? 'amber' : 'slate') +
     statCard('Open statement', open ? open.list.length + ' / ' + PC_STATEMENT_ROWS : 'None', open ? open.no : (can ? 'Start one below' : 'None open'), open ? 'brand' : 'slate') + statCard('Cash check', !rc.counted ? 'Not counted' : (bad ? (rc.diff > 0 ? 'Short ' : 'Over ') + fmtMVR(Math.abs(rc.diff)) : 'Balanced'), !rc.counted ? 'Count the cash below' : (bad ? 'Check the vouchers and the count' : 'Cash agrees with the statement'), !rc.counted ? 'slate' : (bad ? 'rose' : 'emerald')));

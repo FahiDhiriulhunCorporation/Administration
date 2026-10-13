@@ -3037,11 +3037,11 @@ function openPcDetails(id){
 function openPcProcess(id){
   const r = state.pettyCash.find(x => x.id === id); if(!r) return;
   if(!pcCanProcess(r)){ toast('Only an admin or the location\'s petty cash custodian can process a request.', true); return; }
-  const reimb = r.option === 'Reimbursement', inv = pcInvoiceTotal(r), exp = pcTotal(r), amt = r.processedAmount != null ? r.processedAmount : (reimb ? (inv || exp) : exp);
+  const reimb = r.option === 'Reimbursement', inv = pcInvoiceTotal(r), exp = pcTotal(r), amt = r.processedAmount != null ? r.processedAmount : (r.cashAmount != null ? r.cashAmount : (reimb ? (inv || exp) : exp));
   openModal(reimb ? 'Process reimbursement' : 'Process prior request', vFormOpen + `
     <p class="text-sm text-slate-500 mb-4"><b class="text-slate-800">${esc(r.number)}</b> · ${esc(r.purpose || '')}<br>Requested ${fmtMVR(exp)}${inv ? ' · invoice ' + fmtMVR(inv) : ''}</p>
     ${vGrid(2, vF(reimb ? 'Date reimbursed' : 'Date cash handed over', 'processedDate', r.processedDate || vToday(), 'date', { req:1 }) + vF(reimb ? 'Amount reimbursed (MVR)' : 'Amount handed over (MVR)', 'processedAmount', amt, 'number', { req:1 }) +
-      (reimb ? '' : vF('Balance returned (MVR)', 'balanceReturned', r.balanceReturned, 'number') + `<div class="text-[11.5px] text-slate-400 self-end pb-2">If less than the cash handed over was spent, enter what was returned.</div>`) +
+      (reimb ? '' : vF('Balance returned (MVR)', 'balanceReturned', r.balanceReturned != null ? r.balanceReturned : (r.changeAmount != null ? r.changeAmount : ''), 'number') + `<div class="text-[11.5px] text-slate-400 self-end pb-2">If less than the cash handed over was spent, enter what was returned.</div>`) +
       `<div class="sm:col-span-2"><label class="${VEH_LBL}">Cash received by</label><select name="cashReceiverUid" onchange="pcToggleCustom(this, 'pp-cr-custom')" class="${VEH_FIELD} bg-white">${pcUserOptions(r.cashReceiverUid || '', 'Same as the requester')}${pcOtherOpt(!r.cashReceiverUid && !!r.cashReceiverName)}</select>${pcCustomBox('pp-cr-custom', !r.cashReceiverUid ? r.cashReceiverName : '', !r.cashReceiverUid ? r.cashReceiverDesig : '', !r.cashReceiverUid && !!r.cashReceiverName, 'crName', 'crDesig')}</div>` +
       vTa('Note', 'processNote', r.processNote, { span:'sm:col-span-2', rows:2, ph:'For example: paid in cash, or a bank transfer reference' }))}
     <div class="flex justify-end gap-2.5 mt-6"><button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="pcCancelAct()">Cancel</button><button type="button" id="vf-save" onclick="savePcProcess('${id}')" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">${r.processedDate ? 'Save changes' : 'Mark as processed'}</button></div></form>`, true);
@@ -3054,7 +3054,7 @@ async function savePcProcess(id){
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   const crOther = o.cashReceiverUid === PC_OTHER, crU = (!crOther && o.cashReceiverUid && o.cashReceiverUid !== r.requesterUid) ? o.cashReceiverUid : '';
   if(crOther && !String(o.crName || '').trim()){ if(btn) btn.disabled = false; return vFail('Type the name of the person who received the cash.'); }
-  await vehSave('pettyCash', { id, processedDate:o.processedDate, processedAmount:vNum(o.processedAmount), balanceReturned: o.balanceReturned ? vNum(o.balanceReturned) : null, processNote:o.processNote || '',
+  await vehSave('pettyCash', { id, processedDate:o.processedDate, processedAmount:vNum(o.processedAmount), balanceReturned: o.balanceReturned ? vNum(o.balanceReturned) : null, cashAmount:vNum(o.processedAmount), changeAmount: o.balanceReturned !== undefined && o.balanceReturned !== '' ? vNum(o.balanceReturned) : (r.changeAmount != null ? r.changeAmount : null), processNote:o.processNote || '',
     cashReceiverUid:crU, cashReceiverName: crOther ? String(o.crName).trim() : (crU ? pcPerson(crU).name : ''), cashReceiverDesig: crOther ? String(o.crDesig || '').trim() : '' });
   closeModal(); toast(r.option === 'Reimbursement' ? 'Reimbursement marked as processed.' : 'Marked as processed.'); pcDone(id);
 }
@@ -3166,6 +3166,11 @@ const PC_OTHER = '__other';
 const pcOtherOpt = sel => `<option value="${PC_OTHER}" ${sel ? 'selected' : ''}>Someone else (type the name and designation)…</option>`;
 const pcCustomBox = (id, name, desig, show, nm, dm) => `<div id="${id}" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 ${show ? '' : 'hidden'}"><input type="text" name="${nm}" value="${esc(name || '')}" placeholder="Name" class="${VEH_FIELD}"><input type="text" name="${dm}" value="${esc(desig || '')}" placeholder="Designation" class="${VEH_FIELD}"></div>`;
 function pcToggleCustom(sel, boxId){ const b = document.getElementById(boxId); if(b){ b.classList.toggle('hidden', sel.value !== PC_OTHER); if(sel.value === PC_OTHER){ const i = b.querySelector('input'); if(i && !i.value) i.focus(); } } }
+function pcCashChange(){
+  const f = document.getElementById('vform'), h = document.getElementById('pc-change-hint'); if(!f || !h) return;
+  const r = pcEditingId ? state.pettyCash.find(x => x.id === pcEditingId) : null, inv = r ? pcInvoiceTotal(r) : 0, cash = vNum(f.cashAmount.value);
+  h.textContent = cash && inv ? 'Invoices total ' + pcMoneyPlain(inv) + ', so the change should be ' + pcMoneyPlain(Math.max(0, pcRound(cash - inv))) + '.' : 'Printed as "Amount Handed Over" and "Balance Received" on the form.';
+}
 function pcRequesterChanged(){
   const sel = document.getElementById('pc-requester'), box = document.getElementById('pc-sign-box'), linked = document.getElementById('pc-form-link');
   pcToggleCustom(sel, 'pc-req-custom');
@@ -3374,7 +3379,7 @@ function pcInvoiceRowHtml(inv){
     <input type="number" data-f="amount" value="${esc(inv.amount == null ? '' : inv.amount)}" min="0" step="0.01" placeholder="Amount" oninput="pcInvoiceRecalc()" class="${VEH_FIELD}">
     <button type="button" onclick="pcRemoveInvoice(this)" class="text-slate-400 hover:text-rose-600 pt-2.5" title="Remove this invoice">✕</button>
     ${pcInvFuelVehs ? `<div class="sm:col-span-5 grid grid-cols-[1fr_7rem] gap-2"><select data-f="vehicleId" class="${VEH_FIELD} bg-white"><option value="">Vehicle fueled…</option>${pcInvFuelVehs.map(([id, lab]) => `<option value="${esc(id)}" ${(inv.vehicleId || (pcInvFuelVehs.length === 1 ? pcInvFuelVehs[0][0] : '')) === id ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select><input type="number" data-f="litres" value="${esc(inv.litres == null ? '' : inv.litres)}" min="0" step="any" placeholder="Litres" class="${VEH_FIELD}"></div>` : ''}
-    <input type="text" data-f="description" value="${esc(inv.description || '')}" placeholder="Description for the statement, e.g. PETROL 3.577 Lt, 13.98 MVR/Lt (50.00)" ${pcInvFuelVehs ? 'oninput="pcInvDescLitres(this)"' : ''} class="sm:col-span-5 ${VEH_FIELD}">
+    <textarea data-f="description" rows="${Math.max(1, String(inv.description || '').split('\n').length)}" placeholder="Description for the statement — press Enter for another line, e.g. PETROL 3.577 Lt, 13.98 MVR/Lt (50.00)" oninput="this.rows = Math.max(1, this.value.split(String.fromCharCode(10)).length);${pcInvFuelVehs ? ' pcInvDescLitres(this)' : ''}" class="sm:col-span-5 resize-y ${VEH_FIELD}">${esc(inv.description || '')}</textarea>
     <input type="text" data-f="link" value="${esc(inv.link || '')}" placeholder="Link to the invoice document, e.g. SharePoint (optional)" inputmode="url" autocomplete="off" class="veh-link sm:col-span-5 ${VEH_FIELD}">
     <div class="sm:col-span-5 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs -mt-0.5"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcRowFileChosen(this)"><span class="pc-att-act">📎 Attach the invoice file (PDF or photo)</span></label><span class="pc-att-info text-slate-500"></span><button type="button" onclick="pcRowReadAttached(this)" class="pc-att-read font-semibold text-brand-600 hover:underline hidden">Fill the boxes from this file</button><button type="button" onclick="pcRowAttachRemove(this)" class="pc-att-rm text-slate-400 hover:text-rose-600 hidden">Remove file</button></div></div>`;
 }
@@ -3388,13 +3393,13 @@ function pcAttachRefresh(row){
 function pcRowAttachRemove(btn){ const row = btn.closest('.pc-irow'); delete pcAttach[row.dataset.key]; row.dataset.fid = ''; row.dataset.pages = '0'; row.dataset.fname = ''; pcAttachRefresh(row); }
 function pcReadInvoices(){
   return [...document.querySelectorAll('#pc-invoices .pc-irow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); const go = f => { const e = row.querySelector(`[data-f="${f}"]`); return e ? e.value.trim() : ''; };
-    return { key:row.dataset.key, uid:row.dataset.uid || '', vehicleId:go('vehicleId'), litres:go('litres'), supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
+    return { key:row.dataset.key, uid:row.dataset.uid || '', vehicleId:go('vehicleId'), litres:go('litres'), supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
     .filter(i => i.supplier || i.number || i.date || i.amount || i.description || i.link || i.fileId || pcAttach[i.key]);
 }
 function pcInvoiceRecalc(){ const el = document.getElementById('pc-inv-total'); if(el) el.textContent = fmtMVR(pcRound(pcReadInvoices().reduce((s, i) => s + vNum(i.amount), 0))); }
 function pcAddInvoice(inv){
   const box = document.getElementById('pc-invoices'), rows = [...box.querySelectorAll('.pc-irow')];
-  const empty = rows.find(r => ![...r.querySelectorAll('input[type=text],input[type=number],input[type=date]')].some(i => i.value.trim()) && !r.dataset.fid && !pcAttach[r.dataset.key]);
+  const empty = rows.find(r => ![...r.querySelectorAll('input[type=text],input[type=number],input[type=date],textarea')].some(i => i.value.trim()) && !r.dataset.fid && !pcAttach[r.dataset.key]);
   const tmp = document.createElement('div'); tmp.innerHTML = pcInvoiceRowHtml(inv); const row = tmp.firstElementChild;
   if(empty && inv) empty.replaceWith(row); else box.appendChild(row);
   pcAttachRefresh(row); pcInvoiceRecalc(); return row;
@@ -3568,6 +3573,11 @@ async function openPcForm(id, mode){
       <div><label class="${VEH_LBL}">HOD (approves)${vReqStar}</label><select name="hodUid" id="pc-hod" class="${VEH_FIELD} bg-white">${pcUserOptions(d.hodUid, 'Select HOD…')}</select></div>
     </div>
     <div class="mt-3.5 grid grid-cols-1 sm:grid-cols-[16rem_1fr] gap-3.5"><div><label class="${VEH_LBL}">Cash received by</label><select name="cashReceiverUid" id="pc-cash-receiver" onchange="pcToggleCustom(this, 'pc-cr-custom')" class="${VEH_FIELD} bg-white">${pcUserOptions(d.cashReceiverUid || '', 'Same as the requester')}${pcOtherOpt(!d.cashReceiverUid && !!d.cashReceiverName)}</select>${pcCustomBox('pc-cr-custom', !d.cashReceiverUid ? d.cashReceiverName : '', !d.cashReceiverUid ? d.cashReceiverDesig : '', !d.cashReceiverUid && !!d.cashReceiverName, 'crName', 'crDesig')}</div><div class="text-[11.5px] text-slate-400 self-end pb-2.5">Who collects the cash. It is printed in the "Cash Received by" column of the form, and confirmed when the cash is handed over.</div></div>
+    <div class="mt-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+      ${vF('Cash amount handed over (MVR)', 'cashAmount', d.processedDate ? d.processedAmount : d.cashAmount, 'number', { attrs:' oninput="pcCashChange()"' })}
+      ${vF('Change / balance received (MVR)', 'changeAmount', d.processedDate ? (d.balanceReturned != null ? d.balanceReturned : '') : d.changeAmount, 'number')}
+      <div class="text-[11.5px] text-slate-400 self-end pb-2.5" id="pc-change-hint">Printed as "Amount Handed Over" and "Balance Received" on the form.</div>
+    </div>
     <div class="mt-3.5"><label class="${VEH_LBL}">Signed petty cash form link <span class="font-normal text-slate-400">(optional)</span></label><input type="text" id="pc-form-link" name="formLink" value="${esc(d.formLink || '')}" data-has="${d.formLink ? '1' : '0'}" oninput="pcFormLinkChanged()" inputmode="url" autocomplete="off" placeholder="Link to the signed form, e.g. SharePoint" class="veh-link ${VEH_FIELD}"><div class="text-[11px] text-slate-400 mt-1">If you add the link of the signed form, the requester doesn't need to sign here.</div></div>
     <div class="mt-3.5"><label class="${VEH_LBL}">Requester's signature</label><div id="pc-sign-box" class="rounded-lg border border-slate-200 px-4 py-3"></div></div>
     ${vFoot(r ? 'Save changes' : 'Create request', `savePcForm('${id || ''}')`)}`, true);
@@ -3577,6 +3587,8 @@ async function savePcForm(id){
   const f = document.getElementById('vform'), old = id ? state.pettyCash.find(x => x.id === id) : null, fuel = pcFormMode === 'fuel';
   const number = f.number.value.trim(), date = f.date.value, locationId = f.locationId.value, department = document.getElementById('pc-department').value.trim(), purpose = f.purpose.value.trim();
   const option = (f.querySelector('input[name=option]:checked') || {}).value, requesterUid = f.requesterUid.value, hodUid = f.hodUid.value, category = fuel ? 'Fuel' : f.category.value;
+  const cashAmount = f.cashAmount.value === '' ? null : pcRound(vNum(f.cashAmount.value)), changeAmount = f.changeAmount.value === '' ? null : pcRound(vNum(f.changeAmount.value));
+  if(cashAmount != null && changeAmount != null && changeAmount > cashAmount) return vFail('The change cannot be more than the cash handed over.');
   const reqOther = requesterUid === PC_OTHER, crOther = f.cashReceiverUid.value === PC_OTHER;
   const reqName = reqOther ? f.reqName.value.trim() : '', reqDesig = reqOther ? f.reqDesig.value.trim() : '';
   const crName = crOther ? f.crName.value.trim() : '', crDesig = crOther ? f.crDesig.value.trim() : '';
@@ -3621,7 +3633,8 @@ async function savePcForm(id){
   if(requesterUid === hodUid) return vFail('The requester and the HOD must be different people.');
   const rq = reqOther ? { name:reqName, designation:reqDesig } : pcPerson(requesterUid), hod = pcPerson(hodUid), loc = pcFund(locationId), cust = pcPerson(loc && loc.pettyCashCustodianUid, loc && loc.pettyCashCustodianName);
   const rec = { number, date, locationId, department, purpose, option, category, items, invoices, total:pcTotal({ items }), requesterUid: reqOther ? '' : requesterUid, requesterName:rq.name, requesterDesig: reqOther ? reqDesig : '', hodUid, hodName:hod.name, custodianName:cust.name, formLink,
-    cashReceiverUid:crUid, cashReceiverName: crOther ? crName : (crUid ? pcPerson(crUid).name : ''), cashReceiverDesig: crOther ? crDesig : '' };
+    cashReceiverUid:crUid, cashReceiverName: crOther ? crName : (crUid ? pcPerson(crUid).name : ''), cashReceiverDesig: crOther ? crDesig : '', cashAmount, changeAmount };
+  if(old && old.processedDate){ if(cashAmount != null) rec.processedAmount = cashAmount; rec.balanceReturned = changeAmount; }      // already handed over: keep the processing in step
   if(fuel){ rec.kind = 'fuel'; rec.fuelRows = fuelRows; }
   if(old) rec.id = id; else rec.createdByUid = authUser ? authUser.uid : '';
   const signNow = !!(document.getElementById('pc-sign-now') && document.getElementById('pc-sign-now').checked && authUser && requesterUid === authUser.uid && getMySignature());
@@ -3767,7 +3780,8 @@ function pcFormFields(r){
     req: { name: rq.name, desig: rq.designation, date: handoverDateParts(signed ? localDateStr(new Date(r.requesterSignature.signedAt)) : r.date).slash },
     hod: { name: hod.name, desig: hod.designation }, cus: { name: cus.name, desig: cus.designation },
     cr: { name: pcCashReceiver(r).name, desig: pcCashReceiver(r).designation, date: r.processedDate ? handoverDateParts(r.processedDate).slash : '' },
-    handed: r.processedDate ? pcMoneyPlain(r.processedAmount) : '', balance: (r.processedDate && vNum(r.balanceReturned)) ? pcMoneyPlain(r.balanceReturned) : '',
+    handed: r.processedDate ? pcMoneyPlain(r.processedAmount) : (r.cashAmount != null ? pcMoneyPlain(r.cashAmount) : ''),
+    balance: r.processedDate ? (r.balanceReturned != null ? pcMoneyPlain(r.balanceReturned) : (r.changeAmount != null ? pcMoneyPlain(r.changeAmount) : '')) : (r.changeAmount != null ? pcMoneyPlain(r.changeAmount) : ''),
   };
 }
 function fillPettyCashXml(xml, r, drawings){

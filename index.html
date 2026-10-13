@@ -3201,7 +3201,13 @@ function pcVoucherStart(locId, yy){
   if(l && l.voucherStartYear === yy && vNum(l.voucherStart) > 0) return Math.floor(vNum(l.voucherStart));
   return d && d.starts && d.starts[yy] ? d.starts[yy] : 1;
 }
+const PC_FUEL_VOUCHER_STARTS = { '26':12 };                                   // fueling vouchers continue from PTC-F-26-12
 function pcNextVoucher(locationId, dateIso, excludeId){
+  if(locationId === PC_FUEL_ID){
+    const yy = String(dateIso || vToday()).slice(2, 4), re = new RegExp('^PTC-F-' + yy + '-(\\d+)$');
+    let max = 0; state.pettyCash.forEach(r => { if(r.id === excludeId) return; const m = re.exec(r.number || ''); if(m) max = Math.max(max, +m[1]); });
+    return 'PTC-F-' + yy + '-' + String(Math.max(max + 1, PC_FUEL_VOUCHER_STARTS[yy] || 1)).padStart(2, '0');
+  }
   const code = pcVoucherCode(locationId), yy = String(dateIso || vToday()).slice(2, 4), re = new RegExp('^PTC-V-' + code + '-' + yy + '-(\\d+)$');
   let max = 0; state.pettyCash.forEach(r => { if(r.id === excludeId) return; const m = re.exec(r.number || ''); if(m) max = Math.max(max, +m[1]); });
   return 'PTC-V-' + code + '-' + yy + '-' + String(Math.max(max + 1, pcVoucherStart(locationId, yy))).padStart(2, '0');
@@ -3358,15 +3364,17 @@ async function pcPrepareAttachment(files){
 }
 
 /* ---------- invoice rows in the form ---------- */
+let pcInvFuelVehs = null;                                                     // set while the Invoices window of a fueling voucher is open: [[vehicleId, label], …]
 function pcInvoiceRowHtml(inv){
   inv = inv || {}; const key = 'k' + (++pcRowCounter);
-  return `<div class="pc-irow grid grid-cols-1 sm:grid-cols-[1.6fr_1.2fr_8.25rem_6.25rem_1.5rem] gap-2 items-start mb-3" data-key="${key}" data-fid="${esc(inv.fileId || '')}" data-pages="${esc(inv.filePages || 0)}" data-fname="${esc(inv.fileName || '')}">
+  return `<div class="pc-irow grid grid-cols-1 sm:grid-cols-[1.6fr_1.2fr_8.25rem_6.25rem_1.5rem] gap-2 items-start mb-3" data-key="${key}" data-uid="${esc(inv.uid || '')}" data-fid="${esc(inv.fileId || '')}" data-pages="${esc(inv.filePages || 0)}" data-fname="${esc(inv.fileName || '')}">
     <input type="text" data-f="supplier" value="${esc(inv.supplier || '')}" placeholder="Supplier" class="${VEH_FIELD}">
     <input type="text" data-f="number" value="${esc(inv.number || '')}" placeholder="Invoice no." class="${VEH_FIELD}">
     <input type="date" data-f="date" value="${esc(inv.date || '')}" class="${VEH_FIELD}">
     <input type="number" data-f="amount" value="${esc(inv.amount == null ? '' : inv.amount)}" min="0" step="0.01" placeholder="Amount" oninput="pcInvoiceRecalc()" class="${VEH_FIELD}">
     <button type="button" onclick="pcRemoveInvoice(this)" class="text-slate-400 hover:text-rose-600 pt-2.5" title="Remove this invoice">✕</button>
-    <input type="text" data-f="description" value="${esc(inv.description || '')}" placeholder="Description for the statement, e.g. PETROL 3.577 Lt, 13.98 MVR/Lt (50.00)" class="sm:col-span-5 ${VEH_FIELD}">
+    ${pcInvFuelVehs ? `<div class="sm:col-span-5 grid grid-cols-[1fr_7rem] gap-2"><select data-f="vehicleId" class="${VEH_FIELD} bg-white"><option value="">Vehicle fueled…</option>${pcInvFuelVehs.map(([id, lab]) => `<option value="${esc(id)}" ${(inv.vehicleId || (pcInvFuelVehs.length === 1 ? pcInvFuelVehs[0][0] : '')) === id ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select><input type="number" data-f="litres" value="${esc(inv.litres == null ? '' : inv.litres)}" min="0" step="any" placeholder="Litres" class="${VEH_FIELD}"></div>` : ''}
+    <input type="text" data-f="description" value="${esc(inv.description || '')}" placeholder="Description for the statement, e.g. PETROL 3.577 Lt, 13.98 MVR/Lt (50.00)" ${pcInvFuelVehs ? 'oninput="pcInvDescLitres(this)"' : ''} class="sm:col-span-5 ${VEH_FIELD}">
     <input type="text" data-f="link" value="${esc(inv.link || '')}" placeholder="Link to the invoice document, e.g. SharePoint (optional)" inputmode="url" autocomplete="off" class="veh-link sm:col-span-5 ${VEH_FIELD}">
     <div class="sm:col-span-5 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs -mt-0.5"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcRowFileChosen(this)"><span class="pc-att-act">📎 Attach the invoice file (PDF or photo)</span></label><span class="pc-att-info text-slate-500"></span><button type="button" onclick="pcRowReadAttached(this)" class="pc-att-read font-semibold text-brand-600 hover:underline hidden">Fill the boxes from this file</button><button type="button" onclick="pcRowAttachRemove(this)" class="pc-att-rm text-slate-400 hover:text-rose-600 hidden">Remove file</button></div></div>`;
 }
@@ -3379,7 +3387,8 @@ function pcAttachRefresh(row){
 }
 function pcRowAttachRemove(btn){ const row = btn.closest('.pc-irow'); delete pcAttach[row.dataset.key]; row.dataset.fid = ''; row.dataset.pages = '0'; row.dataset.fname = ''; pcAttachRefresh(row); }
 function pcReadInvoices(){
-  return [...document.querySelectorAll('#pc-invoices .pc-irow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); return { key:row.dataset.key, supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
+  return [...document.querySelectorAll('#pc-invoices .pc-irow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); const go = f => { const e = row.querySelector(`[data-f="${f}"]`); return e ? e.value.trim() : ''; };
+    return { key:row.dataset.key, uid:row.dataset.uid || '', vehicleId:go('vehicleId'), litres:go('litres'), supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
     .filter(i => i.supplier || i.number || i.date || i.amount || i.description || i.link || i.fileId || pcAttach[i.key]);
 }
 function pcInvoiceRecalc(){ const el = document.getElementById('pc-inv-total'); if(el) el.textContent = fmtMVR(pcRound(pcReadInvoices().reduce((s, i) => s + vNum(i.amount), 0))); }
@@ -3391,9 +3400,11 @@ function pcAddInvoice(inv){
   pcAttachRefresh(row); pcInvoiceRecalc(); return row;
 }
 // fills the row's empty boxes from what was read (never over what was typed)
+function pcInvDescLitres(el){ const row = el.closest('.pc-irow'), l = row.querySelector('[data-f="litres"]'), m = /(\d+(?:\.\d+)?)\s*(?:l|lt|ltr|litres?|liters?)\b/i.exec(el.value); if(l && m && !l.value) l.value = m[1]; }
 function pcFillRowFrom(row, got){
   let n = 0;
   [['supplier', got.supplier], ['number', got.number], ['date', got.date], ['amount', got.amount], ['description', got.description]].forEach(([f, v]) => { const el = row.querySelector(`[data-f="${f}"]`); if(el && v && !el.value.trim()){ el.value = v; n++; } });
+  const ds = row.querySelector('[data-f="description"]'); if(ds && row.querySelector('[data-f="litres"]')) pcInvDescLitres(ds);
   pcInvoiceRecalc(); return n;
 }
 // reads the file already attached to a row (just attached, or kept with the voucher) and fills its empty boxes
@@ -3630,10 +3641,11 @@ function openPcInvoices(id){
   if(pcInClosed(r)){ toast(r.number + ' is in the closed statement ' + r.statementNo + '. Reopen the statement to change its invoices.', true); return; }
   if(!pcCanInvoice(r)){ toast('Only an admin, the requester, or the location\'s petty cash custodian can add invoices.', true); return; }
   pcEditingId = id; Object.keys(pcAttach).forEach(k => { delete pcAttach[k]; });
+  pcInvFuelVehs = r.kind === 'fuel' ? [...new Set((r.fuelRows || []).map(f => f.vehicleId).filter(Boolean))].map(vid => { const v = vehById(vid); return [vid, v ? vLabel(v) + (vName(v) ? ' — ' + vName(v) : '') : '(removed vehicle)']; }) : null;
   const invoices = pcInvoices(r).length ? pcInvoices(r) : [{}];
   openModal('Invoices — ' + (r.number || ''), vFormOpen + `
     <div class="text-sm text-slate-600 mb-1"><b class="text-slate-900">${esc(r.number || '')}</b> · ${esc(r.purpose || '')} · requested ${fmtMVR(pcTotal(r))}</div>
-    <div class="text-[12px] text-slate-500 mb-4">A voucher needs an invoice to go into a statement. The <b>description</b> of each invoice is what the statement shows under Details (one line per invoice). Type the details, or read them from the invoice file.</div>
+    ${pcInvFuelVehs ? '<div class="text-[12px] rounded-lg bg-amber-50 text-amber-800 px-3.5 py-2.5 mb-3">Fueling voucher: choose the vehicle and litres on each invoice. Saving logs each one under Fueling against the vehicle\'s petty cash fuel requisition, so its balance goes down.</div>' : ''}<div class="text-[12px] text-slate-500 mb-4">A voucher needs an invoice to go into a statement. The <b>description</b> of each invoice is what the statement shows under Details (one line per invoice). Type the details, or read them from the invoice file.</div>
     <div class="hidden sm:grid grid-cols-[1.6fr_1.2fr_8.25rem_6.25rem_1.5rem] gap-2 text-[11px] font-semibold text-slate-400 mb-1.5"><span>Supplier</span><span>Invoice no.</span><span>Invoice date</span><span>Amount</span><span></span></div>
     <div id="pc-invoices">${invoices.map(pcInvoiceRowHtml).join('')}</div>
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-1">
@@ -3644,6 +3656,22 @@ function openPcInvoices(id){
     ${vFoot('Save invoices', `savePcInvoices('${id}')`)}`, true);
   document.querySelectorAll('#pc-invoices .pc-irow').forEach(pcAttachRefresh); pcInvoiceRecalc();
 }
+// a fueling voucher's invoices become fuel entries (one per invoice) against the vehicle's petty cash fuel requisition
+async function pcSyncFuelLog(r){
+  const mine = state.fuelRecords.filter(f => f.pcId === r.id), keep = new Set();
+  for(const iv of pcInvoices(r)){
+    if(!iv.vehicleId || !(vNum(iv.amount) > 0)) continue;
+    const row = (r.fuelRows || []).find(f => f.vehicleId === iv.vehicleId) || {}, v = vehById(iv.vehicleId);
+    const rq = state.fuelRequisitions.find(q => q.pettyCashId === r.id && q.vehicleId === iv.vehicleId);
+    const lit = vNum(iv.litres), rec = { vehicleId:iv.vehicleId, fuelType: (rq && rq.fuelType) || row.fuelType || (v && v.fuelType) || 'Petrol', fundType:'Petty Cash', requisitionId: rq ? rq.id : '',
+      date: iv.date || r.date, litres: lit, rate: lit ? Math.round(vNum(iv.amount) / lit * 100) / 100 : '', total: vNum(iv.amount), station: iv.supplier || '', ref: iv.number || '', docUrl: iv.link || '',
+      notes: 'Petty cash voucher ' + r.number, pcId: r.id, pcInvUid: iv.uid };
+    const ex = mine.find(f => f.pcInvUid === iv.uid);
+    if(ex) rec.id = ex.id;
+    await vehSave('fuelRecords', rec); keep.add(iv.uid);
+  }
+  for(const f of mine) if(!keep.has(f.pcInvUid)) await vehDelete('fuelRecords', f.id);
+}
 async function savePcInvoices(id){
   const r = state.pettyCash.find(x => x.id === id); if(!r || !pcCanInvoice(r)) return;
   const invoices = [];
@@ -3653,7 +3681,10 @@ async function savePcInvoices(id){
     if(!inv.description) return vFail('Invoice ' + (i + 1) + ': enter the description (it is the Details text on the statement).');
     const link = inv.link ? normalizeWebUrl(inv.link) : '';
     if(link === null) return vFail('Invoice ' + (i + 1) + ': the document link must be a web address (starting with https://).');
-    invoices.push({ supplier:inv.supplier, number:inv.number, date:inv.date, amount:vNum(inv.amount), description:inv.description, link, fileId:inv.fileId || '', filePages:inv.filePages || 0, fileName:inv.fileName || '', _key:inv.key });
+    if(r.kind === 'fuel' && !inv.vehicleId) return vFail('Invoice ' + (i + 1) + ': choose the vehicle that was fueled.');
+    if(r.kind === 'fuel' && !(vNum(inv.litres) > 0)) return vFail('Invoice ' + (i + 1) + ': enter the litres.');
+    invoices.push(Object.assign({ uid: inv.uid || uid(), supplier:inv.supplier, number:inv.number, date:inv.date, amount:vNum(inv.amount), description:inv.description, link, fileId:inv.fileId || '', filePages:inv.filePages || 0, fileName:inv.fileName || '', _key:inv.key },
+      r.kind === 'fuel' ? { vehicleId:inv.vehicleId, litres:vNum(inv.litres) } : {}));
   }
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   try{
@@ -3663,8 +3694,10 @@ async function savePcInvoices(id){
   const oldFileIds = pcInvoices(r).map(i => i.fileId).filter(Boolean), keep = new Set(invoices.map(i => i.fileId).filter(Boolean));
   await vehSave('pettyCash', { id, invoices });
   oldFileIds.filter(f => !keep.has(f)).forEach(f => pcFileDelete(f));
+  if(r.kind === 'fuel') await pcSyncFuelLog(Object.assign({}, r, { invoices }));
   Object.keys(pcAttach).forEach(k => { delete pcAttach[k]; });
-  closeModal(); rerenderMain(); toast(invoices.length ? 'Invoices saved.' : 'Invoices removed.');
+  pcInvFuelVehs = null;
+  closeModal(); rerenderMain(); toast(invoices.length ? (r.kind === 'fuel' ? 'Invoices saved and logged under Fueling.' : 'Invoices saved.') : 'Invoices removed.');
   if(pcBackTo === id) pcDone(id);
 }
 
@@ -4161,7 +4194,7 @@ function pcItemDetail(it){
 }
 function pcStatementRow(r){
   const inv = pcInvoices(r).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-  const NL = String.fromCharCode(10), descs = inv.map(i => String(i.description || '').trim()).filter(Boolean);
+  const NL = String.fromCharCode(10), descs = inv.map(i => { const d = String(i.description || '').trim(), v = i.vehicleId ? vehById(i.vehicleId) : null; return d && v ? vLabel(v) + ' – ' + d : d; }).filter(Boolean);
   const dates = [...new Set(inv.map(i => i.date).filter(Boolean))];
   return { supplier:[...new Set(inv.map(i => i.supplier).filter(Boolean))].join(' / '),
     date: dates.length > 1 ? dates.map(pcOrdinalDate).join(NL) : pcOrdinalDate(dates[0] || r.date),

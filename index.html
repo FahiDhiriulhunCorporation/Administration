@@ -3188,10 +3188,22 @@ const pcHasInvoice = r => pcInvoices(r).some(i => vNum(i.amount) > 0);
 const pcVoucherSeq = n => { const m = /-(\d+)$/.exec(n || ''); return m ? +m[1] : 0; };
 function pcLocCode(locId){ const l = pcFund(locId); return String((l && l.code) || 'XX').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'XX'; }
 // the next voucher number for a location: numbers run on through the year (…-01, …-02, … -37)
+// voucher code and the number the year continues from, per location (set on the location; these are the defaults until then)
+const PC_VOUCHER_DEFAULTS = [[/apollo/i, { code:'AT', starts:{ '26':40 } }]];        // Apollo Tower vouchers are PTC-V-AT-…, and 2026 continues from 40
+const pcVoucherDefault = l => { const d = l && PC_VOUCHER_DEFAULTS.find(([re]) => re.test(l.name || '')); return d ? d[1] : null; };
+function pcVoucherCode(locId){
+  const l = pcFund(locId), d = pcVoucherDefault(l), c = String((l && l.voucherCode) || (d && d.code) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return c || pcLocCode(locId);
+}
+function pcVoucherStart(locId, yy){
+  const l = pcFund(locId), d = pcVoucherDefault(l);
+  if(l && l.voucherStartYear === yy && vNum(l.voucherStart) > 0) return Math.floor(vNum(l.voucherStart));
+  return d && d.starts && d.starts[yy] ? d.starts[yy] : 1;
+}
 function pcNextVoucher(locationId, dateIso, excludeId){
-  const code = pcLocCode(locationId), yy = String(dateIso || vToday()).slice(2, 4), re = new RegExp('^PTC-V-' + code + '-' + yy + '-(\\d+)$');
+  const code = pcVoucherCode(locationId), yy = String(dateIso || vToday()).slice(2, 4), re = new RegExp('^PTC-V-' + code + '-' + yy + '-(\\d+)$');
   let max = 0; state.pettyCash.forEach(r => { if(r.id === excludeId) return; const m = re.exec(r.number || ''); if(m) max = Math.max(max, +m[1]); });
-  return 'PTC-V-' + code + '-' + yy + '-' + String(max + 1).padStart(2, '0');
+  return 'PTC-V-' + code + '-' + yy + '-' + String(Math.max(max + 1, pcVoucherStart(locationId, yy))).padStart(2, '0');
 }
 const pcCanEdit = r => {
   if(pcInClosed(r)) return false;                                                         // a closed statement is final
@@ -7227,6 +7239,13 @@ function openLocationForm(id){
       <input type="number" id="lf-pc-float" min="0" step="0.01" value="${editing ? pcFloatOf(editing) : 0}" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm">
       <div class="text-[11px] text-slate-400 mt-1.5">The fixed amount of petty cash assigned to this location. Used in the statement's cash reconciliation.</div>
     </div>
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Voucher code</label>
+        <input type="text" id="lf-v-code" maxlength="8" value="${esc(editing ? pcVoucherCode(editing.id) : '')}" placeholder="same as the code" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm uppercase"></div>
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Vouchers this year start from no.</label>
+        <input type="number" id="lf-v-start" min="1" step="1" value="${editing ? pcVoucherStart(editing.id, vToday().slice(2, 4)) : 1}" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm"></div>
+      <div class="col-span-2 text-[11px] text-slate-400 -mt-1.5">Petty cash vouchers are numbered PTC-V-&lt;voucher code&gt;-&lt;yy&gt;-&lt;no.&gt;. The next voucher uses this number, or the one after the highest already used, whichever is higher.</div>
+    </div>
     <div class="mb-5">
       <label class="block text-xs font-semibold text-slate-600 mb-1.5">Stock valuation</label>
       <div class="flex gap-5">
@@ -7264,6 +7283,7 @@ function saveLocation(id){
   const pettyCashCustodianUid = pcSelect.value;
   const pettyCashCustodianName = pettyCashCustodianUid ? pcSelect.options[pcSelect.selectedIndex].dataset.name : '';
   const pettyCashFloat = Number(document.getElementById('lf-pc-float').value) || 0;
+  const voucherCode = (document.getElementById('lf-v-code').value || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), voucherStart = Math.max(1, Math.floor(Number(document.getElementById('lf-v-start').value) || 1)), voucherStartYear = vToday().slice(2, 4);
   if(!name){ errEl.textContent='Location name is required.'; errEl.classList.remove('hidden'); return; }
   if(!code){ errEl.textContent='Short code is required.'; errEl.classList.remove('hidden'); return; }
   const dup = LOCATIONS.find(l=> l.code.toLowerCase()===code.toLowerCase() && l.id!==id);
@@ -7272,9 +7292,9 @@ function saveLocation(id){
     const loc = getLocation(id);
     loc.name = name; loc.code = code; loc.color = color; loc.address = address; loc.stockValuation = stockValuation;
     loc.custodianUid = custodianUid; loc.custodianName = custodianName;
-    loc.pettyCashCustodianUid = pettyCashCustodianUid; loc.pettyCashCustodianName = pettyCashCustodianName; loc.pettyCashFloat = pettyCashFloat; loc.pettyCashFloatSet = true;
+    loc.pettyCashCustodianUid = pettyCashCustodianUid; loc.pettyCashCustodianName = pettyCashCustodianName; loc.pettyCashFloat = pettyCashFloat; loc.pettyCashFloatSet = true; loc.voucherCode = voucherCode; loc.voucherStart = voucherStart; loc.voucherStartYear = voucherStartYear;
   } else {
-    LOCATIONS.push({ id: uid(), name, code, color, address, stockValuation, custodianUid, custodianName, pettyCashCustodianUid, pettyCashCustodianName, pettyCashFloat, pettyCashFloatSet:true });
+    LOCATIONS.push({ id: uid(), name, code, color, address, stockValuation, custodianUid, custodianName, pettyCashCustodianUid, pettyCashCustodianName, pettyCashFloat, pettyCashFloatSet:true, voucherCode, voucherStart, voucherStartYear });
   }
   persistLocations();
   closeModal();

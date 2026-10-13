@@ -2237,6 +2237,7 @@ function viewVehicleDetail(){
     </div>
     ${vPanel('Fuel funding (PR / Petty Cash)', admin ? `<button onclick="openVehReqForm(null,{vehicleId:'${v.id}'})" class="text-xs font-semibold text-brand-600 hover:underline">+ Add requisition</button>` : '', reqBody)}
     ${vPanel('Recent fueling', fuel.length > 5 ? `<button onclick="vehUi.fuelVeh='${v.id}';vehUi.fuelTab='log';goTo('fueling')" class="text-xs font-semibold text-brand-600 hover:underline">View all ${fuel.length}</button>` : '', fuelBody)}
+    ${vehKeysPanel(v)}
     ${vPanel('Recent servicing', svc.length > 6 ? `<button onclick="vehUi.svcVeh='${v.id}';goTo('servicing')" class="text-xs font-semibold text-brand-600 hover:underline">View all ${svc.length}</button>` : '', svcBody)}`;
 }
 function vehZoomPhoto(id){ const v = vehById(id); if(v && v.image) openModal((v.plate || 'Vehicle') + ' — photo', `<img src="${esc(v.image)}" alt="Vehicle photo" class="w-full rounded-lg">`, true); }
@@ -5316,7 +5317,8 @@ function utReportCsv(){
 /* =====================================================================
    KEY REGISTRY — where every key and AC remote is: in the key box, with admin staff, with other departments, or as a copy
 ===================================================================== */
-const KEY_KINDS = ['Key', 'AC Remote'];
+const KEY_KINDS = ['Key', 'Vehicle Key', 'AC Remote'];
+const KEY_VEH_SITE = 'Vehicles';                                       // vehicle keys are listed together under their own site
 const KEY_SEED = [{"kind": "Key", "site": "UD T15", "no": 1, "details": "Reception Main Door (Finger Machine)", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 2, "details": "Reception Second Door", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 3, "details": "Admin, CRM & R&D Main Door", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 4, "details": "HR Expat Room", "qtyBox": 1, "adminQty": 0, "adminHolders": "", "otherQty": 2, "otherHolders": "HR - Umar", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 5, "details": "Server Room", "qtyBox": 2, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 2, "copiesHolders": "Samah\nKey Box"}, {"kind": "Key", "site": "UD T15", "no": 6, "details": "Pantry", "qtyBox": 2, "adminQty": 1, "adminHolders": "Samah", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 7, "details": "Meeting Room 1 (Main)", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 4, "copiesHolders": "Key Box\nSamah\nShabin"}, {"kind": "Key", "site": "UD T15", "no": 8, "details": "Meeting Room 2 (Admin - Near Peoperty)", "qtyBox": 1, "adminQty": 2, "adminHolders": "Amjad\nSamah", "otherQty": 0, "otherHolders": "", "copiesQty": 2, "copiesHolders": "Ifa\nMaiha"}, {"kind": "Key", "site": "UD T15", "no": 9, "details": "Main Door 1 (Property & Facilities Side)", "qtyBox": 2, "adminQty": 1, "adminHolders": "Shabin", "otherQty": 0, "otherHolders": "", "copiesQty": 1, "copiesHolders": "Samah"}, {"kind": "Key", "site": "UD T15", "no": 10, "details": "Main Door 2 (Planning Side)", "qtyBox": 2, "adminQty": 1, "adminHolders": "Samah", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 11, "details": "Storage Room", "qtyBox": 2, "adminQty": 0, "adminHolders": "", "otherQty": 1, "otherHolders": "Rashee (Property)", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 12, "details": "Thinking Room", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 13, "details": "Toilet Main Door", "qtyBox": 0, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 14, "details": "Female Toilet", "qtyBox": 0, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 15, "details": "Male Toilet", "qtyBox": 0, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 16, "details": "Toilet Storage Room", "qtyBox": 0, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 17, "details": "Expat Accommodation Storage (KPIL)", "qtyBox": 1, "adminQty": 1, "adminHolders": "Shabin", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 18, "details": "UD Tower 12 Original (Security)", "qtyBox": 1, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 19, "details": "Admin, CRM & R&D Area", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 20, "details": "Call Center Door", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 21, "details": "Prayer Room", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 22, "details": "Wellness Room (Inside Prayer Room)", "qtyBox": 3, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 23, "details": "Storage Room (Near Reception)", "qtyBox": 0, "adminQty": 1, "adminHolders": "Samah", "otherQty": 2, "otherHolders": "Muflih (Prop)", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 24, "details": "Storage Cabinet White (Left Door)", "qtyBox": 0, "adminQty": 2, "adminHolders": "Ifa\nAmjad", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "Key", "site": "UD T15", "no": 25, "details": "Storage Cabinet White (Middle Door)", "qtyBox": 2, "adminQty": 0, "adminHolders": "", "otherQty": 0, "otherHolders": "", "copiesQty": 0, "copiesHolders": ""}, {"kind": "AC Remote", "site": "UD T15", "no": 1, "details": "AC Remotes", "qtyBox": 0, "adminQty": 2, "adminHolders": "Samah", "otherQty": 2, "otherHolders": "RND & Prayer Room", "copiesQty": 0, "copiesHolders": ""}];                                                  // the UD T15 sheet (UD_T15_Keys.xlsx)
 const keyQty = v => Math.max(0, Math.floor(vNum(v)));
 const keyNames = s => String(s || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
@@ -5344,14 +5346,14 @@ function keyToggleCollapse(site){ const c = new Set(vehUi.keyCollapsed || []); i
 function viewKeyRegistry(){
   const all = state.keyRegistry, admin = canManageInventory();
   const sites = [...new Set(all.map(r => r.site).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric:true }));
-  const list = all.filter(r => (!vehUi.keySite || r.site === vehUi.keySite) && (!vehUi.keyKind || r.kind === vehUi.keyKind) && vMatch(vehUi.keyQ, [r.site, r.kind, r.details, r.adminHolders, r.otherHolders, r.copiesHolders, r.notes, r.no]))
+  const list = all.filter(r => (!vehUi.keySite || r.site === vehUi.keySite) && (!vehUi.keyKind || r.kind === vehUi.keyKind) && vMatch(vehUi.keyQ, [r.site, r.kind, r.details, r.adminHolders, r.otherHolders, r.copiesHolders, r.notes, r.no, r.vehicleId && vehById(r.vehicleId) ? vehById(r.vehicleId).plate : '']))
     .sort((a, b) => KEY_KINDS.indexOf(a.kind) - KEY_KINDS.indexOf(b.kind) || vNum(a.no) - vNum(b.no) || String(a.details).localeCompare(String(b.details)));
   const T = keySiteStats(list);
   const dot = site => { const l = keySiteLocation(site); return `<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${l ? esc(l.color) : '#94a3b8'}"></span>`; };
   const code = site => { const l = keySiteLocation(site); return l && l.code ? `<span class="shrink-0 text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">${esc(l.code)}</span>` : ''; };
-  const keyRow = r => { const ac = r.kind === 'AC Remote'; return `<tr class="${vTr} align-top">${vTd(esc(String(r.no || '')), { first:1 })}${vTd(`<div class="font-semibold text-slate-800">${esc(r.details)}</div>${r.notes ? `<div class="text-[11.5px] text-slate-400">${esc(r.notes)}</div>` : ''}`)}${vTd(ac ? '<span class="text-slate-300">—</span>' : keyCell(r.qtyBox, ''))}${vTd(keyCell(r.adminQty, r.adminHolders))}${vTd(keyCell(r.otherQty, r.otherHolders))}${vTd(ac ? '<span class="text-slate-300">—</span>' : keyCell(r.copiesQty, r.copiesHolders))}${vTd(`<b class="num">${keyTotal(r)}</b>`, { n:1 })}${vTd(`<button onclick="openKeyForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">Edit</button>${admin ? `<button onclick="deleteKey('${r.id}')" class="text-xs font-semibold text-rose-600 hover:underline">Delete</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; };
-  const kindTable = (rows, ac) => rows.length ? `
-      <div class="px-5 sm:px-6 pt-4 pb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">${ac ? 'AC remotes' : 'Keys'}<span class="font-normal normal-case tracking-normal text-slate-400">${rows.length} item${rows.length === 1 ? '' : 's'} · ${rows.reduce((t, r) => t + keyTotal(r), 0)} total</span></div>
+  const keyRow = r => { const ac = r.kind === 'AC Remote'; return `<tr class="${vTr} align-top">${vTd(esc(String(r.no || '')), { first:1 })}${vTd(`<div class="font-semibold text-slate-800">${r.vehicleId && vehById(r.vehicleId) ? `<a href="#" onclick="openVehicle('${r.vehicleId}');return false;" class="hover:underline">${esc(r.details)}</a>` : esc(r.details)}</div>${r.notes ? `<div class="text-[11.5px] text-slate-400">${esc(r.notes)}</div>` : ''}${keyLastMove(r) ? `<div class="text-[11px] text-slate-400 mt-0.5">${esc(keyLastMove(r))}</div>` : ''}`)}${vTd(ac ? '<span class="text-slate-300">—</span>' : keyCell(r.qtyBox, ''))}${vTd(keyCell(r.adminQty, r.adminHolders))}${vTd(keyCell(r.otherQty, r.otherHolders))}${vTd(ac ? '<span class="text-slate-300">—</span>' : keyCell(r.copiesQty, r.copiesHolders))}${vTd(`<b class="num">${keyTotal(r)}</b>`, { n:1 })}${vTd(`${!ac && keyQty(r.qtyBox) ? `<button onclick="openKeyHandOut('${r.id}')" class="text-xs font-semibold text-amber-700 hover:underline mr-2.5">Hand out</button>` : ''}${!ac && keyHolderLines(r).length ? `<button onclick="openKeyReturn('${r.id}')" class="text-xs font-semibold text-emerald-600 hover:underline mr-2.5">Return</button>` : ''}${(r.log || []).length ? `<button onclick="openKeyHistory('${r.id}')" class="text-xs font-semibold text-slate-500 hover:underline mr-2.5">History</button>` : ''}<button onclick="openKeyForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">Edit</button>${admin ? `<button onclick="deleteKey('${r.id}')" class="text-xs font-semibold text-rose-600 hover:underline">Delete</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; };
+  const kindTable = (rows, ac, title) => rows.length ? `
+      <div class="px-5 sm:px-6 pt-4 pb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">${title || (ac ? 'AC remotes' : 'Keys')}<span class="font-normal normal-case tracking-normal text-slate-400">${rows.length} item${rows.length === 1 ? '' : 's'} · ${rows.reduce((t, r) => t + keyTotal(r), 0)} total</span></div>
       <div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'#' }, { t:'Details' }, { t:ac ? '' : 'In key box' }, { t:'With admin staff' }, { t:'With other departments' }, { t:ac ? '' : 'Copies with other staff' }, { t:'Total', n:1 }, { t:'' }])}<tbody>${rows.map(keyRow).join('')}</tbody></table></div>` : '';
   // one card per site: its own totals, keys and AC remotes listed separately, can be folded away
   const siteNames = sites.filter(st => list.some(r => r.site === st));
@@ -5363,7 +5365,7 @@ function viewKeyRegistry(){
         <div class="flex items-center gap-2.5 min-w-0">${dot(st)}<span class="text-base font-extrabold text-slate-900 truncate">${esc(st)}</span>${code(st)}${l && l.name !== st ? `<span class="text-xs text-slate-400 truncate">${esc(l.name)}</span>` : ''}</div>
         <div class="flex items-center gap-1.5 flex-wrap">${chip('keys', x.keys)}${chip('in box', x.box, 'bg-emerald-100 text-emerald-700')}${chip('with staff', x.admin + x.other, 'bg-amber-100 text-amber-700')}${x.copies ? chip('copies', x.copies) : ''}${x.remoteItems ? chip('AC remotes', x.remotes, 'bg-sky-100 text-sky-700') : ''}<span class="text-slate-400 text-sm ml-1">${shut ? '▸' : '▾'}</span></div>
       </button>
-      ${shut ? '' : `<div class="border-t border-slate-100 pb-2">${kindTable(rows.filter(r => r.kind !== 'AC Remote'), false)}${kindTable(rows.filter(r => r.kind === 'AC Remote'), true)}</div>`}
+      ${shut ? '' : `<div class="border-t border-slate-100 pb-2">${kindTable(rows.filter(r => r.kind === 'Key' || !r.kind), false)}${kindTable(rows.filter(r => r.kind === 'Vehicle Key'), false, 'Vehicle keys')}${kindTable(rows.filter(r => r.kind === 'AC Remote'), true)}</div>`}
     </div>`;
   }).join('');
   // site overview: a card per site, click to show just that site
@@ -5378,24 +5380,106 @@ function viewKeyRegistry(){
     </div>` : '';
   return `
     ${vHead('Key Registry', 'Where every key and AC remote is, site by site: in the key box, with admin staff, with other departments, or as a copy.',
-      (admin ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">Import from Excel<input type="file" id="key-file" accept=".xlsx" class="hidden" onchange="keyImportFile(this)"></label>` : '') + (all.length ? vBtnPlain('Export CSV', 'keyExportCsv()') : '') + vBtnPrimary('+ Add', 'openKeyForm()'))}
+      (admin ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">Import from Excel<input type="file" id="key-file" accept=".xlsx" class="hidden" onchange="keyImportFile(this)"></label>` : '') + (all.length ? vBtnPlain('Export CSV', 'keyExportCsv()') : '') + (admin && state.vehicles.length ? vBtnPlain('+ Vehicle keys', 'openAddVehicleKeys()') : '') + vBtnPrimary('+ Add', 'openKeyForm()'))}
     ${vKpis(statCard('Total keys', fmtNum(T.keys), (vehUi.keySite ? esc(vehUi.keySite) + ' · ' : '') + T.keyItems + ' key item' + (T.keyItems === 1 ? '' : 's') + ' · originals and copies', 'brand') + statCard('In the key box', fmtNum(T.box), 'Kept at the office', 'emerald') +
       statCard('With staff', fmtNum(T.admin + T.other), 'Admin ' + T.admin + ' · other departments ' + T.other, 'amber') + statCard('Copies with other staff', fmtNum(T.copies), 'Duplicates handed out', 'slate'))}
     ${overview}
-    <div class="flex flex-wrap gap-2.5 mb-5">${vSearch('key-q', 'keyQ', 'Search a door, a person, a note…')}${vSelect('keyKind', [['Key', 'Keys'], ['AC Remote', 'AC remotes']], vehUi.keyKind, 'Keys and remotes')}${siteNames.length > 1 ? `<button onclick="vehUi.keyCollapsed = ${JSON.stringify(siteNames).replace(/"/g, '&quot;')}; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Fold all</button><button onclick="vehUi.keyCollapsed = []; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Unfold all</button>` : ''}</div>
+    <div class="flex flex-wrap gap-2.5 mb-5">${vSearch('key-q', 'keyQ', 'Search a door, a person, a note…')}${vSelect('keyKind', [['Key', 'Keys'], ['Vehicle Key', 'Vehicle keys'], ['AC Remote', 'AC remotes']], vehUi.keyKind, 'Keys and remotes')}${siteNames.length > 1 ? `<button onclick="vehUi.keyCollapsed = ${JSON.stringify(siteNames).replace(/"/g, '&quot;')}; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Fold all</button><button onclick="vehUi.keyCollapsed = []; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Unfold all</button>` : ''}</div>
     ${!all.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No keys recorded yet.<div class="mt-4 flex flex-wrap justify-center gap-2.5">' + (admin ? vBtnPrimary('Import the UD T15 keys', 'keyImportSeed()') : '') + vBtnPlain('+ Add a key', 'openKeyForm()') + '</div>' + (admin ? '<div class="text-xs text-slate-400 mt-3">The UD T15 keys and AC remotes come from UD_T15_Keys.xlsx. You can also import any sheet in the same layout with "Import from Excel".</div>' : ''))}</div>`
       : !list.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('Nothing matches these filters.')}</div>`
       : sitePanels}`;
 }
-function keyKindChanged(sel){ const ac = sel.value === 'AC Remote'; ['key-box-row', 'key-copies-row'].forEach(id => { document.getElementById(id).style.display = ac ? 'none' : ''; }); }
+/* ---------- hand out and return: keys move between the key box and the people holding them, with a history ---------- */
+const KEY_GROUPS = [['admin', 'adminQty', 'adminHolders', 'Admin staff'], ['other', 'otherQty', 'otherHolders', 'Other department'], ['copies', 'copiesQty', 'copiesHolders', 'Copy holder']];
+const keyHolderLines = r => KEY_GROUPS.flatMap(([g, qk, hk, label]) => keyNames(r[hk]).map((n, i) => { const m = /^(.*?)\s*\(x(\d+)\)\s*$/.exec(n); return { g, qk, hk, label, i, line:n, name:m ? m[1] : n, qty:m ? +m[2] : 1 }; }));
+function keyLastMove(r){ const l = (r.log || [])[ (r.log || []).length - 1 ]; return l ? `${l.action === 'out' ? 'Handed to' : 'Returned by'} ${l.who} · ${new Date(l.at).toLocaleDateString()}` : ''; }
+function openKeyHandOut(id){
+  const r = state.keyRegistry.find(x => x.id === id); if(!r) return;
+  const box = keyQty(r.qtyBox); if(!box){ toast('There is no key in the key box to hand out. Record a return first.', true); return; }
+  const people = state.profiles.map(p => `<option value="${esc(p.name || '')}"></option>`).join('');
+  openModal('Hand out — ' + r.details, vFormOpen + `
+    <p class="text-sm text-slate-500 mb-4">${esc(r.site)} · ${box} in the key box</p>
+    <datalist id="key-people">${people}</datalist>
+    ${vGrid(2, `<div class="sm:col-span-2"><label class="${VEH_LBL}">Given to${vReqStar}</label><input name="who" list="key-people" autocomplete="off" placeholder="Name" class="${VEH_FIELD}"></div>` +
+      vS('Holder is', 'grp', [['admin', 'Admin staff'], ['other', 'Other department staff']], 'admin') + vF('Quantity', 'qty', 1, 'number', { attrs:` step="1" min="1" max="${box}"` }) + vTa('Note', 'note', '', { span:'sm:col-span-2', rows:2, ph:'e.g. for the meeting room booking, until Thursday' }))}
+    ${vFoot('Hand out', `saveKeyHandOut('${id}')`)}`);
+}
+async function saveKeyHandOut(id){
+  const r = state.keyRegistry.find(x => x.id === id); if(!r) return;
+  const o = vehFormObj(document.getElementById('vform')), who = String(o.who || '').trim(), q = Math.floor(vNum(o.qty)), box = keyQty(r.qtyBox);
+  if(!who) return vFail('Enter who the key is given to.');
+  if(!(q >= 1)) return vFail('Enter the quantity.');
+  if(q > box) return vFail('Only ' + box + ' in the key box.');
+  const G = KEY_GROUPS.find(x => x[0] === o.grp) || KEY_GROUPS[0];
+  const lines = keyNames(r[G[2]]).concat([q > 1 ? who + ' (x' + q + ')' : who]);
+  await vehSave('keyRegistry', { id, qtyBox: box - q, [G[1]]: keyQty(r[G[1]]) + q, [G[2]]: lines.join('\n'),
+    log: (r.log || []).concat([{ at: Date.now(), by: authUser ? authUser.name : '', action:'out', who, group:G[3], qty:q, note:String(o.note || '').trim() }]).slice(-50) });
+  closeModal(); rerenderMain(); toast(q + ' key' + (q === 1 ? '' : 's') + ' handed to ' + who + '.');
+}
+function openKeyReturn(id){
+  const r = state.keyRegistry.find(x => x.id === id); if(!r) return;
+  const hs = keyHolderLines(r); if(!hs.length){ toast('Nobody is recorded as holding this key.', true); return; }
+  openModal('Return — ' + r.details, vFormOpen + `
+    <p class="text-sm text-slate-500 mb-3">${esc(r.site)} · choose who is returning it. It goes back into the key box.</p>
+    <div class="space-y-2 mb-3">${hs.map((h, k) => `<label class="flex items-center gap-3 rounded-lg border border-slate-200 px-3.5 py-2.5 cursor-pointer hover:bg-slate-50"><input type="radio" name="pick" value="${k}" ${k === 0 ? 'checked' : ''}><span class="flex-1"><span class="font-semibold text-slate-800">${esc(h.name)}</span><span class="text-xs text-slate-400 ml-2">${esc(h.label)}</span></span><span class="text-xs num text-slate-500">${h.qty}</span></label>`).join('')}</div>
+    ${vTa('Note', 'note', '', { rows:2, ph:'Optional' })}
+    ${vFoot('Record return', `saveKeyReturn('${id}')`)}`);
+}
+async function saveKeyReturn(id){
+  const r = state.keyRegistry.find(x => x.id === id); if(!r) return;
+  const o = vehFormObj(document.getElementById('vform')), h = keyHolderLines(r)[+o.pick]; if(!h) return vFail('Choose who is returning the key.');
+  const lines = keyNames(r[h.hk]); lines.splice(h.i, 1);
+  await vehSave('keyRegistry', { id, qtyBox: keyQty(r.qtyBox) + h.qty, [h.qk]: Math.max(0, keyQty(r[h.qk]) - h.qty), [h.hk]: lines.join('\n'),
+    log: (r.log || []).concat([{ at: Date.now(), by: authUser ? authUser.name : '', action:'in', who:h.name, group:h.label, qty:h.qty, note:String(o.note || '').trim() }]).slice(-50) });
+  closeModal(); rerenderMain(); toast('Return recorded — back in the key box.');
+}
+function openKeyHistory(id){
+  const r = state.keyRegistry.find(x => x.id === id); if(!r) return;
+  const log = (r.log || []).slice().reverse();
+  openModal('History — ' + r.details, log.length ? `<div class="divide-y divide-slate-100">${log.map(l => `<div class="py-2.5 flex items-start justify-between gap-3"><div><div class="text-sm"><span class="font-semibold ${l.action === 'out' ? 'text-amber-700' : 'text-emerald-700'}">${l.action === 'out' ? 'Handed out' : 'Returned'}</span> · ${esc(l.who)} <span class="text-xs text-slate-400">(${esc(l.group)}${l.qty > 1 ? ', ' + l.qty : ''})</span></div>${l.note ? `<div class="text-xs text-slate-500">${esc(l.note)}</div>` : ''}</div><div class="text-[11px] text-slate-400 text-right whitespace-nowrap">${esc(new Date(l.at).toLocaleString())}${l.by ? '<br>by ' + esc(l.by) : ''}</div></div>`).join('')}</div>` : '<div class="text-sm text-slate-500">No hand-outs or returns recorded yet.</div>');
+}
+// one key record for every vehicle that has none yet
+function openAddVehicleKeys(){
+  if(!canManageInventory()) return;
+  const missing = state.vehicles.filter(v => !state.keyRegistry.some(k => k.kind === 'Vehicle Key' && k.vehicleId === v.id));
+  if(!missing.length){ toast('Every vehicle already has keys in the registry.'); return; }
+  openModal('Add vehicle keys', vFormOpen + `<p class="text-sm text-slate-500 mb-4">Adds a key record for the ${missing.length} vehicle${missing.length === 1 ? '' : 's'} without one: ${esc(missing.slice(0, 8).map(vLabel).join(', '))}${missing.length > 8 ? '…' : ''}. All keys start in the key box; adjust any of them afterwards.</p>` +
+    vGrid(2, vF('Keys per vehicle', 'n', 2, 'number', { attrs:' step="1" min="1"' })) + vFoot('Add keys', 'saveAddVehicleKeys()'));
+}
+async function saveAddVehicleKeys(){
+  const o = vehFormObj(document.getElementById('vform')), n = Math.max(1, Math.floor(vNum(o.n) || 1));
+  const missing = state.vehicles.filter(v => !state.keyRegistry.some(k => k.kind === 'Vehicle Key' && k.vehicleId === v.id));
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  for(const v of missing) await vehSave('keyRegistry', { kind:'Vehicle Key', site:KEY_VEH_SITE, vehicleId:v.id, details:vLabel(v) + (vName(v) ? ' — ' + vName(v) : ''), no:keyNextNo(KEY_VEH_SITE, 'Vehicle Key'), qtyBox:n, adminQty:0, adminHolders:'', otherQty:0, otherHolders:'', copiesQty:0, copiesHolders:'', notes:'' });
+  closeModal(); vehUi.keySite = KEY_VEH_SITE; rerenderMain(); toast('Keys added for ' + missing.length + ' vehicle' + (missing.length === 1 ? '' : 's') + '.');
+}
+// the keys of one vehicle, shown on its page
+function vehKeysPanel(v){
+  const ks = state.keyRegistry.filter(k => k.kind === 'Vehicle Key' && k.vehicleId === v.id);
+  const body = ks.length ? ks.map(k => { const hs = keyHolderLines(k); return `<div class="px-5 sm:px-6 py-3.5 flex items-start justify-between gap-3 flex-wrap border-t border-slate-100 first:border-0">
+      <div><div class="text-sm"><b class="num">${keyQty(k.qtyBox)}</b> in the key box${hs.length ? ' · with ' + hs.map(h => esc(h.name) + (h.qty > 1 ? ' (' + h.qty + ')' : '')).join(', ') : ''}</div><div class="text-[11.5px] text-slate-400">${esc(keyLastMove(k) || (keyTotal(k) + ' key' + (keyTotal(k) === 1 ? '' : 's') + ' in total'))}</div></div>
+      <div class="flex gap-3 text-xs font-semibold">${keyQty(k.qtyBox) ? `<button onclick="openKeyHandOut('${k.id}')" class="text-brand-600 hover:underline">Hand out</button>` : ''}${hs.length ? `<button onclick="openKeyReturn('${k.id}')" class="text-emerald-600 hover:underline">Return</button>` : ''}<button onclick="openKeyHistory('${k.id}')" class="text-slate-500 hover:underline">History</button></div></div>`; }).join('')
+    : vEmpty('No keys recorded for this vehicle.' + (canManageInventory() ? `<div class="mt-3"><button onclick="vehUi.keyPreset={kind:'Vehicle Key',site:'${KEY_VEH_SITE}',vehicleId:'${v.id}',details:'${esc(vLabel(v)).replace(/'/g, '&#39;')}',qtyBox:2}; openKeyForm()" class="text-xs font-semibold text-brand-600 hover:underline">+ Add its keys</button></div>` : ''));
+  return vPanel('Keys', `<button onclick="vehUi.keySite='${KEY_VEH_SITE}'; goTo('keys')" class="text-xs font-semibold text-brand-600 hover:underline">Key Registry →</button>`, body);
+}
+
+function keyKindChanged(sel){
+  const ac = sel.value === 'AC Remote', vk = sel.value === 'Vehicle Key', f = sel.form;
+  ['key-box-row', 'key-copies-row'].forEach(id => { document.getElementById(id).style.display = ac ? 'none' : ''; });
+  document.getElementById('key-veh-row').style.display = vk ? '' : 'none';
+  document.getElementById('key-site-row').style.display = vk ? 'none' : '';
+  if(vk){ f.site.value = KEY_VEH_SITE; keyVehChanged(f.vehicleId); }
+}
+function keyVehChanged(sel){ const v = vehById(sel.value), f = sel.form; if(v && (!f.details.value || f.details.dataset.auto === '1')){ f.details.value = vLabel(v) + (vName(v) ? ' — ' + vName(v) : ''); f.details.dataset.auto = '1'; } }
 function openKeyForm(id){
   const r = id ? state.keyRegistry.find(x => x.id === id) : null; if(id && !r) return;
-  const d = r || { kind:vehUi.keyKind || 'Key', site:vehUi.keySite || (state.keyRegistry[0] && state.keyRegistry[0].site) || '' }, ac = d.kind === 'AC Remote';
+  const d = r || Object.assign({ kind:vehUi.keyKind || 'Key', site:vehUi.keySite || (state.keyRegistry[0] && state.keyRegistry[0].site) || '' }, vehUi.keyPreset || {}), ac = d.kind === 'AC Remote'; vehUi.keyPreset = null;
   const sites = [...new Set(state.keyRegistry.map(x => x.site).concat(LOCATIONS.map(l => l.name)).filter(Boolean))];
   const group = (label, qk, hk, hint) => `<div class="mt-3.5"><div class="${VEH_LBL}">${label}</div><div class="grid grid-cols-[6rem_1fr] gap-3 items-start"><input type="number" min="0" step="1" name="${qk}" value="${esc(d[qk] == null ? '' : d[qk])}" placeholder="Qty" class="${VEH_FIELD}"><textarea name="${hk}" rows="2" placeholder="${esc(hint)}" class="${VEH_FIELD}">${esc(d[hk] || '')}</textarea></div></div>`;
   openModal(r ? 'Edit key' : 'Add a key or remote', vFormOpen + vGrid(2,
     vS('Type', 'kind', KEY_KINDS, d.kind, null, { req:1, attrs:' onchange="keyKindChanged(this)"' }) +
-    `<div><label class="${VEH_LBL}">Site${vReqStar}</label><input name="site" list="key-sites" value="${esc(d.site || '')}" placeholder="e.g. UD T15" autocomplete="off" class="${VEH_FIELD}"><datalist id="key-sites">${sites.map(s => `<option value="${esc(s)}"></option>`).join('')}</datalist></div>` +
+    `<div id="key-site-row" ${d.kind === 'Vehicle Key' ? 'style="display:none"' : ''}><label class="${VEH_LBL}">Site${vReqStar}</label><input name="site" list="key-sites" value="${esc(d.site || '')}" placeholder="e.g. UD T15" autocomplete="off" class="${VEH_FIELD}"><datalist id="key-sites">${sites.map(s => `<option value="${esc(s)}"></option>`).join('')}</datalist></div>` +
+    `<div id="key-veh-row" ${d.kind === 'Vehicle Key' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Vehicle${vReqStar}</label><select name="vehicleId" onchange="keyVehChanged(this)" class="${VEH_FIELD} bg-white"><option value="">Select vehicle…</option>${vSorted().map(v => `<option value="${esc(v.id)}" ${v.id === d.vehicleId ? 'selected' : ''}>${esc(vLabel(v))}${vName(v) ? ' — ' + esc(vName(v)) : ''}</option>`).join('')}</select></div>` +
     vF('Details', 'details', d.details, 'text', { req:1, span:'sm:col-span-2' }) + vF('#', 'no', d.no, 'number')) +
     `<div id="key-box-row" class="mt-3.5" ${ac ? 'style="display:none"' : ''}><label class="${VEH_LBL}">Quantity in the key box</label><input type="number" min="0" step="1" name="qtyBox" value="${esc(d.qtyBox == null ? '' : d.qtyBox)}" class="${VEH_FIELD} w-28"></div>` +
     group('With admin staff', 'adminQty', 'adminHolders', 'Who has them, one name per line') + group('With other department staff', 'otherQty', 'otherHolders', 'Who has them, one name per line') +
@@ -5404,11 +5488,14 @@ function openKeyForm(id){
     vFoot(r ? 'Save changes' : 'Add', `saveKey('${id || ''}')`, r && canManageInventory() ? `deleteKey('${id}')` : ''), true);
 }
 async function saveKey(id){
-  const o = vehFormObj(document.getElementById('vform')), kind = o.kind, ac = kind === 'AC Remote', site = String(o.site || '').trim(), details = String(o.details || '').trim();
-  if(!site) return vFail('Enter the site, for example UD T15.');
+  const o = vehFormObj(document.getElementById('vform')), kind = o.kind, ac = kind === 'AC Remote', site = kind === 'Vehicle Key' ? KEY_VEH_SITE : String(o.site || '').trim(), details = String(o.details || '').trim();
+  const vk = kind === 'Vehicle Key', veh = vk ? vehById(o.vehicleId) : null;
+  if(vk && !veh) return vFail('Choose the vehicle.');
+  if(vk) o.site = KEY_VEH_SITE;
+  if(!site && !vk) return vFail('Enter the site, for example UD T15.');
   if(!details) return vFail('Enter the details, for example the door or room.');
   const clean = s => keyNames(s).join('\n');
-  const rec = { kind, site, details, no:o.no === '' ? keyNextNo(site, kind) : Math.floor(vNum(o.no)), qtyBox:ac ? 0 : keyQty(o.qtyBox), adminQty:keyQty(o.adminQty), adminHolders:clean(o.adminHolders), otherQty:keyQty(o.otherQty), otherHolders:clean(o.otherHolders), copiesQty:ac ? 0 : keyQty(o.copiesQty), copiesHolders:ac ? '' : clean(o.copiesHolders), notes:String(o.notes || '').trim() };
+  const rec = { kind, site, details, no:o.no === '' ? keyNextNo(site, kind) : Math.floor(vNum(o.no)), qtyBox:ac ? 0 : keyQty(o.qtyBox), adminQty:keyQty(o.adminQty), adminHolders:clean(o.adminHolders), otherQty:keyQty(o.otherQty), otherHolders:clean(o.otherHolders), copiesQty:ac ? 0 : keyQty(o.copiesQty), copiesHolders:ac ? '' : clean(o.copiesHolders), notes:String(o.notes || '').trim(), vehicleId: vk ? veh.id : '' };
   if(state.keyRegistry.some(x => x.id !== id && keyIdent(x) === keyIdent(rec))) return vFail('"' + details + '" is already in the registry for ' + site + '. Edit that entry instead.');
   if(id) rec.id = id;
   await vehSave('keyRegistry', rec); closeModal(); toast(id ? 'Updated.' : 'Added.');

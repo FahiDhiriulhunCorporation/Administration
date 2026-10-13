@@ -2657,7 +2657,7 @@ function vehReqKindChanged(sel){
   // what the old link filled in goes with it (only values that still match it, so anything you typed stays)
   const p = state.purchaseRequisitions.find(x => x.id === f.prId.value), v = state.pettyCash.find(x => x.id === f.pettyCashId.value);
   if(p){ if(f.refNo.value === (p.prNumber || '')) f.refNo.value = ''; if(vNum(f.amount.value) === vNum(p.totalCost)) f.amount.value = ''; if(p.prUrl && f.docUrl.value === p.prUrl) f.docUrl.value = ''; }
-  if(v){ if(f.refNo.value === (v.number || '')) f.refNo.value = ''; if(vNum(f.amount.value) === pcTotal(v) || (v.fuelRows || []).some(x => vNum(f.amount.value) === pcRound(vNum(x.litres) * vNum(x.rate)))){ f.amount.value = ''; f.litres.value = ''; } }
+  if(v){ if(f.refNo.value === (v.number || '')) f.refNo.value = ''; if(vNum(f.amount.value) === pcTotal(v) || (v.fuelRows || []).some(x => vNum(f.amount.value) === pcFuelAmt(x))){ f.amount.value = ''; f.litres.value = ''; } }
   f.prId.value = ''; f.pettyCashId.value = '';                                    // a link belongs to one type only
 }
 function vehReqPickPR(sel){
@@ -2668,7 +2668,7 @@ function vehReqPickPC(sel){
   const v = state.pettyCash.find(x => x.id === sel.value), f = sel.form; if(!v) return;
   f.refNo.value = v.number || ''; if(v.date) f.date.value = v.date;
   const rows = v.kind === 'fuel' ? (v.fuelRows || []) : [], row = rows.find(x => x.vehicleId === f.vehicleId.value) || (rows.length === 1 ? rows[0] : null);
-  if(row){ f.amount.value = pcRound(vNum(row.litres) * vNum(row.rate)); f.litres.value = row.litres; if(!f.vehicleId.value) f.vehicleId.value = row.vehicleId; f.fuelType.value = row.fuelType; }
+  if(row){ f.amount.value = pcFuelAmt(row); f.litres.value = pcFuelLitres(row); if(!f.vehicleId.value) f.vehicleId.value = row.vehicleId; f.fuelType.value = row.fuelType; }
   else f.amount.value = pcTotal(v);
 }
 // where a requisition came from: small links to the PR or the petty cash voucher
@@ -2932,7 +2932,7 @@ function pcFloatOf(f){
 const PC_OPTIONS = ['Prior Request', 'Reimbursement'];
 const PC_MIN_ROWS = 5;                                           // the printed form always shows at least five numbered rows
 const pcRound = v => Math.round((Number(v) || 0) * 100) / 100;
-const pcItems = r => Array.isArray(r && r.items) ? r.items : [];
+const pcItems = r => (r && r.kind === 'fuel' && Array.isArray(r.fuelRows) && r.fuelRows.length && typeof pcFuelItems === 'function') ? pcFuelItems(r.fuelRows) : (Array.isArray(r && r.items) ? r.items : []);       // fueling vouchers always print from their vehicle rows
 const pcItemTotal = it => pcRound(vNum(it.qty) * vNum(it.unitPrice));
 const pcTotal = r => pcRound(pcItems(r).reduce((s, it) => s + pcItemTotal(it), 0));
 const pcSigned = r => !!(r && r.requesterSignature && r.requesterSignature.image);
@@ -3466,18 +3466,27 @@ async function openPcInvoiceView(id, k){
 
 /* ---------- fueling petty cash: vehicles, litres and rate instead of item rows ---------- */
 let pcFormMode = 'items', pcNumberTouched = false, pcPurposeTouched = false;
+// a vehicle's fueling: Qty fills of Rate (MVR) each, at Rate / L → total litres = Qty × Rate (MVR) ÷ Rate / L; amount = Qty × Rate (MVR)
+// (rows saved before this layout had litres and rate per litre only: they read as one fill of their amount)
+const pcFuelQty = fr => fr.qty != null && fr.qty !== '' ? vNum(fr.qty) : (vNum(fr.litres) && vNum(fr.rate) ? 1 : 0);
+const pcFuelEach = fr => fr.amountEach != null && fr.amountEach !== '' ? vNum(fr.amountEach) : pcRound(vNum(fr.litres) * vNum(fr.rate));
+const pcFuelAmt = fr => pcRound(pcFuelQty(fr) * pcFuelEach(fr));
+const pcFuelLitres = fr => fr.qty != null && fr.qty !== '' ? (vNum(fr.rate) ? Math.round(pcFuelQty(fr) * pcFuelEach(fr) / vNum(fr.rate) * 1000) / 1000 : 0) : vNum(fr.litres);
 function pcFuelRowHtml(fr){
   fr = fr || {};
-  return `<div class="pc-frow grid grid-cols-1 sm:grid-cols-[1fr_5.5rem_4.75rem_5.25rem_5.5rem_1.5rem] gap-2 items-start mb-2">
+  const q = fr.qty != null ? fr.qty : (fr.litres ? 1 : ''), each = fr.amountEach != null ? fr.amountEach : (fr.litres ? pcFuelEach(fr) : '');
+  return `<div class="pc-frow grid grid-cols-1 sm:grid-cols-[1fr_5.25rem_3.75rem_5rem_4.75rem_4.5rem_5rem_1.5rem] gap-2 items-start mb-2">
     <select data-f="vehicleId" onchange="pcFuelVehChanged(this)" class="${VEH_FIELD} bg-white"><option value="">Select vehicle…</option>${vSorted().map(v => `<option value="${esc(v.id)}" ${v.id === fr.vehicleId ? 'selected' : ''}>${esc(v.plate)}${vName(v) ? ' — ' + esc(vName(v)) : ''}</option>`).join('')}</select>
     <select data-f="fuelType" onchange="pcFuelRecalc()" class="${VEH_FIELD} bg-white">${VEH_FUELS.map(f => `<option ${f === (fr.fuelType || 'Petrol') ? 'selected' : ''}>${f}</option>`).join('')}</select>
-    <input type="number" data-f="litres" value="${esc(fr.litres == null ? '' : fr.litres)}" min="0" step="any" placeholder="Litres" oninput="pcFuelRecalc()" class="${VEH_FIELD}">
-    <input type="number" data-f="rate" value="${esc(fr.rate == null ? '' : fr.rate)}" min="0" step="0.01" placeholder="Rate / L" oninput="pcFuelRecalc()" class="${VEH_FIELD}">
-    <div class="pc-line-total text-sm font-semibold text-slate-800 num text-right pt-2.5">${pcMoneyPlain(pcRound(vNum(fr.litres) * vNum(fr.rate)))}</div>
+    <input type="number" data-f="qty" value="${esc(q)}" min="0" step="1" placeholder="Qty" oninput="pcFuelRecalc()" class="${VEH_FIELD} !px-2.5">
+    <input type="number" data-f="amountEach" value="${esc(each)}" min="0" step="0.01" placeholder="MVR" oninput="pcFuelRecalc()" class="${VEH_FIELD} !px-2.5">
+    <input type="number" data-f="rate" value="${esc(fr.rate == null ? '' : fr.rate)}" min="0" step="0.01" placeholder="/ L" oninput="pcFuelRecalc()" class="${VEH_FIELD} !px-2.5">
+    <div class="pc-line-litres text-sm text-slate-600 num text-right pt-2.5">${pcFuelLitres(Object.assign({}, fr, { qty:q, amountEach:each })) ? vFmtL(pcFuelLitres(Object.assign({}, fr, { qty:q, amountEach:each }))) : '—'}</div>
+    <div class="pc-line-total text-sm font-semibold text-slate-800 num text-right pt-2.5">${pcMoneyPlain(pcRound(vNum(q) * vNum(each)))}</div>
     <button type="button" onclick="pcRemoveFuelRow(this)" class="text-slate-400 hover:text-rose-600 pt-2.5" title="Remove this vehicle">✕</button></div>`;
 }
 function pcReadFuelRows(){
-  return [...document.querySelectorAll('#pc-fuel-rows .pc-frow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); return { vehicleId:g('vehicleId'), fuelType:g('fuelType'), litres:g('litres'), rate:g('rate') }; }).filter(r => r.vehicleId || r.litres || r.rate);
+  return [...document.querySelectorAll('#pc-fuel-rows .pc-frow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); return { vehicleId:g('vehicleId'), fuelType:g('fuelType'), qty:g('qty'), amountEach:g('amountEach'), rate:g('rate') }; }).filter(r => r.vehicleId || r.qty || r.amountEach || r.rate);
 }
 function pcFuelPurposeText(rows){
   const plates = [...new Set(rows.map(r => { const v = vehById(r.vehicleId); return v ? v.plate : ''; }).filter(Boolean))], types = [...new Set(rows.map(r => r.fuelType).filter(Boolean))];
@@ -3485,20 +3494,23 @@ function pcFuelPurposeText(rows){
 }
 function pcFuelRecalc(){
   let sum = 0;
-  document.querySelectorAll('#pc-fuel-rows .pc-frow').forEach(row => { const t = pcRound(vNum(row.querySelector('[data-f="litres"]').value) * vNum(row.querySelector('[data-f="rate"]').value)); sum += t; row.querySelector('.pc-line-total').textContent = pcMoneyPlain(t); });
+  document.querySelectorAll('#pc-fuel-rows .pc-frow').forEach(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value, fr = { qty:g('qty'), amountEach:g('amountEach'), rate:g('rate') }, t = pcFuelAmt(fr), l = pcFuelLitres(fr);
+    sum += t; row.querySelector('.pc-line-total').textContent = pcMoneyPlain(t); row.querySelector('.pc-line-litres').textContent = l ? vFmtL(l) : '—'; });
   const el = document.getElementById('pc-grand'); if(el) el.textContent = fmtMVR(pcRound(sum));
   const f = document.getElementById('vform'); if(f && !pcPurposeTouched) f.purpose.value = pcFuelPurposeText(pcReadFuelRows());
 }
 function pcFuelVehChanged(sel){ const v = vehById(sel.value), ft = sel.closest('.pc-frow').querySelector('[data-f="fuelType"]'); if(v && v.fuelType) ft.value = v.fuelType; pcFuelRecalc(); }
 function pcAddFuelRow(){ document.getElementById('pc-fuel-rows').insertAdjacentHTML('beforeend', pcFuelRowHtml({})); }
 function pcRemoveFuelRow(btn){ const box = document.getElementById('pc-fuel-rows'); if(box.children.length > 1) btn.closest('.pc-frow').remove(); else btn.closest('.pc-frow').querySelectorAll('input').forEach(i => { i.value = ''; }); pcFuelRecalc(); }
-const pcFuelItems = rows => rows.map(r => { const v = vehById(r.vehicleId); return { name:r.fuelType + ' for ' + (v ? [v.type, v.plate].filter(Boolean).join(' ') : ''), description:vFmtL(r.litres) + ' @ ' + pcMoneyPlain(r.rate) + ' per litre', qty:vNum(r.litres), unitPrice:vNum(r.rate) }; });
+// on the request form: Item = the fuel (Petrol / Diesel), Details = the vehicle (e.g. "Motorcycle C5914"), then Qty and Rate (MVR)
+const pcShortPlate = p => { const m = /-([A-Z]{1,2}\d{2,})$/i.exec(String(p || '').trim()); return m ? m[1].toUpperCase() : String(p || '').trim(); };
+const pcFuelItems = rows => rows.map(r => { const v = vehById(r.vehicleId); return { name:r.fuelType || 'Fuel', description: v ? [v.type, pcShortPlate(v.plate)].filter(Boolean).join(' ') : '', qty:pcFuelQty(r), unitPrice:pcFuelEach(r) }; });
 // keep the vehicle module's petty cash fuel requisitions in step with a fueling petty cash request
 async function pcSyncFuelRequisitions(rec, pcId, createNew){
   const rows = rec.fuelRows || [], linked = state.fuelRequisitions.filter(q => q.pettyCashId === pcId);
   const used = q => state.fuelRecords.some(f => f.requisitionId === q.id);
   for(const [i, fr] of rows.entries()){
-    const body = { kind:'Petty Cash', refNo: rows.length > 1 ? rec.number + '-' + (i + 1) : rec.number, vehicleId:fr.vehicleId, fuelType:fr.fuelType, date:rec.date, amount:pcRound(vNum(fr.litres) * vNum(fr.rate)), litres:vNum(fr.litres), notes:'Petty cash voucher ' + rec.number, pettyCashId:pcId, pettyCashRow:i };
+    const body = { kind:'Petty Cash', refNo: rows.length > 1 ? rec.number + '-' + (i + 1) : rec.number, vehicleId:fr.vehicleId, fuelType:fr.fuelType, date:rec.date, amount:pcFuelAmt(fr), litres:pcFuelLitres(fr), notes:'Petty cash voucher ' + rec.number, pettyCashId:pcId, pettyCashRow:i };
     const ex = linked.find(q => q.pettyCashRow === i);
     if(ex){ if(!used(ex)) await vehSave('fuelRequisitions', Object.assign({ id:ex.id }, body)); }
     else if(createNew && !state.fuelRequisitions.some(q => q.kind === 'Petty Cash' && String(q.refNo).toLowerCase() === body.refNo.toLowerCase())) await vehSave('fuelRequisitions', body);
@@ -3525,10 +3537,10 @@ async function openPcForm(id, mode){
   pcEditingId = id || ''; pcNumberTouched = !!r; pcPurposeTouched = !!r; Object.keys(pcAttach).forEach(k => { delete pcAttach[k]; });
   const itemsBlock = mode === 'fuel' ? `
     ${vSec('Vehicles to fuel')}
-    <div class="hidden sm:grid grid-cols-[1fr_5.5rem_4.75rem_5.25rem_5.5rem_1.5rem] gap-2 text-[11px] font-semibold text-slate-400 mb-1.5"><span>Vehicle</span><span>Fuel</span><span>Litres</span><span>Rate / litre</span><span class="text-right">Amount</span><span></span></div>
+    <div class="hidden sm:grid grid-cols-[1fr_5.25rem_3.75rem_5rem_4.75rem_4.5rem_5rem_1.5rem] gap-2 text-[11px] font-semibold text-slate-400 mb-1.5"><span>Vehicle</span><span>Fuel</span><span>Qty</span><span>Rate (MVR)</span><span>Rate / L</span><span class="text-right">Total L</span><span class="text-right">Amount</span><span></span></div>
     <div id="pc-fuel-rows">${fuelRows.map(pcFuelRowHtml).join('')}</div>
     <div class="flex items-center justify-between gap-3 mt-1"><button type="button" onclick="pcAddFuelRow()" class="text-xs font-semibold text-brand-600 hover:underline">+ Add another vehicle</button>
-      <div class="text-sm text-slate-500">Total <b id="pc-grand" class="text-slate-900 num text-base ml-1">${fmtMVR(pcRound(fuelRows.reduce((s, f) => s + vNum(f.litres) * vNum(f.rate), 0)))}</b></div></div>
+      <div class="text-sm text-slate-500">Total <b id="pc-grand" class="text-slate-900 num text-base ml-1">${fmtMVR(pcRound(fuelRows.reduce((s, f) => s + pcFuelAmt(f), 0)))}</b></div></div>
     <label class="flex items-start gap-2.5 text-sm text-slate-700 cursor-pointer mt-3"><input type="checkbox" id="pc-fuel-req" ${(!r || linkedReqs) ? 'checked' : ''} class="mt-1"><span>${r ? 'Keep the vehicles\' petty cash fuel requisitions in step with this request' : 'Also add a petty cash fuel requisition for each vehicle'} <span class="block text-[11.5px] text-slate-400">so fuel bought with this cash can be logged against it under Fueling.</span></span></label>` : `
     ${vSec('Items / services')}
     <div class="hidden sm:grid grid-cols-[1.75rem_1.3fr_1.6fr_3.5rem_5.25rem_5rem_1.5rem] gap-2 text-[11px] font-semibold text-slate-400 mb-1.5"><span>#</span><span>Item / Service</span><span>Description</span><span>Qty</span><span>Price / unit</span><span class="text-right">Expected total</span><span></span></div>
@@ -3582,10 +3594,11 @@ async function savePcForm(id){
     if(!fuelRows.length) return vFail('Add at least one vehicle.');
     for(const [i, r] of fuelRows.entries()){
       if(!r.vehicleId) return vFail('Vehicle ' + (i + 1) + ': choose the vehicle.');
-      if(!(vNum(r.litres) > 0)) return vFail('Vehicle ' + (i + 1) + ': enter the litres.');
+      if(!(vNum(r.qty) > 0)) return vFail('Vehicle ' + (i + 1) + ': enter the quantity (number of fills).');
+      if(!(vNum(r.amountEach) > 0)) return vFail('Vehicle ' + (i + 1) + ': enter the rate in MVR (amount per fill).');
       if(!(vNum(r.rate) > 0)) return vFail('Vehicle ' + (i + 1) + ': enter the rate per litre.');
     }
-    fuelRows = fuelRows.map(r => ({ vehicleId:r.vehicleId, fuelType:r.fuelType, litres:vNum(r.litres), rate:vNum(r.rate) }));
+    fuelRows = fuelRows.map(r => { const o = { vehicleId:r.vehicleId, fuelType:r.fuelType, qty:vNum(r.qty), amountEach:vNum(r.amountEach), rate:vNum(r.rate) }; o.litres = pcFuelLitres(o); return o; });
     items = pcFuelItems(fuelRows);
   } else {
     const rows = pcReadRows().filter(r => r.name || r.description || r.qty || r.unitPrice);

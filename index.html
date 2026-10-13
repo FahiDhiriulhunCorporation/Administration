@@ -2940,8 +2940,8 @@ function pcPerson(uid, fallbackName){
   const p = state.profiles.find(x => x.uid === uid) || (authUser && authUser.uid === uid ? authUser : null);
   return { name: (p && (p.name || p.email)) || fallbackName || '', designation: (p && p.designation) || '' };
 }
-const pcRequester = r => pcPerson(r.requesterUid, r.requesterName);
-const pcCashReceiver = r => r.cashReceiverUid ? pcPerson(r.cashReceiverUid, r.cashReceiverName) : pcPerson(r.requesterUid, r.requesterName);      // blank = the requester collects the cash
+const pcRequester = r => r.requesterUid ? pcPerson(r.requesterUid, r.requesterName) : { name: r.requesterName || '', designation: r.requesterDesig || '' };      // no uid = typed in (not a user of the app)
+const pcCashReceiver = r => r.cashReceiverUid ? pcPerson(r.cashReceiverUid, r.cashReceiverName) : r.cashReceiverName ? { name: r.cashReceiverName, designation: r.cashReceiverDesig || '' } : pcRequester(r);      // blank = the requester collects the cash
 const pcHod = r => pcPerson(r.hodUid, r.hodName);
 function pcCustodian(r){
   const loc = pcFund(r.locationId);
@@ -2954,7 +2954,7 @@ function pcNextNumber(){
 }
 const pcCanSign = r => !!authUser && !!r.requesterUid && r.requesterUid === authUser.uid && !r.formLink;        // no signing once the signed form is linked
 // what a signature vouches for: if any of this changes after signing, the signature no longer applies
-const pcContentKey = r => JSON.stringify([r.number, r.locationId, r.department, r.purpose, r.option, r.date, r.requesterUid, r.hodUid, pcItems(r).map(i => [i.name, i.description, vNum(i.qty), vNum(i.unitPrice)])]);
+const pcContentKey = r => JSON.stringify([r.number, r.locationId, r.department, r.purpose, r.option, r.date, r.requesterUid || ('~' + (r.requesterName || '') + '|' + (r.requesterDesig || '')), r.hodUid, pcItems(r).map(i => [i.name, i.description, vNum(i.qty), vNum(i.unitPrice)])]);
 const pcLocName = id => { const l = pcFund(id); return l ? l.name : '(removed location)'; };
 const pcSignedDate = sig => fmtDate(localDateStr(new Date(sig.signedAt)));
 const pcUserOptions = (sel, blank) => `${blank ? `<option value="">${esc(blank)}</option>` : ''}${state.profiles.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).map(p => `<option value="${esc(p.uid)}" ${p.uid === sel ? 'selected' : ''}>${esc(p.name || p.email)}${p.designation ? ' — ' + esc(p.designation) : ''}</option>`).join('')}`;
@@ -3041,7 +3041,7 @@ function openPcProcess(id){
     <p class="text-sm text-slate-500 mb-4"><b class="text-slate-800">${esc(r.number)}</b> · ${esc(r.purpose || '')}<br>Requested ${fmtMVR(exp)}${inv ? ' · invoice ' + fmtMVR(inv) : ''}</p>
     ${vGrid(2, vF(reimb ? 'Date reimbursed' : 'Date cash handed over', 'processedDate', r.processedDate || vToday(), 'date', { req:1 }) + vF(reimb ? 'Amount reimbursed (MVR)' : 'Amount handed over (MVR)', 'processedAmount', amt, 'number', { req:1 }) +
       (reimb ? '' : vF('Balance returned (MVR)', 'balanceReturned', r.balanceReturned, 'number') + `<div class="text-[11.5px] text-slate-400 self-end pb-2">If less than the cash handed over was spent, enter what was returned.</div>`) +
-      vS('Cash received by', 'cashReceiverUid', state.profiles.map(p => [p.uid, p.name || p.email]), r.cashReceiverUid || '', 'Same as the requester', { span:'sm:col-span-2' }) +
+      `<div class="sm:col-span-2"><label class="${VEH_LBL}">Cash received by</label><select name="cashReceiverUid" onchange="pcToggleCustom(this, 'pp-cr-custom')" class="${VEH_FIELD} bg-white">${pcUserOptions(r.cashReceiverUid || '', 'Same as the requester')}${pcOtherOpt(!r.cashReceiverUid && !!r.cashReceiverName)}</select>${pcCustomBox('pp-cr-custom', !r.cashReceiverUid ? r.cashReceiverName : '', !r.cashReceiverUid ? r.cashReceiverDesig : '', !r.cashReceiverUid && !!r.cashReceiverName, 'crName', 'crDesig')}</div>` +
       vTa('Note', 'processNote', r.processNote, { span:'sm:col-span-2', rows:2, ph:'For example: paid in cash, or a bank transfer reference' }))}
     <div class="flex justify-end gap-2.5 mt-6"><button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="pcCancelAct()">Cancel</button><button type="button" id="vf-save" onclick="savePcProcess('${id}')" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">${r.processedDate ? 'Save changes' : 'Mark as processed'}</button></div></form>`, true);
 }
@@ -3051,7 +3051,10 @@ async function savePcProcess(id){
   if(!(vNum(o.processedAmount) > 0)) return vFail('Enter the amount.');
   if(o.balanceReturned !== undefined && o.balanceReturned !== '' && (vNum(o.balanceReturned) < 0 || vNum(o.balanceReturned) > vNum(o.processedAmount))) return vFail('The balance returned cannot be more than the amount handed over.');
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
-  await vehSave('pettyCash', { id, processedDate:o.processedDate, processedAmount:vNum(o.processedAmount), balanceReturned: o.balanceReturned ? vNum(o.balanceReturned) : null, processNote:o.processNote || '', cashReceiverUid:(o.cashReceiverUid && o.cashReceiverUid !== r.requesterUid) ? o.cashReceiverUid : '', cashReceiverName:(o.cashReceiverUid && o.cashReceiverUid !== r.requesterUid) ? pcPerson(o.cashReceiverUid).name : '', processedBy:authUser ? authUser.name : '', processedByUid:authUser ? authUser.uid : '', processedAt:Date.now() });
+  const crOther = o.cashReceiverUid === PC_OTHER, crU = (!crOther && o.cashReceiverUid && o.cashReceiverUid !== r.requesterUid) ? o.cashReceiverUid : '';
+  if(crOther && !String(o.crName || '').trim()){ if(btn) btn.disabled = false; return vFail('Type the name of the person who received the cash.'); }
+  await vehSave('pettyCash', { id, processedDate:o.processedDate, processedAmount:vNum(o.processedAmount), balanceReturned: o.balanceReturned ? vNum(o.balanceReturned) : null, processNote:o.processNote || '',
+    cashReceiverUid:crU, cashReceiverName: crOther ? String(o.crName).trim() : (crU ? pcPerson(crU).name : ''), cashReceiverDesig: crOther ? String(o.crDesig || '').trim() : '' });
   closeModal(); toast(r.option === 'Reimbursement' ? 'Reimbursement marked as processed.' : 'Marked as processed.'); pcDone(id);
 }
 function pcReopenProcess(id){
@@ -3158,8 +3161,14 @@ function pcLocationChanged(){
 }
 let pcEditingId = '';
 function pcFormLinkChanged(){ const el = document.getElementById('pc-form-link'), has = el.value.trim() ? '1' : '0'; if(el.dataset.has !== has){ el.dataset.has = has; pcRequesterChanged(); } }
+const PC_OTHER = '__other';
+const pcOtherOpt = sel => `<option value="${PC_OTHER}" ${sel ? 'selected' : ''}>Someone else (type the name and designation)…</option>`;
+const pcCustomBox = (id, name, desig, show, nm, dm) => `<div id="${id}" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 ${show ? '' : 'hidden'}"><input type="text" name="${nm}" value="${esc(name || '')}" placeholder="Name" class="${VEH_FIELD}"><input type="text" name="${dm}" value="${esc(desig || '')}" placeholder="Designation" class="${VEH_FIELD}"></div>`;
+function pcToggleCustom(sel, boxId){ const b = document.getElementById(boxId); if(b){ b.classList.toggle('hidden', sel.value !== PC_OTHER); if(sel.value === PC_OTHER){ const i = b.querySelector('input'); if(i && !i.value) i.focus(); } } }
 function pcRequesterChanged(){
   const sel = document.getElementById('pc-requester'), box = document.getElementById('pc-sign-box'), linked = document.getElementById('pc-form-link');
+  pcToggleCustom(sel, 'pc-req-custom');
+  if(sel.value === PC_OTHER){ box.innerHTML = '<div class="text-sm text-slate-500">This requester isn\'t a user of the app, so they sign the printed form. Add the link to the signed form above once it is signed.</div>'; return; }
   if(linked && linked.value.trim()){ box.innerHTML = '<div class="text-sm text-slate-500">A link to the signed form is attached, so no signature is needed here.</div>'; return; }
   const mine = authUser && sel.value === authUser.uid;
   const old = pcEditingId ? state.pettyCash.find(x => x.id === pcEditingId) : null;       // when editing, signing again is a choice, not a default
@@ -3519,10 +3528,10 @@ async function openPcForm(id, mode){
     ${itemsBlock}
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-5">
       <div><label class="${VEH_LBL}">Petty Cash Custodian</label><div id="pc-custodian" class="text-sm px-3.5 py-2.5 rounded-lg bg-slate-50 border border-slate-200 min-h-[2.6rem]"></div><div class="text-[11px] text-slate-400 mt-1">Set automatically from the location.</div></div>
-      <div><label class="${VEH_LBL}">Requester${vReqStar}</label><select name="requesterUid" id="pc-requester" onchange="pcRequesterChanged()" class="${VEH_FIELD} bg-white">${pcUserOptions(d.requesterUid, 'Select requester…')}</select></div>
+      <div><label class="${VEH_LBL}">Requester${vReqStar}</label><select name="requesterUid" id="pc-requester" onchange="pcRequesterChanged()" class="${VEH_FIELD} bg-white">${pcUserOptions(d.requesterUid, 'Select requester…')}${pcOtherOpt(!d.requesterUid && !!d.requesterName)}</select>${pcCustomBox('pc-req-custom', !d.requesterUid ? d.requesterName : '', !d.requesterUid ? d.requesterDesig : '', !d.requesterUid && !!d.requesterName, 'reqName', 'reqDesig')}</div>
       <div><label class="${VEH_LBL}">HOD (approves)${vReqStar}</label><select name="hodUid" id="pc-hod" class="${VEH_FIELD} bg-white">${pcUserOptions(d.hodUid, 'Select HOD…')}</select></div>
     </div>
-    <div class="mt-3.5 grid grid-cols-1 sm:grid-cols-[16rem_1fr] gap-3.5"><div><label class="${VEH_LBL}">Cash received by</label><select name="cashReceiverUid" id="pc-cash-receiver" class="${VEH_FIELD} bg-white">${pcUserOptions(d.cashReceiverUid || '', 'Same as the requester')}</select></div><div class="text-[11.5px] text-slate-400 self-end pb-2.5">Who collects the cash. It is printed in the "Cash Received by" column of the form, and confirmed when the cash is handed over.</div></div>
+    <div class="mt-3.5 grid grid-cols-1 sm:grid-cols-[16rem_1fr] gap-3.5"><div><label class="${VEH_LBL}">Cash received by</label><select name="cashReceiverUid" id="pc-cash-receiver" onchange="pcToggleCustom(this, 'pc-cr-custom')" class="${VEH_FIELD} bg-white">${pcUserOptions(d.cashReceiverUid || '', 'Same as the requester')}${pcOtherOpt(!d.cashReceiverUid && !!d.cashReceiverName)}</select>${pcCustomBox('pc-cr-custom', !d.cashReceiverUid ? d.cashReceiverName : '', !d.cashReceiverUid ? d.cashReceiverDesig : '', !d.cashReceiverUid && !!d.cashReceiverName, 'crName', 'crDesig')}</div><div class="text-[11.5px] text-slate-400 self-end pb-2.5">Who collects the cash. It is printed in the "Cash Received by" column of the form, and confirmed when the cash is handed over.</div></div>
     <div class="mt-3.5"><label class="${VEH_LBL}">Signed petty cash form link <span class="font-normal text-slate-400">(optional)</span></label><input type="text" id="pc-form-link" name="formLink" value="${esc(d.formLink || '')}" data-has="${d.formLink ? '1' : '0'}" oninput="pcFormLinkChanged()" inputmode="url" autocomplete="off" placeholder="Link to the signed form, e.g. SharePoint" class="veh-link ${VEH_FIELD}"><div class="text-[11px] text-slate-400 mt-1">If you add the link of the signed form, the requester doesn't need to sign here.</div></div>
     <div class="mt-3.5"><label class="${VEH_LBL}">Requester's signature</label><div id="pc-sign-box" class="rounded-lg border border-slate-200 px-4 py-3"></div></div>
     ${vFoot(r ? 'Save changes' : 'Create request', `savePcForm('${id || ''}')`)}`, true);
@@ -3532,7 +3541,10 @@ async function savePcForm(id){
   const f = document.getElementById('vform'), old = id ? state.pettyCash.find(x => x.id === id) : null, fuel = pcFormMode === 'fuel';
   const number = f.number.value.trim(), date = f.date.value, locationId = f.locationId.value, department = document.getElementById('pc-department').value.trim(), purpose = f.purpose.value.trim();
   const option = (f.querySelector('input[name=option]:checked') || {}).value, requesterUid = f.requesterUid.value, hodUid = f.hodUid.value, category = fuel ? 'Fuel' : f.category.value;
-  const crUid = (f.cashReceiverUid.value && f.cashReceiverUid.value !== requesterUid) ? f.cashReceiverUid.value : '';
+  const reqOther = requesterUid === PC_OTHER, crOther = f.cashReceiverUid.value === PC_OTHER;
+  const reqName = reqOther ? f.reqName.value.trim() : '', reqDesig = reqOther ? f.reqDesig.value.trim() : '';
+  const crName = crOther ? f.crName.value.trim() : '', crDesig = crOther ? f.crDesig.value.trim() : '';
+  const crUid = (!crOther && f.cashReceiverUid.value && f.cashReceiverUid.value !== requesterUid) ? f.cashReceiverUid.value : '';
   if(!number) return vFail('Enter the voucher number.');
   if(state.pettyCash.some(x => x.id !== id && String(x.number).toLowerCase() === number.toLowerCase())) return vFail('The voucher number ' + number + ' is already used.');
   if(!date) return vFail('Enter the date.');
@@ -3565,10 +3577,14 @@ async function savePcForm(id){
   const formLinkRaw = (document.getElementById('pc-form-link').value || '').trim(), formLink = formLinkRaw ? normalizeWebUrl(formLinkRaw) : '';
   if(formLink === null) return vFail('The form link must be a web address (starting with https://).');
   if(!requesterUid) return vFail('Select the requester.');
+  if(reqOther && !reqName) return vFail('Type the requester\'s name.');
+  if(reqOther && !reqDesig) return vFail('Type the requester\'s designation.');
+  if(crOther && !crName) return vFail('Type the name of the person who receives the cash.');
   if(!hodUid) return vFail('Select the HOD.');
   if(requesterUid === hodUid) return vFail('The requester and the HOD must be different people.');
-  const rq = pcPerson(requesterUid), hod = pcPerson(hodUid), loc = pcFund(locationId), cust = pcPerson(loc && loc.pettyCashCustodianUid, loc && loc.pettyCashCustodianName);
-  const rec = { number, date, locationId, department, purpose, option, category, items, invoices, total:pcTotal({ items }), requesterUid, requesterName:rq.name, hodUid, hodName:hod.name, custodianName:cust.name, formLink, cashReceiverUid:crUid, cashReceiverName:crUid ? pcPerson(crUid).name : '' };
+  const rq = reqOther ? { name:reqName, designation:reqDesig } : pcPerson(requesterUid), hod = pcPerson(hodUid), loc = pcFund(locationId), cust = pcPerson(loc && loc.pettyCashCustodianUid, loc && loc.pettyCashCustodianName);
+  const rec = { number, date, locationId, department, purpose, option, category, items, invoices, total:pcTotal({ items }), requesterUid: reqOther ? '' : requesterUid, requesterName:rq.name, requesterDesig: reqOther ? reqDesig : '', hodUid, hodName:hod.name, custodianName:cust.name, formLink,
+    cashReceiverUid:crUid, cashReceiverName: crOther ? crName : (crUid ? pcPerson(crUid).name : ''), cashReceiverDesig: crOther ? crDesig : '' };
   if(fuel){ rec.kind = 'fuel'; rec.fuelRows = fuelRows; }
   if(old) rec.id = id; else rec.createdByUid = authUser ? authUser.uid : '';
   const signNow = !!(document.getElementById('pc-sign-now') && document.getElementById('pc-sign-now').checked && authUser && requesterUid === authUser.uid && getMySignature());

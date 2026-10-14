@@ -1643,25 +1643,32 @@ function currentNav(){
   try{ vAlerts = vehAlerts(); rAlerts = vehReqAlerts(); pcAwaiting = authUser ? state.pettyCash.filter(r => pcCanSign(r) && !pcSigned(r)).length : 0; }catch(e){}
   const tone = list => list.some(a=>a.st.k==='crit') ? 'crit' : 'warn';
   let utAl = []; try{ utAl = utAlerts(); }catch(e){}
+  const cntOf = fn => { try{ return fn() || 0; }catch(e){ return 0; } };          // a failing count never breaks the menu
+  const nXfer = cntOf(() => state.itemTransfers.filter(t => t.status === 'pending' && canAcceptTransferForLocation(t.toLocationId)).length);
+  const nHo = cntOf(() => state.handovers.filter(h => !hoFullySigned(h)).length);
+  const nIssues = cntOf(() => state.serviceRecords.filter(r => r.kind === 'incident' && r.status !== 'Resolved').length);
+  const nPr = cntOf(() => state.purchaseRequisitions.filter(p => (p.status || 'open') === 'pending_approval').length);
+  const nRepl = cntOf(() => pcFundList().reduce((t, f) => t + pcStatements(f.id).filter(x => pcStmtPending(x) > 0).length, 0));
+  const nUnbal = cntOf(() => pcFundList().filter(f => { const rc = pcReconcile(f); return rc.counted && Math.abs(rc.diff) >= 0.005; }).length);
   const nav = [
     { id:'dashboard', label:'Dashboard', icon:'dashboard' },
     { id:'reports', label:'Reports', icon:'statement' },
     { section:'Stock' },
     { id:'products', label:'Items', icon:'products' },
     { id:'levels', label:'Stock Levels', icon:'levels' },
-    { id:'movements', label:'Stock Movements', icon:'movements', badge:(()=>{ try{ return stockRequestsAwaitingMe().length; }catch(e){ return 0; } })(), tone:'warn' },
+    { id:'movements', label:'Stock Movements', icon:'movements', badge:cntOf(() => stockRequestsAwaitingMe().length) + nXfer, tone:'warn', hint:'Stock requests to approve and transfers to accept' },
     { id:'stock-report', label:'Stock Report', icon:'chart' },
     { section:'Assets' },
     { id:'assets', label:'Assets', icon:'assets' },
     { id:'asset-transactions', label:'Asset Movements', icon:'assettx' },
-    { id:'handovers', label:'Handovers', icon:'handover' },
+    { id:'handovers', label:'Handovers', icon:'handover', badge:nHo, tone:'warn', hint:'Handovers not fully signed' },
     { id:'keys', label:'Key Registry', icon:'key' },
     { id:'asset-report', label:'Asset Report', icon:'chart' },
     { section:'Fleet' },
     { id:'vehicles', label:'Vehicles', icon:'vehicle', badge:vAlerts.length, tone:tone(vAlerts) },
     { id:'fueling', label:'Fueling', icon:'fuel', badge:rAlerts.length, tone:tone(rAlerts) },
-    { id:'servicing', label:'Servicing', icon:'service' },
-    { id:'vehicle-log', label:'Vehicle Log', icon:'vlog', badge:(()=>{ try{ return state.vehicleLogs.filter(l => !l.inDate).length; }catch(e){ return 0; } })(), tone:'warn' },
+    { id:'servicing', label:'Servicing', icon:'service', badge:nIssues, tone:'warn', hint:'Open vehicle issues' },
+    { id:'vehicle-log', label:'Vehicle Log', icon:'vlog', badge:(()=>{ try{ return state.vehicleLogs.filter(l => !l.inDate).length; }catch(e){ return 0; } })(), tone:'warn', hint:'Vehicles out, not returned yet' },
     { id:'vehicle-reports', label:'Fleet Report', icon:'chart' },
     { section:'Facilities' },
     ...UT_TYPE_LIST.map(t => ({ id:'utility-' + UT_TYPES[t].slug, label:t, icon:UT_TYPES[t].icon, badge:utAl.filter(a=>a.type===t).length, tone:utAl.some(a=>a.type===t && a.st.k==='crit') ? 'crit' : 'warn' })),
@@ -1670,10 +1677,10 @@ function currentNav(){
     { id:'travel-local', label:'Local Travel', icon:'plane', badge:(()=>{ try{ return state.travelRequests.filter(t => (t.scope || 'local') === 'local' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
     { id:'travel-foreign', label:'Foreign Travel', icon:'globe', badge:(()=>{ try{ return state.travelRequests.filter(t => t.scope === 'foreign' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
     { section:'Finance' },
-    { id:'purchase-requisitions', label:'Purchase Requisitions', icon:'pr' },
+    { id:'purchase-requisitions', label:'Purchase Requisitions', icon:'pr', badge:nPr, tone:'warn', hint:'PRs pending approval' },
     { id:'petty-cash', label:'Petty Cash Requests', icon:'cash', badge:pcAwaiting, tone:'warn' },
-    { id:'petty-statement', label:'Statements', icon:'statement' },
-    { id:'petty-count', label:'Cash Count', icon:'coins' },
+    { id:'petty-statement', label:'Statements', icon:'statement', badge:nRepl, tone:'warn', hint:'Closed statements pending replenishment' },
+    { id:'petty-count', label:'Cash Count', icon:'coins', badge:nUnbal, tone:'crit', hint:'Funds whose cash count does not balance' },
   ];
   if(canManageInventory() || (authUser && authUser.role==='admin')) nav.push({ section:'Settings' });
   if(canManageInventory()) nav.push({ id:'locations', label:'Locations', icon:'locations' });
@@ -1701,7 +1708,7 @@ function renderNav(){
   const item = n => `
     <a href="#" onclick="goTo('${n.id}');return false;"
        class="flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors ${navIsActive(n) ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
-      ${ICONS[n.icon]}<span class="flex-1">${n.label}</span>${n.badge ? `<span class="ml-auto min-w-[1.25rem] text-center px-1.5 py-0.5 rounded-full text-[10.5px] font-bold ${n.tone==='crit' ? 'bg-rose-500 text-white' : 'bg-amber-400 text-slate-900'}">${n.badge}</span>` : ''}
+      ${ICONS[n.icon]}<span class="flex-1">${n.label}</span>${n.badge ? `<span ${n.hint ? `title="${esc(n.hint)}"` : ''} class="ml-auto min-w-[1.25rem] text-center px-1.5 py-0.5 rounded-full text-[10.5px] font-bold ${n.tone==='crit' ? 'bg-rose-500 text-white' : 'bg-amber-400 text-slate-900'}">${n.badge}</span>` : ''}
     </a>`;
   document.getElementById('nav-list').innerHTML = groups.map(g => {
     if(!g.name) return g.items.map(item).join('');

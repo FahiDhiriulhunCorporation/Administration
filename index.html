@@ -5147,12 +5147,27 @@ function trSettings(){
     memoFrom:t.memoFrom != null ? t.memoFrom : 'Administration', memoTo:t.memoTo != null ? t.memoTo : 'Finance', memoCc:t.memoCc != null ? t.memoCc : 'CFO',
     signName:t.signName || '', signDesig:t.signDesig != null ? t.signDesig : 'Director, Administration', memoPrefix:t.memoPrefix || '(MEMO)FDC/FDC/' };
 }
+// DSA rates by country and location: the most specific row wins (country + location, then the country's "all locations" row, then "all countries")
+const TR_HOME = 'Maldives';
+const trNorm = x => String(x || '').trim().toLowerCase();
+function trRates(){
+  const t = vehSettings.travel || {};
+  if(Array.isArray(t.rates)) return t.rates;
+  const S = trSettings(), out = [{ scope:'local', country:TR_HOME, location:'', currency:S.local.currency, meal:S.local.meal, pocket:S.local.pocket, accom:S.local.accom }];   // first use: from the earlier single local / foreign amounts
+  if(S.foreign.meal || S.foreign.pocket || S.foreign.accom) out.push({ scope:'foreign', country:'', location:'', currency:S.foreign.currency, meal:S.foreign.meal, pocket:S.foreign.pocket, accom:S.foreign.accom });
+  return out;
+}
+function trRateFor(scope, country, location){
+  const rows = trRates().filter(r => (r.scope || 'local') === scope), c = trNorm(country), l = trNorm(location);
+  return (c && l && rows.find(r => trNorm(r.country) === c && trNorm(r.location) === l)) || (c && rows.find(r => trNorm(r.country) === c && !trNorm(r.location))) || rows.find(r => !trNorm(r.country) && !trNorm(r.location)) || null;
+}
+const trRateLabel = r => !r ? '' : (r.country || 'All countries') + ' · ' + (r.location || 'All locations');
 const trDays = (from, to) => { if(!from || !to) return 0; const a = Date.parse(from + 'T00:00:00Z'), b = Date.parse(to + 'T00:00:00Z'); return isNaN(a) || isNaN(b) || b < a ? 0 : Math.round((b - a) / 86400000) + 1; };
 const trList = scope => state.travelRequests.filter(t => (t.scope || 'local') === scope);
 const trById = id => state.travelRequests.find(t => t.id === id) || null;
 const trParts = t => (t.participants || []).filter(p => p && String(p.name || '').trim());
 const trDsaOn = t => !!(t.dsa && t.dsa.enabled);
-const trCur = t => (t.dsa && t.dsa.currency) || trSettings()[t.scope || 'local'].currency;
+const trCur = t => (t.dsa && t.dsa.currency) || ((trRateFor(t.scope || 'local', t.country, t.rateLocation) || {}).currency) || 'MVR';
 // one person's allowance lines and total (the same rates and days for everyone on the trip)
 function trDsaLines(t){
   const d = t.dsa || {};
@@ -5179,8 +5194,8 @@ function trSetFilter(k, v){ vehUi[k] = v; rerenderMain(); }
 
 function viewTravel(scope){
   const S = TR_SCOPES[scope], all = trList(scope), yr = vToday().slice(0, 4), st = vehUi.trStatus || '', q = String(vehUi.trQ || '').toLowerCase().trim();
-  const set = trSettings()[scope], ratesMissing = !(set.meal || set.pocket || set.accom);
-  const list = all.filter(t => (!st || (t.status || 'Open') === st) && (!q || [t.formNumber, t.destination, t.purpose, (t.dsa || {}).memoNo, ...trParts(t).map(p => p.name)].join(' ').toLowerCase().includes(q)))
+  const ratesMissing = !trRates().some(r => (r.scope || 'local') === scope && (r.meal || r.pocket || r.accom));
+  const list = all.filter(t => (!st || (t.status || 'Open') === st) && (!q || [t.formNumber, t.destination, t.country, t.rateLocation, t.purpose, (t.dsa || {}).memoNo, ...trParts(t).map(p => p.name)].join(' ').toLowerCase().includes(q)))
     .sort((a, b) => String(b.fromDate || '').localeCompare(String(a.fromDate || '')) || (b.createdAt || 0) - (a.createdAt || 0));
   const cnt = s => all.filter(t => (t.status || 'Open') === s).length;
   const dsaYear = all.filter(t => String(t.fromDate || '').slice(0, 4) === yr), byCur = {};
@@ -5192,7 +5207,7 @@ function viewTravel(scope){
     const tk = trTicketInfo(t), ps = trParts(t), dsa = trDsaOn(t), memo = t.dsa || {};
     return `<tr class="${vTr} cursor-pointer" onclick="openTravelDetail('${t.id}')">
       ${vTd(`<span class="font-semibold">${esc(t.formNumber || '—')}</span><div class="text-[11.5px] text-slate-400">${t.formDate ? vDate(t.formDate) : ''}</div>`, { first:1 })}
-      ${vTd(`<div class="font-semibold text-slate-800">${esc(t.destination || '—')}</div><div class="text-[11.5px] text-slate-400">${esc(t.purpose || '')}</div>`)}
+      ${vTd(`<div class="font-semibold text-slate-800">${esc(t.destination || '—')}</div><div class="text-[11.5px] text-slate-400">${esc([t.country && t.country !== TR_HOME ? t.country : '', t.rateLocation, t.purpose].filter(Boolean).join(' · '))}</div>`)}
       ${vTd(`${t.fromDate ? vDate(t.fromDate) + (t.toDate && t.toDate !== t.fromDate ? ' – ' + vDate(t.toDate) : '') : '—'}<div class="text-[11.5px] text-slate-400">${trDays(t.fromDate, t.toDate) || '—'} day${trDays(t.fromDate, t.toDate) === 1 ? '' : 's'}</div>`, { cls:'whitespace-nowrap' })}
       ${vTd(ps.length ? esc(ps[0].name) + (ps.length > 1 ? ` <span class="text-slate-400">+${ps.length - 1}</span>` : '') : '—')}
       ${vTd(!tk ? '<span class="text-amber-600 text-xs font-semibold">Not linked</span>' : tk.kind === 'none' ? '<span class="text-slate-400 text-xs">Not needed</span>' : `<span class="text-xs font-semibold text-slate-700">${esc(tk.label)}</span><div class="text-[11px] text-slate-400">${esc(tk.kind)}</div>`)}
@@ -5202,7 +5217,7 @@ function viewTravel(scope){
   return `
     ${vHead(S.label, scope === 'local' ? 'Trips within the country: the request, the ticket and the Daily Subsistence Allowance.' : 'Trips abroad: the request, the ticket and the Daily Subsistence Allowance.',
       `<button onclick="openTravelSettings()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">DSA rates</button>${vBtnPrimary('+ Travel request', `openTravelForm('', '${scope}')`)}`)}
-    ${ratesMissing ? `<div class="mb-5 rounded-lg bg-amber-50 text-amber-800 text-[13px] px-4 py-3">The ${scope} DSA amounts are not set yet. Set them under <button onclick="openTravelSettings()" class="font-semibold underline">DSA rates</button> so new requests fill them in.</div>` : ''}
+    ${ratesMissing ? `<div class="mb-5 rounded-lg bg-amber-50 text-amber-800 text-[13px] px-4 py-3">No ${scope} DSA rates are set yet. Set them under <button onclick="openTravelSettings()" class="font-semibold underline">DSA rates</button> so new requests fill them in.</div>` : ''}
     ${kpis}
     <div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['', 'All (' + all.length + ')'], ...TR_STATUSES.map(s => [s, s + ' (' + cnt(s) + ')'])], st, 'trSetStatus')}
       <input type="search" value="${esc(vehUi.trQ || '')}" oninput="vehUi.trQ = this.value; clearTimeout(window._trQt); window._trQt = setTimeout(rerenderMain, 250)" placeholder="Search form no., destination, traveller, memo…" class="${VEH_INPUT} flex-1 min-w-[14rem]" id="tr-search"></div>
@@ -5236,24 +5251,37 @@ function trDsaPreview(){
   const n = Math.max(1, [...document.querySelectorAll('#tr-people-box .tr-pname')].filter(i => i.value.trim()).length), cur = (f['dsa.currency'] || {}).value || 'MVR';
   out.innerHTML = `${trMoney(cur, per)} per person${n > 1 ? ` × ${n} = <b>${trMoney(cur, pcRound(per * n))}</b>` : ''}`;
 }
-function trScopeRates(scope){                       // switching local/foreign brings that scope's set amounts
-  const f = document.getElementById('vform'), r = trSettings()[scope]; if(!f || !r) return;
-  f['dsa.currency'].value = r.currency; TR_ALLOW.forEach(([k]) => { f['dsa.' + k + 'Rate'].value = r[k] || ''; }); trDsaPreview();
+function trCountryOpts(scope){ return [...new Set(trRates().filter(r => (r.scope || 'local') === scope && r.country).map(r => r.country))].sort().map(c => `<option value="${esc(c)}"></option>`).join(''); }
+function trLocationOpts(scope, country){ const c = trNorm(country); return [...new Set(trRates().filter(r => (r.scope || 'local') === scope && trNorm(r.country) === c && r.location).map(r => r.location))].sort().map(l => `<option value="${esc(l)}"></option>`).join(''); }
+function trScopeRates(scope){                       // switching local/foreign: the home country for local, the lists for that scope, and its rates
+  const f = document.getElementById('vform'); if(!f) return;
+  if(scope === 'local') f.country.value = TR_HOME; else if(trNorm(f.country.value) === trNorm(TR_HOME)) f.country.value = '';
+  document.getElementById('tr-countries').innerHTML = trCountryOpts(scope); trCountryChanged();
+}
+function trCountryChanged(){ const f = document.getElementById('vform'); if(!f) return; f.rateLocation.value = ''; document.getElementById('tr-locations').innerHTML = trLocationOpts(f.scope.value, f.country.value); trApplyRate(); }
+function trApplyRate(){                             // fills the rates of the country and location chosen
+  const f = document.getElementById('vform'); if(!f) return;
+  const r = trRateFor(f.scope.value, f.country.value, f.rateLocation.value), out = document.getElementById('tr-rate-src');
+  TR_ALLOW.forEach(([k]) => { f['dsa.' + k + 'Rate'].value = r && r[k] ? r[k] : ''; }); if(r) f['dsa.currency'].value = r.currency || 'MVR';      // no rate: the amounts are left empty to enter
+  if(out) out.innerHTML = r ? 'Rates from <b>' + esc(trRateLabel(r)) + '</b>' : '<span class="text-amber-600">No rate is set for this country / location. Enter the amounts, or add the rate under DSA rates.</span>';
+  trDsaPreview();
 }
 function openTravelForm(id, scope){
   const t = id ? trById(id) : null; if(id && !t) return;
   scope = (t && t.scope) || scope || 'local';
-  const S = trSettings(), r = S[scope], days = t ? trDays(t.fromDate, t.toDate) : 0;
+  const S = trSettings(), country = t ? (t.country || (scope === 'local' ? TR_HOME : '')) : (scope === 'local' ? TR_HOME : ''), rloc = t ? t.rateLocation || '' : '';
+  const r = trRateFor(scope, country, rloc) || { currency:scope === 'local' ? 'MVR' : 'USD', meal:'', pocket:'', accom:'' }, days = t ? trDays(t.fromDate, t.toDate) : 0;
   const d = (t && t.dsa) || { enabled:true, currency:r.currency, mealRate:r.meal, pocketRate:r.pocket, accomRate:r.accom, mealDays:'', pocketDays:1, accomDays:'', memoFrom:S.memoFrom, memoTo:S.memoTo, memoCc:S.memoCc, signName:S.signName, signDesig:S.signDesig };
   const tk = (t && t.ticket) || { via:'' }, me = authUser ? { name:authUser.name, designation:[authUser.designation, authUser.department].filter(Boolean).join(', ') } : {};
   const people = state.profiles.map(pr => `<option value="${esc(pr.name || '')}"></option>`).join('');
   const parts = t ? trParts(t) : [];
   const prs = vehReqPRs(), pcs = state.pettyCash.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   openModal((t ? 'Edit ' : 'New ') + TR_SCOPES[scope].one + ' request', vFormOpen + `
-    <datalist id="tr-people">${people}</datalist>
+    <datalist id="tr-people">${people}</datalist><datalist id="tr-countries">${trCountryOpts(scope)}</datalist><datalist id="tr-locations">${trLocationOpts(scope, country)}</datalist>
     ${vSec('Travel request')}
     ${vGrid(3, vS('Travel', 'scope', [['local', 'Local'], ['foreign', 'Foreign']], scope, null, { attrs:' onchange="trScopeRates(this.value)"' }) + vF('Form number', 'formNumber', t ? t.formNumber : '', 'text', { attrs:' placeholder="(FRM)FDCMDB/FDC/2026/21"' }) + vF('Form date', 'formDate', t ? t.formDate : vToday(), 'date'))}
     <div class="mt-3.5">${vGrid(2, vF('Destination', 'destination', t ? t.destination : '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="K.Dhiffushi, Adh.Dhangethi & Adh.Omadhoo"' }) +
+      vF('Country', 'country', country, 'text', { req:1, attrs:' list="tr-countries" onchange="trCountryChanged()" placeholder="Country"' }) + vF('Location (for the DSA rate)', 'rateLocation', rloc, 'text', { attrs:' list="tr-locations" onchange="trApplyRate()" placeholder="City / atoll / island — blank for all"' }) +
       vF('From', 'fromDate', t ? t.fromDate : '', 'date', { req:1, attrs:' onchange="trDatesChanged()"' }) + `<div><label class="${VEH_LBL}">To <span class="text-rose-500">*</span> <span id="tr-days" class="font-normal text-slate-400 ml-1">${days ? days + ' day' + (days === 1 ? '' : 's') : ''}</span></label><input type="date" name="toDate" value="${esc(t ? t.toDate || '' : '')}" onchange="trDatesChanged()" class="${VEH_FIELD}"></div>` +
       vS('Budgeted from', 'budget', TR_BUDGETS, t ? t.budget : '', '—') + vF('Purpose of trip', 'purpose', t ? t.purpose : 'Official Trip') + vS('Status', 'status', TR_STATUSES, (t && t.status) || 'Open'))}</div>
     ${vSec('Travellers (name and designation)')}
@@ -5271,6 +5299,7 @@ function openTravelForm(id, scope){
     ${vSec('Daily Subsistence Allowance (DSA)')}
     <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="dsa.enabled" value="1" ${d.enabled ? 'checked' : ''} onchange="trDsaToggle(this.checked)"> DSA is paid for this trip</label>
     <div id="tr-dsa" ${d.enabled ? '' : 'style="display:none"'} class="mt-3">
+      <div id="tr-rate-src" class="text-xs text-slate-500 mb-2.5">${t ? 'Amounts as saved with this request. Change the country or location to load its rates.' : ''}</div>
       <div class="grid grid-cols-[1fr_7rem_5rem] gap-2 items-end text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1"><div>Allowance</div><div>Rate</div><div>Days</div></div>
       ${TR_ALLOW.map(([k, label]) => `<div class="grid grid-cols-[1fr_7rem_5rem] gap-2 items-center mb-2"><div class="text-sm text-slate-700">${label}</div><input type="number" step="0.01" min="0" name="dsa.${k}Rate" value="${esc(d[k + 'Rate'] != null ? d[k + 'Rate'] : '')}" oninput="trDsaPreview()" class="${VEH_FIELD}"><input type="number" step="1" min="0" name="dsa.${k}Days" value="${esc(d[k + 'Days'] != null && d[k + 'Days'] !== '' ? d[k + 'Days'] : (k === 'pocket' ? 1 : days || ''))}" ${k !== 'pocket' && t ? 'data-auto="0"' : ''} oninput="this.dataset.auto='0'; trDsaPreview()" class="${VEH_FIELD}"></div>`).join('')}
       <div class="grid grid-cols-[1fr_7rem_5rem] gap-2 items-center mb-3"><div class="text-sm text-slate-700">Currency</div><input type="text" name="dsa.currency" value="${esc(d.currency || r.currency)}" oninput="trDsaPreview()" class="${VEH_FIELD}"><div></div></div>
@@ -5281,12 +5310,13 @@ function openTravelForm(id, scope){
       <div class="mt-3.5">${vF('Link to the signed memo (optional)', 'dsa.memoUrl', d.memoUrl || '', 'url')}</div>
     </div>
     ${vFoot(t ? 'Save changes' : 'Save request', `saveTravel('${t ? t.id : ''}')`, t && canManageInventory() ? `deleteTravel('${t.id}')` : '')}`, true);
-  trDsaPreview();
+  if(!t) trApplyRate(); else trDsaPreview();
 }
 async function saveTravel(id){
   const f = document.getElementById('vform'), o = vehFormObj(f);
   const parts = [...document.querySelectorAll('#tr-people-box .tr-person')].map(row => ({ name:row.querySelector('.tr-pname').value.trim(), designation:row.querySelector('.tr-pdesig').value.trim() })).filter(p => p.name);
   if(!String(o.destination || '').trim()) return vFail('Enter the destination.');
+  if(!String(o.country || '').trim()) return vFail('Enter the country.');
   if(!o.fromDate || !o.toDate) return vFail('Enter the travel dates.');
   if(o.toDate < o.fromDate) return vFail('The return date is before the departure date.');
   if(!parts.length) return vFail('Add at least one traveller.');
@@ -5297,7 +5327,7 @@ async function saveTravel(id){
   const memoNo = String(dd.memoNo || '').trim();
   if(on && memoNo && /\/$/.test(memoNo)) return vFail('Complete the memo number (it ends with the running number).');
   if(on && memoNo){ const dup = state.travelRequests.find(x => x.id !== id && x.dsa && String(x.dsa.memoNo || '').trim().toLowerCase() === memoNo.toLowerCase()); if(dup) return vFail('Memo ' + memoNo + ' is already used for the trip to ' + (dup.destination || '—') + '.'); }
-  const rec = { id:id || undefined, scope:o.scope === 'foreign' ? 'foreign' : 'local', formNumber:String(o.formNumber || '').trim(), formDate:o.formDate || '', destination:o.destination.trim(), fromDate:o.fromDate, toDate:o.toDate,
+  const rec = { id:id || undefined, scope:o.scope === 'foreign' ? 'foreign' : 'local', formNumber:String(o.formNumber || '').trim(), formDate:o.formDate || '', destination:o.destination.trim(), country:String(o.country).trim(), rateLocation:String(o.rateLocation || '').trim(), fromDate:o.fromDate, toDate:o.toDate,
     budget:o.budget || '', purpose:String(o.purpose || '').trim(), status:TR_STATUSES.includes(o.status) ? o.status : 'Open', participants:parts, comments:String(o.comments || '').trim(),
     requestedBy:String(o.requestedBy || '').trim(), requestedDesig:String(o.requestedDesig || '').trim(), authorizedBy:String(o.authorizedBy || '').trim(), authorizedDesig:String(o.authorizedDesig || '').trim(), formUrl:urls.formUrl,
     ticket:{ via:tk.via || '', prId:tk.via === 'pr' ? tk.prId : '', pettyId:tk.via === 'petty' ? tk.pettyId : '' },
@@ -5327,7 +5357,7 @@ function openTravelDetail(id){
   openModal((t.scope === 'foreign' ? 'Foreign' : 'Local') + ' travel · ' + (t.destination || ''), `
     <div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2">${trStatusPill(t.status)}<span class="text-xs text-slate-400">${esc(t.formNumber || 'No form number')}${t.formDate ? ' · ' + vDate(t.formDate) : ''}</span></div>
       <div class="inline-flex rounded-lg bg-slate-100 p-1 gap-1">${TR_STATUSES.map(s => `<button onclick="trSetTravelStatus('${t.id}', '${s}')" class="px-3 py-1 rounded-md text-xs font-semibold ${(t.status || 'Open') === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${s}</button>`).join('')}</div></div>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Travel dates', t.fromDate ? vDate(t.fromDate) + (t.toDate !== t.fromDate ? ' – ' + vDate(t.toDate) : '') : '—')}${item('Duration', n ? n + ' day' + (n === 1 ? '' : 's') : '—')}${item('Purpose', esc(t.purpose || '—'))}${item('Budgeted from', esc(t.budget || '—'))}</div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Travel dates', t.fromDate ? vDate(t.fromDate) + (t.toDate !== t.fromDate ? ' – ' + vDate(t.toDate) : '') : '—')}${item('Duration', n ? n + ' day' + (n === 1 ? '' : 's') : '—')}${item('Country · location', esc([t.country, t.rateLocation].filter(Boolean).join(' · ') || '—'))}${item('Budgeted from', esc(t.budget || '—'))}</div>
     ${head('Travellers')}
     <div class="rounded-lg border border-slate-100 divide-y divide-slate-100 mb-5">${ps.map(p => `<div class="px-3.5 py-2 flex justify-between gap-3 text-sm"><span class="font-semibold text-slate-800">${esc(p.name)}</span><span class="text-slate-500 text-right">${esc(p.designation || '')}</span></div>`).join('') || '<div class="px-3.5 py-2 text-sm text-slate-400">None</div>'}</div>
     <div class="grid sm:grid-cols-2 gap-4 mb-5">
@@ -5346,18 +5376,44 @@ function openTravelDetail(id){
 }
 
 /* ---------- the DSA amounts and memo defaults ---------- */
+function trRateRow(r){
+  const inp = (cls, v, o) => `<input type="${o && o.num ? 'number' : 'text'}" ${o && o.num ? 'step="0.01" min="0"' : ''} value="${esc(v == null ? '' : v)}" placeholder="${(o && o.ph) || ''}" class="${cls} ${VEH_FIELD} !px-2 !py-1.5 text-sm" ${o && o.list ? `list="${o.list}"` : ''}>`;
+  return `<tr class="tr-rate border-b border-slate-100 last:border-0">
+    <td class="py-1.5 pr-1.5"><select class="tr-r-scope ${VEH_FIELD} !px-2 !py-1.5 text-sm bg-white"><option value="local" ${(r.scope || 'local') === 'local' ? 'selected' : ''}>Local</option><option value="foreign" ${r.scope === 'foreign' ? 'selected' : ''}>Foreign</option></select></td>
+    <td class="py-1.5 pr-1.5">${inp('tr-r-country', r.country, { ph:'All countries', list:'tr-set-countries' })}</td>
+    <td class="py-1.5 pr-1.5">${inp('tr-r-loc', r.location, { ph:'All locations' })}</td>
+    <td class="py-1.5 pr-1.5 w-20">${inp('tr-r-cur', r.currency || 'MVR')}</td>
+    <td class="py-1.5 pr-1.5 w-24">${inp('tr-r-meal', r.meal, { num:1 })}</td>
+    <td class="py-1.5 pr-1.5 w-24">${inp('tr-r-pocket', r.pocket, { num:1 })}</td>
+    <td class="py-1.5 pr-1.5 w-24">${inp('tr-r-accom', r.accom, { num:1 })}</td>
+    <td class="py-1.5 text-right"><button type="button" onclick="this.closest('tr').remove()" class="text-slate-400 hover:text-rose-600 px-1.5 text-lg leading-none" title="Remove">×</button></td></tr>`;
+}
+function trAddRateRow(scope){ const b = document.getElementById('tr-rate-body'); if(!b) return; b.insertAdjacentHTML('beforeend', trRateRow({ scope, currency:scope === 'foreign' ? 'USD' : 'MVR', country:scope === 'local' ? TR_HOME : '' })); b.lastElementChild.querySelector(scope === 'local' ? '.tr-r-loc' : '.tr-r-country').focus(); }
 function openTravelSettings(){
-  const S = trSettings(), row = (scope, label) => `<div class="rounded-xl border border-slate-200 p-4"><div class="text-sm font-bold text-slate-800 mb-3">${label}</div>${vGrid(2, vF('Currency', scope + '.currency', S[scope].currency) + '<div></div>' + vF('Meal (per day)', scope + '.meal', S[scope].meal, 'number') + vF('Pocket money', scope + '.pocket', S[scope].pocket, 'number') + vF('Accommodation (per night)', scope + '.accom', S[scope].accom, 'number'))}</div>`;
-  openModal('DSA rates and memo', vFormOpen + `
-    <p class="text-sm text-slate-500 mb-4">The set amounts fill in each new travel request. A request keeps the amounts it was saved with.</p>
-    <div class="grid sm:grid-cols-2 gap-4">${row('local', 'Local travel')}${row('foreign', 'Foreign travel')}</div>
+  const S = trSettings(), rates = trRates().slice().sort((a, b) => (a.scope === b.scope ? 0 : a.scope === 'local' ? -1 : 1) || String(a.country || '').localeCompare(String(b.country || '')) || String(a.location || '').localeCompare(String(b.location || '')));
+  const countries = [...new Set(rates.map(r => r.country).filter(Boolean))].map(c => `<option value="${esc(c)}"></option>`).join('');
+  openModal('DSA rates and memo', vFormOpen + `<datalist id="tr-set-countries">${countries}</datalist>
+    <p class="text-sm text-slate-500 mb-3">Rates by country and location. A request uses the row for its country and location; if there is none, the country's row with no location; then the row with no country. A request keeps the amounts it was saved with.</p>
+    <div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="w-full text-sm min-w-[46rem]"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100"><th class="py-2 px-1.5 font-semibold">Travel</th><th class="py-2 px-1.5 font-semibold">Country</th><th class="py-2 px-1.5 font-semibold">Location</th><th class="py-2 px-1.5 font-semibold">Currency</th><th class="py-2 px-1.5 font-semibold">Meal / day</th><th class="py-2 px-1.5 font-semibold">Pocket money</th><th class="py-2 px-1.5 font-semibold">Accommodation / night</th><th></th></tr></thead>
+      <tbody id="tr-rate-body" class="[&_td:first-child]:pl-1.5">${rates.map(trRateRow).join('')}</tbody></table></div>
+    <div class="flex gap-4 mt-2"><button type="button" onclick="trAddRateRow('local')" class="text-xs font-semibold text-brand-600 hover:underline">+ Local rate</button><button type="button" onclick="trAddRateRow('foreign')" class="text-xs font-semibold text-brand-600 hover:underline">+ Foreign rate</button></div>
     ${vSec('Memo')}
     ${vGrid(2, vF('Memo number starts with', 'memoPrefix', S.memoPrefix) + '<div></div>' + vF('From', 'memoFrom', S.memoFrom) + vF('To', 'memoTo', S.memoTo) + vF('CC', 'memoCc', S.memoCc) + '<div></div>' + vF('Signed by (name)', 'signName', S.signName) + vF('Signatory designation', 'signDesig', S.signDesig))}
     ${vFoot('Save', 'saveTravelSettings()')}`, true);
 }
 async function saveTravelSettings(){
-  const o = vehFormObj(document.getElementById('vform')), sc = x => ({ currency:String((x || {}).currency || 'MVR').trim() || 'MVR', meal:pcRound(vNum((x || {}).meal)), pocket:pcRound(vNum((x || {}).pocket)), accom:pcRound(vNum((x || {}).accom)) });
-  vehSettings = Object.assign({}, vehSettings, { travel:{ local:sc(o.local), foreign:sc(o.foreign), memoPrefix:String(o.memoPrefix || '').trim() || '(MEMO)FDC/FDC/', memoFrom:o.memoFrom || '', memoTo:o.memoTo || '', memoCc:o.memoCc || '', signName:o.signName || '', signDesig:o.signDesig || '' } });
+  const o = vehFormObj(document.getElementById('vform')), seen = new Set(), rates = [];
+  for(const tr of document.querySelectorAll('#tr-rate-body .tr-rate')){
+    const g = c => tr.querySelector(c).value.trim();
+    const r = { scope:g('.tr-r-scope') === 'foreign' ? 'foreign' : 'local', country:g('.tr-r-country'), location:g('.tr-r-loc'), currency:g('.tr-r-cur') || 'MVR', meal:pcRound(vNum(g('.tr-r-meal'))), pocket:pcRound(vNum(g('.tr-r-pocket'))), accom:pcRound(vNum(g('.tr-r-accom'))) };
+    if(!r.country && !r.location && !r.meal && !r.pocket && !r.accom) continue;               // an empty row
+    if(r.location && !r.country) return vFail('Enter the country for the location ' + r.location + '.');
+    const key = r.scope + '|' + trNorm(r.country) + '|' + trNorm(r.location);
+    if(seen.has(key)) return vFail('There are two ' + r.scope + ' rates for ' + trRateLabel(r) + '.'); seen.add(key);
+    rates.push(r);
+  }
+  const prev = vehSettings.travel || {};
+  vehSettings = Object.assign({}, vehSettings, { travel:Object.assign({}, prev, { rates, memoPrefix:String(o.memoPrefix || '').trim() || '(MEMO)FDC/FDC/', memoFrom:o.memoFrom || '', memoTo:o.memoTo || '', memoCc:o.memoCc || '', signName:o.signName || '', signDesig:o.signDesig || '' }) });
   await persistVehSettings(); closeModal(); rerenderMain(); toast('DSA rates saved.');
 }
 
@@ -5509,6 +5565,26 @@ function rhSections(){
         ...UT_TYPE_LIST.map(t => { const tb = bills.filter(b => (utAcc(b.accountId) || {}).type === t), u = tb.reduce((a, b) => a + utUnits(b), 0); return [t, fmtMVR(tb.reduce((a, b) => a + vNum(b.amount), 0)), u ? fmtNum(Math.round(u)) + ' ' + UT_TYPES[t].unit : cnt(tb.length, 'invoice')]; }),
         ['Unpaid invoices now', fmtNum(unpaid.length), fmtMVR(unpaid.reduce((t, b) => t + vNum(b.amount), 0))], ['Overdue now', fmtNum(od.length), fmtMVR(od.reduce((t, b) => t + vNum(b.amount), 0))]],
       lists:[{ title:'Cost by location', items: top(byLoc, 6).map(([k, v]) => [k, fmtMVR(v)]) }] };
+  });
+  safe(() => {
+    const inTrip = t => t.fromDate && t.fromDate <= R.to && (t.toDate || t.fromDate) >= R.from;      // trips that fall in the period, even partly
+    const tr = state.travelRequests.filter(inTrip), loc = tr.filter(t => (t.scope || 'local') === 'local'), frn = tr.filter(t => t.scope === 'foreign');
+    const dsa = {}; tr.forEach(t => { const v = trDsaTotal(t); if(v) dsa[trCur(t)] = pcRound((dsa[trCur(t)] || 0) + v); });
+    const ppl = tr.reduce((a, t) => a + trParts(t).length, 0), pDays = tr.reduce((a, t) => a + trDays(t.fromDate, t.toDate) * trParts(t).length, 0);
+    const all = state.travelRequests, st = k => all.filter(t => (t.status || 'Open') === k).length;
+    const unsigned = all.filter(t => trDsaOn(t) && !(t.dsa || {}).memoUrl && (t.status || 'Open') !== 'Closed').length, noTicket = all.filter(t => !trTicketInfo(t) && (t.status || 'Open') !== 'Closed').length;
+    const byDest = {}, byPerson = {}, byTicket = {};
+    tr.forEach(t => { const k = (t.scope === 'foreign' ? (t.country || 'Abroad') + ' – ' : '') + (t.rateLocation || t.destination || '—'); byDest[k] = (byDest[k] || 0) + 1;
+      trParts(t).forEach(pp => { byPerson[pp.name] = (byPerson[pp.name] || 0) + trDays(t.fromDate, t.toDate); });
+      const ti = trTicketInfo(t); if(ti && ti.kind !== 'none'){ byTicket[ti.kind] = pcRound((byTicket[ti.kind] || 0) + vNum(ti.amount)); } });
+    const curs = Object.keys(dsa).sort((a, b) => a === 'MVR' ? -1 : b === 'MVR' ? 1 : a.localeCompare(b));
+    return { key:'travel', title:'Travel', icon:'plane', link:'travel-local', linkLabel:'Local Travel',
+      rows:[['Trips', cnt(tr.length, 'trip'), fmtNum(loc.length) + ' local · ' + fmtNum(frn.length) + ' foreign'], ['Travellers', fmtNum(ppl), fmtNum(pDays) + ' person-days'],
+        ...(curs.length ? curs.map(c => ['DSA (' + c + ')', trMoney(c, dsa[c]), cnt(tr.filter(t => trDsaOn(t) && trCur(t) === c).length, 'trip')]) : [['DSA', '—', 'none in the period']]),
+        ['Open now', fmtNum(st('Open'))], ['Pending now', fmtNum(st('Pending'))], ['Closed', fmtNum(st('Closed')), 'all time'],
+        ['Memos not signed', fmtNum(unsigned), 'trips not closed'], ['Tickets not linked', fmtNum(noTicket), 'trips not closed']],
+      lists:[{ title:'Trips by destination', items: top(byDest, 6).map(([k, v]) => [k, cnt(v, 'trip')]) }, { title:'Travel days by person', items: top(byPerson, 6).map(([k, v]) => [k, cnt(v, 'day')]) },
+        ...(Object.keys(byTicket).length ? [{ title:'Tickets', items: Object.entries(byTicket).map(([k, v]) => [k === 'PR' ? 'Through PRs' : 'Through petty cash', fmtMVR(v)]) }] : [])] };
   });
   return out;
 }
@@ -6664,6 +6740,17 @@ function dashboardModuleSummary(){
       return card('utility-report', 'bolt', 'Utilities',
         [metric(vMoney0(cost('')), 'All utilities this month'), metric(vMoney0(cost('Electricity')), 'Electricity this month'), metric(fmtNum(unpaid.length), 'Unpaid invoices')],
         [od ? note(plural(od, 'invoice') + ' overdue', 'crit') : '', al.length - od ? note(plural(al.length - od, 'invoice') + ' due within a week', 'warn') : '', !state.utilityAccounts.length ? note('No accounts set up yet') : '']);
+    }),
+    safe(() => {
+      const month = localDateStr(new Date()).slice(0, 7), today = vToday(), wk = localDateStr(new Date(Date.now() + 7 * 86400000)), all = state.travelRequests;
+      const mo = all.filter(t => String(t.fromDate || '').slice(0, 7) === month), pend = all.filter(t => t.status === 'Pending').length, open = all.filter(t => (t.status || 'Open') === 'Open').length;
+      const away = all.filter(t => t.fromDate && t.fromDate <= today && (t.toDate || t.fromDate) >= today && t.status !== 'Closed').reduce((a, t) => a + trParts(t).length, 0);
+      const soon = all.filter(t => t.fromDate > today && t.fromDate <= wk && t.status !== 'Closed').length;
+      const unsigned = all.filter(t => trDsaOn(t) && !(t.dsa || {}).memoUrl && t.status !== 'Closed').length, noTicket = all.filter(t => !trTicketInfo(t) && t.status !== 'Closed').length;
+      const dsaM = mo.filter(t => trCur(t) === 'MVR').reduce((a, t) => a + trDsaTotal(t), 0);
+      return card('travel-local', 'plane', 'Travel',
+        [metric(fmtNum(mo.length), 'Trips this month'), metric('MVR ' + Math.round(dsaM).toLocaleString('en-US'), 'DSA this month'), metric(fmtNum(open + pend), 'Open / pending')],
+        [away ? note(plural(away, 'person', 'people') + ' travelling now') : '', soon ? note(plural(soon, 'trip') + ' in the next 7 days') : '', pend ? note(fmtNum(pend) + ' pending', 'warn') : '', unsigned ? note(plural(unsigned, 'memo') + ' not signed', 'warn') : '', noTicket ? note(plural(noTicket, 'ticket') + ' not linked', 'warn') : '', !all.length ? note('No trips yet') : '']);
     }),
     safe(() => {
       const prs = state.purchaseRequisitions, by = id => prs.filter(p => (p.status || 'open') === id).length;

@@ -5268,7 +5268,7 @@ function viewLeavePlan(){
     const hdr = days.map(iso => { const we = lvWeekend(iso), h = hol[iso]; return `<th class="p-0 text-center ${h ? 'cursor-pointer' : ''}" ${h ? `onclick="openLvHolidayView('${iso}')"` : ''} title="${esc(vDate(iso) + (h ? ' · ' + h : ''))}"><div class="text-[8.5px] font-semibold leading-tight ${we || h ? 'text-rose-500' : 'text-slate-400'}">${'SMTWTFS'[lvDow(iso)]}</div><div class="text-[10px] font-bold leading-tight ${iso === vToday() ? 'text-brand-600' : 'text-slate-600'}">${+iso.slice(8)}</div></th>`; }).join('');
     const rowOf = s => { const d = (lvDoc(s.key, year) || {}).days || {}, ed = lvCanEdit(s.key), mine = authUser && s.key === 'u:' + authUser.uid;
       const mcodes = days.map(iso => d[iso.slice(5)]).filter(lvIsLeave), n = mcodes.length, sch = lvType(lvDefaultSched(s.key, days[0]));
-      return `<tr class="border-t border-slate-100"><td class="py-0.5 pl-3 pr-1 sticky left-0 bg-white z-[1]"><button type="button" onclick="openLvPerson('${esc(s.key)}')" title="${esc(s.name + (s.designation ? ' · ' + s.designation : '') + (s.department ? ' · ' + s.department : '') + ' · ' + (sch.short || sch.code) + ' ' + lvHours(sch))}" class="block w-full text-left truncate text-[11.5px] font-semibold text-slate-800 hover:text-brand-600">${esc(s.name)}${mine ? ' <span class="text-[9.5px] text-brand-600">(you)</span>' : ''}${s.designation && s.designation !== s.level ? ` <span class="text-[9.5px] font-normal text-slate-400">${esc(s.designation)}</span>` : ''}</button></td>
+      return `<tr class="border-t border-slate-100"><td class="py-0.5 pl-3 pr-1 sticky left-0 bg-white z-[1]"><button type="button" onclick="openLvPerson('${esc(s.key)}')" title="${esc(s.name + (s.designation ? ' · ' + s.designation : '') + (s.department ? ' · ' + s.department : '') + ' · ' + (sch.short || sch.code) + ' ' + lvHours(sch))}" class="block w-full text-left truncate text-[11.5px] font-semibold text-slate-800 hover:text-brand-600">${esc(s.name)}${mine ? ' <span class="text-[9.5px] text-brand-600">(you)</span>' : ''}</button></td>
         ${days.map(iso => { const c = d[iso.slice(5)], t = c ? lvType(c) : null, off = !lvWorks(s.key, iso, c), h = hol[iso], mk = lvMarks(s.key, s.name, iso);
           const at = (a => a)((((lvDoc(s.key, year) || {}).att) || {})[iso.slice(5)] || {});
           const tip = s.name + ' · ' + vDate(iso) + (t ? ' · ' + t.name + (t.from ? ' (' + lvHours(t) + ')' : '') : off ? ' · day off' : '') + (h ? ' · ' + h : '') + mk.map(m => ' · ' + m.text).join('') + (lvAttText(at) ? ' · ' + lvAttText(at) : '');
@@ -12681,7 +12681,7 @@ function hoSignStatusHtml(h, side){
     const mine = authUser && sig.uid === authUser.uid;
     return `<div class="mt-2.5 flex items-center gap-2 flex-wrap" title="Signed by ${esc(sig.name)} on ${esc(new Date(sig.signedAt).toLocaleString())}">
       <span class="text-xs font-semibold text-emerald-600">✓ Signed ${esc(hoSignedDate(sig))}</span>
-      ${mine ? `<button type="button" onclick="withdrawHandoverSignature('${h.id}','${side}')" class="text-[11px] text-slate-400 hover:text-rose-600 underline">Withdraw</button>` : ''}
+
     </div>`;
   }
   if(h.fileUrl) return `<div class="mt-2.5 text-xs font-semibold text-emerald-600" title="A link to the signed handover form is attached">✓ Signed form attached</div>`;

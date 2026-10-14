@@ -1626,6 +1626,7 @@ const ICONS = {
   vehicle:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11l1.5-4.5A2 2 0 0 1 6.4 5h7.2a2 2 0 0 1 1.9 1.5L17 11"/><rect x="2.5" y="11" width="15" height="4.5" rx="1.5"/><circle cx="6" cy="13.3" r=".7"/><circle cx="14" cy="13.3" r=".7"/></svg>',
   fuel:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 17V4.5A1.5 1.5 0 0 1 5.5 3h5A1.5 1.5 0 0 1 12 4.5V17"/><path d="M3 17h10"/><path d="M6 6.5h4"/><path d="M12 8h1.5A1.5 1.5 0 0 1 15 9.5V13a1 1 0 0 0 2 0V7l-2-2"/></svg>',
   service:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12.5 3a4 4 0 0 0-3.7 5.4L3.5 13.7a1.6 1.6 0 0 0 2.3 2.3l5.3-5.3A4 4 0 0 0 16.5 7.5l-2.3 2.3-2-.5-.5-2 2.3-2.3A4 4 0 0 0 12.5 3z"/></svg>',
+  calendar:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="4" width="14" height="13" rx="1.5"/><path d="M3 8h14M7 2.5v3M13 2.5v3M6.5 11h2M11.5 11h2M6.5 14h2"/></svg>',
   broom:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M14.5 2.5 10 8.5"/><path d="M6.5 8.5h6l1.5 3.5H5z"/><path d="M5 12l-1.2 5.5M8 12l-.5 5.5M11 12l.5 5.5M14 12l1.2 5.5"/></svg>',
   vlog:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="3.5" width="12" height="14" rx="1.5"/><path d="M7.5 3.5V2.5h5v1M7 8h6M7 11h6M7 14h3.5"/></svg>',
   plane:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8.5 11.5 3 9.5l1.2-1.2 5.8.6 3.6-3.6c.8-.8 2-.9 2.4-.5s.3 1.6-.5 2.4L11.9 10.8l.6 5.8-1.2 1.2-2-5.5-2.6 2.4.2 1.8-1 1-1-2.6-2.6-1 1-1 1.8.2z"/></svg>',
@@ -1653,7 +1654,10 @@ function currentNav(){
   const nUnbal = cntOf(() => pcFundList().filter(f => { const rc = pcReconcile(f); return rc.counted && Math.abs(rc.diff) >= 0.005; }).length);
   const nav = [
     { id:'dashboard', label:'Dashboard', icon:'dashboard' },
-    { id:'reports', label:'Reports', icon:'statement' },
+    { section:'Reports' },
+    { id:'reports', label:'Summary Report', icon:'statement' },
+    { id:'weekly-report', label:'Department Weekly Report', icon:'vlog' },
+    { id:'leave-plan', label:'Staff Leave Plan', icon:'calendar' },
     { section:'Stock' },
     { id:'products', label:'Items', icon:'products' },
     { id:'levels', label:'Stock Levels', icon:'levels' },
@@ -1724,6 +1728,7 @@ function renderNav(){
   }).join('');
 }
 function goTo(tab){
+  if(tab === 'weekly-report' && typeof vehUi !== 'undefined') vehUi.wrId = '';      // the menu always opens the list of reports
   ui.tab = tab;
   toggleSidebar(false);
   render();
@@ -1844,6 +1849,8 @@ const VEH_COLS = {
   vehicleLogs:      { collection:'fdc_inventory_vehicle_logs',          label:'vehicle log entries', one:'vehicle log entry' },
   cleaningTemplates:{ collection:'fdc_inventory_cleaning_templates',    label:'cleaning checklists', one:'cleaning checklist' },
   cleaningSheets:   { collection:'fdc_inventory_cleaning_sheets',       label:'weekly cleaning checklists', one:'weekly cleaning checklist' },
+  leavePlans:       { collection:'fdc_inventory_leave_plans',           label:'leave plans', one:'leave plan' },
+  weeklyReports:    { collection:'fdc_inventory_weekly_reports',        label:'weekly reports', one:'weekly report' },
 };
 const vehRefs = {}, vehUnsubs = {};
 let vehSettingsUnsub = null;
@@ -5146,6 +5153,336 @@ function viewPettyCashStatement(){
 
 
 /* =====================================================================
+   STAFF LEAVE PLAN — a year grid per staff member (like Department Leave Plan.xlsx): each day can carry a
+   leave code (AL, SL, BD, WA …). Staff mark their own days; admins can mark anyone's. Every staff member of
+   the app is listed, plus staff without a login (added by an admin or imported from the Excel plan).
+===================================================================== */
+const LV_DEFAULT_TYPES = [
+  { code:'AL', name:'Annual Leave', color:'#66FFFF' }, { code:'SL', name:'Sick Leave', color:'#F9A8D4' }, { code:'BD', name:'Birthday Leave', color:'#C4B5FD' },
+  { code:'WA', name:'Wedding Anniversary Leave', color:'#FDE68A' }, { code:'FR', name:'Family Responsibility Leave', color:'#A7F3D0' }, { code:'ML', name:'Maternity / Paternity Leave', color:'#FFFF00' },
+  { code:'NP', name:'No Pay Leave', color:'#D1D5DB' }, { code:'OD', name:'Official Duty / Training', color:'#BAE6FD' },
+  { code:'S1', name:'Shift 1', color:'#FED7AA' }, { code:'S2', name:'Shift 2', color:'#FDBA74' }, { code:'R1', name:'Roster 1', color:'#E9D5FF' } ];
+const LV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const lvTypes = () => (vehSettings.leaveTypes && vehSettings.leaveTypes.length ? vehSettings.leaveTypes : LV_DEFAULT_TYPES);
+const lvType = code => lvTypes().find(t => t.code === code) || { code, name:code, color:'#E5E7EB' };
+const lvHolidays = () => vehSettings.leaveHolidays || {};
+const lvSlug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const lvIso = (y, m, d) => y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+const lvDim = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+const lvDow = iso => new Date(iso + 'T00:00:00Z').getUTCDay();
+const lvWeekend = iso => { const d = lvDow(iso); return d === 5 || d === 6; };               // Friday and Saturday
+// everyone on the plan: the app's staff, staff added by hand, and anyone already on this year's plan
+function lvStaff(year){
+  const out = [], seen = new Set(), add = (key, name, dept, extra) => { if(!name || seen.has(key)) return; seen.add(key); out.push({ key, name, department:dept || '', extra:!!extra }); };
+  const hidden = new Set(vehSettings.leaveHidden || []);
+  state.profiles.forEach(p => { if(p.uid && !hidden.has('u:' + p.uid)) add('u:' + p.uid, p.name || p.email, p.department); });
+  (vehSettings.leaveStaff || []).forEach(s => { if(!hidden.has('x:' + lvSlug(s.name))) add('x:' + lvSlug(s.name), s.name, s.department, true); });
+  state.leavePlans.filter(d => d.year === year && !hidden.has(d.staffKey)).forEach(d => add(d.staffKey, d.name, d.department, d.staffKey.startsWith('x:')));
+  const order = vehSettings.leaveOrder || [];
+  return out.sort((a, b) => { const ia = order.indexOf(a.key), ib = order.indexOf(b.key); if(ia >= 0 || ib >= 0) return (ia < 0 ? 1e6 : ia) - (ib < 0 ? 1e6 : ib); return String(a.department).localeCompare(String(b.department)) || a.name.localeCompare(b.name); });
+}
+const lvDoc = (key, year) => state.leavePlans.find(d => d.staffKey === key && d.year === year) || null;
+const lvCanEdit = key => !authUser || canManageInventory() || key === 'u:' + authUser.uid;
+const lvCount = (days, code) => Object.values(days || {}).filter(c => !code || c === code).length;
+
+function viewLeavePlan(){
+  const year = vehUi.lvYear || (vehUi.lvYear = +vToday().slice(0, 4)), mode = vehUi.lvMonth == null ? (vehUi.lvMonth = +vToday().slice(5, 7)) : vehUi.lvMonth, admin = canManageInventory();
+  const staff = lvStaff(year), types = lvTypes(), brush = vehUi.lvBrush == null ? 'AL' : vehUi.lvBrush, hol = lvHolidays();
+  const monthTabs = `<div class="inline-flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-1 gap-1">${LV_MONTHS.map((m, i) => `<button onclick="vehUi.lvMonth=${i + 1}; rerenderMain()" class="px-2.5 py-1.5 rounded-md text-[12.5px] font-semibold whitespace-nowrap ${mode === i + 1 ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${m.slice(0, 3)}</button>`).join('')}<button onclick="vehUi.lvMonth=0; rerenderMain()" class="px-2.5 py-1.5 rounded-md text-[12.5px] font-semibold whitespace-nowrap ${mode === 0 ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">Year summary</button></div>`;
+  const head = vHead('Staff Leave Plan', 'Each staff member marks their planned leave for the year; admins can mark and adjust anyone\'s. Fridays and Saturdays and public holidays are shaded.',
+    (admin ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">Import from Excel<input type="file" accept=".xlsx" class="hidden" onchange="lvImportFile(this)"></label>` + vBtnPlain('Staff list', 'openLvStaff()') + vBtnPlain('Leave types & holidays', 'openLvTypes()') : '') + vBtnPlain('Export CSV', 'lvExportCsv()'));
+  const yearSel = `<div class="flex items-center gap-2"><button onclick="vehUi.lvYear--; rerenderMain()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 !px-3">‹</button><span class="text-lg font-extrabold text-slate-900 num">${year}</span><button onclick="vehUi.lvYear++; rerenderMain()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 !px-3">›</button></div>`;
+  const brushBar = `<div class="flex items-center gap-1.5 flex-wrap mb-3"><span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mr-1">Mark days as</span>${types.map(t => `<button onclick="vehUi.lvBrush='${esc(t.code)}'; rerenderMain()" title="${esc(t.name)}" class="px-2 py-1 rounded-md text-[11.5px] font-bold border ${brush === t.code ? 'ring-2 ring-brand-500 border-transparent' : 'border-slate-300'}" style="background:${esc(t.color)};color:#111">${esc(t.code)} <span class="font-normal">${esc(t.name)}</span></button>`).join('')}<button onclick="vehUi.lvBrush=''; rerenderMain()" class="px-2 py-1 rounded-md text-[11.5px] font-bold border ${!brush ? 'ring-2 ring-brand-500 border-transparent' : 'border-slate-300'} text-slate-600">✕ Clear</button>
+    <span class="text-[11px] text-slate-400 ml-2">Click a day, or drag across days. ${admin ? 'You can edit everyone.' : 'You can edit your own row.'}</span><button onclick="openLvRange()" class="ml-auto text-xs font-semibold text-brand-600 hover:underline">+ Add leave by dates</button></div>`;
+  let body;
+  if(mode === 0){
+    const counted = types.map(t => t.code);
+    body = vTableWrap(`<table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100"><th class="py-2 pl-5 pr-3">Staff</th>${LV_MONTHS.map(m => `<th class="py-2 px-1.5 text-center">${m.slice(0, 3)}</th>`).join('')}${counted.map(c => `<th class="py-2 px-1.5 text-center" title="${esc(lvType(c).name)}"><span class="px-1 rounded" style="background:${esc(lvType(c).color)};color:#111">${esc(c)}</span></th>`).join('')}<th class="py-2 pr-5 pl-2 text-right">Total</th></tr></thead><tbody>${staff.map(s => { const d = (lvDoc(s.key, year) || {}).days || {}; return `<tr class="${vTr}"><td class="py-2 pl-5 pr-3"><div class="font-semibold text-slate-800">${esc(s.name)}</div><div class="text-[11px] text-slate-400">${esc(s.department || '')}</div></td>${LV_MONTHS.map((m, i) => { const n = Object.keys(d).filter(k => +k.slice(0, 2) === i + 1).length; return `<td class="py-2 px-1.5 text-center num ${n ? 'font-semibold text-slate-800' : 'text-slate-300'}">${n || '·'}</td>`; }).join('')}${counted.map(c => { const n = lvCount(d, c); return `<td class="py-2 px-1.5 text-center num ${n ? 'font-semibold' : 'text-slate-300'}">${n || '·'}</td>`; }).join('')}<td class="py-2 pr-5 pl-2 text-right num font-extrabold">${lvCount(d)}</td></tr>`; }).join('')}</tbody></table>`);
+  } else {
+    const dim = lvDim(year, mode), days = Array.from({ length:dim }, (x, i) => lvIso(year, mode, i + 1));
+    const hdr = days.map(iso => { const we = lvWeekend(iso), h = hol[iso]; return `<th class="px-0 py-1.5 text-center w-7 min-w-[1.75rem] ${we ? 'bg-rose-50' : h ? 'bg-amber-50' : ''}" title="${esc(h || '')}"><div class="text-[9.5px] font-semibold ${we ? 'text-rose-500' : 'text-slate-400'}">${'SMTWTFS'[lvDow(iso)]}</div><div class="text-[11px] font-bold ${iso === vToday() ? 'text-brand-600' : 'text-slate-600'}">${+iso.slice(8)}</div></th>`; }).join('');
+    const rows = staff.map(s => { const d = (lvDoc(s.key, year) || {}).days || {}, ed = lvCanEdit(s.key), mine = authUser && s.key === 'u:' + authUser.uid, n = Object.keys(d).filter(k => +k.slice(0, 2) === mode).length;
+      return `<tr class="border-t border-slate-100 ${mine ? 'bg-brand-50/40' : ''}"><td class="py-1 pl-4 pr-2 whitespace-nowrap sticky left-0 bg-white z-[1]"><div class="text-[12.5px] font-semibold text-slate-800 leading-tight">${esc(s.name)}${mine ? ' <span class="text-[10px] text-brand-600">(you)</span>' : ''}</div><div class="text-[10.5px] text-slate-400 leading-tight">${esc(s.department || '')}</div></td>
+        ${days.map(iso => { const c = d[iso.slice(5)], t = c ? lvType(c) : null, we = lvWeekend(iso), h = hol[iso];
+          return `<td class="lv-c p-0 text-center border-l border-slate-100 ${ed ? 'cursor-pointer' : ''} ${!t && we ? 'bg-rose-50' : !t && h ? 'bg-amber-50' : ''}" ${ed ? `data-k="${esc(s.key)}" data-d="${iso}" onmousedown="lvDown(event, this)" onmouseenter="lvOver(this)"` : ''} ${t ? `style="background:${esc(t.color)}"` : ''} title="${esc(s.name + ' · ' + vDate(iso) + (t ? ' · ' + t.name : '') + (h ? ' · ' + h : ''))}"><span class="text-[10px] font-bold text-slate-900">${t ? esc(c) : ''}</span></td>`; }).join('')}
+        <td class="py-1 px-2 text-right text-[11px] num text-slate-500">${n || ''}</td></tr>`; }).join('');
+    body = `<div class="bg-white rounded-xl border border-slate-200 overflow-x-auto mb-6 select-none" onmouseleave="lvUp()"><table class="text-sm border-collapse"><thead><tr><th class="py-2 pl-4 pr-2 text-left text-[11px] uppercase tracking-wide text-slate-400 sticky left-0 bg-white z-[1]">${LV_MONTHS[mode - 1]} ${year}</th>${hdr}<th class="px-2 text-[10px] text-slate-400">Days</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  const onLeave = staff.filter(s => ((lvDoc(s.key, year) || {}).days || {})[vToday().slice(5)] && +vToday().slice(0, 4) === year);
+  return head + `<div class="flex items-center justify-between gap-3 flex-wrap mb-4">${yearSel}${onLeave.length ? `<div class="text-xs text-slate-500">On leave today: ${onLeave.map(s => `<b class="text-slate-700">${esc(s.name)}</b> (${esc(((lvDoc(s.key, year) || {}).days || {})[vToday().slice(5)])})`).join(', ')}</div>` : ''}</div>
+    <div class="mb-4">${monthTabs}</div>${mode ? brushBar : ''}${body}
+    <div class="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-slate-500 mb-6">${types.map(t => `<span class="inline-flex items-center gap-1.5"><span class="px-1 rounded font-bold" style="background:${esc(t.color)};color:#111">${esc(t.code)}</span>${esc(t.name)}</span>`).join('')}<span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded bg-rose-50 border border-rose-200"></span>Fri / Sat</span><span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded bg-amber-50 border border-amber-200"></span>Public holiday</span></div>`;
+}
+// painting days: press on a day, drag across; saved when the mouse is released
+let lvPaint = null;
+function lvDown(e, td){ e.preventDefault(); const code = vehUi.lvBrush == null ? 'AL' : vehUi.lvBrush, d = lvDayOf(td.dataset.k, td.dataset.d); const erase = code && d === code; lvPaint = { code:erase ? '' : code, key:td.dataset.k, cells:new Map() }; lvApply(td); document.addEventListener('mouseup', lvUp, { once:true }); }
+function lvOver(td){ if(lvPaint && td.dataset.k === lvPaint.key) lvApply(td); }
+function lvDayOf(key, iso){ return ((lvDoc(key, +iso.slice(0, 4)) || {}).days || {})[iso.slice(5)] || ''; }
+function lvApply(td){ const t = lvPaint.code ? lvType(lvPaint.code) : null; lvPaint.cells.set(td.dataset.d, lvPaint.code); td.style.background = t ? t.color : ''; td.querySelector('span').textContent = lvPaint.code || ''; }
+async function lvUp(){
+  if(!lvPaint) return; const p = lvPaint; lvPaint = null; if(!p.cells.size) return;
+  const byYear = {}; p.cells.forEach((code, iso) => { (byYear[iso.slice(0, 4)] = byYear[iso.slice(0, 4)] || []).push([iso, code]); });
+  for(const y of Object.keys(byYear)) await lvSetDays(p.key, +y, byYear[y]);
+  rerenderMain();
+}
+async function lvSetDays(key, year, list){
+  if(!lvCanEdit(key)){ toast('You can only change your own leave plan.', true); return; }
+  const doc = lvDoc(key, year), s = lvStaff(year).find(x => x.key === key) || {}, days = Object.assign({}, (doc || {}).days || {});
+  list.forEach(([iso, code]) => { const k = iso.slice(5); if(code) days[k] = code; else delete days[k]; });
+  await vehSave('leavePlans', { id:doc ? doc.id : undefined, staffKey:key, year, name:s.name || (doc || {}).name || '', department:s.department || (doc || {}).department || '', days });
+}
+function openLvRange(){
+  const year = vehUi.lvYear, staff = lvStaff(year).filter(s => lvCanEdit(s.key)), me = authUser ? 'u:' + authUser.uid : '';
+  openModal('Add leave by dates', vFormOpen + vGrid(2, vS('Staff', 'key', staff.map(s => [s.key, s.name + (s.department ? ' — ' + s.department : '')]), staff.some(s => s.key === me) ? me : (staff[0] || {}).key, null, { req:1, span:'sm:col-span-2' }) +
+    vS('Leave type', 'code', lvTypes().map(t => [t.code, t.code + ' — ' + t.name]), vehUi.lvBrush || 'AL', null, { req:1, span:'sm:col-span-2' }) + vF('From', 'from', '', 'date', { req:1 }) + vF('To', 'to', '', 'date', { req:1 })) +
+    `<label class="flex items-center gap-2 text-sm text-slate-700 mt-3"><input type="checkbox" name="skipWe" value="1" checked> Skip Fridays, Saturdays and public holidays</label>
+     <label class="flex items-center gap-2 text-sm text-slate-700 mt-1.5"><input type="checkbox" name="clear" value="1"> Clear these days instead</label>` + vFoot('Save', 'saveLvRange()'));
+}
+async function saveLvRange(){
+  const f = document.getElementById('vform'), o = vehFormObj(f); if(!o.key) return vFail('Choose the staff member.'); if(!o.from || !o.to) return vFail('Enter the dates.'); if(o.to < o.from) return vFail('The end is before the start.');
+  if(o.to.slice(0, 4) - o.from.slice(0, 4) > 1) return vFail('Choose a shorter range.');
+  const hol = lvHolidays(), list = []; for(let d = o.from; d <= o.to; d = clIsoAdd(d, 1)){ if(f.skipWe.checked && (lvWeekend(d) || hol[d])) continue; list.push([d, f.clear.checked ? '' : o.code]); }
+  if(!list.length) return vFail('No working days in that range.');
+  const byYear = {}; list.forEach(x => { (byYear[x[0].slice(0, 4)] = byYear[x[0].slice(0, 4)] || []).push(x); });
+  for(const y of Object.keys(byYear)) await lvSetDays(o.key, +y, byYear[y]);
+  closeModal(); rerenderMain(); toast((f.clear.checked ? 'Cleared ' : 'Marked ') + list.length + ' day' + (list.length === 1 ? '' : 's') + '.');
+}
+/* ---------- admin: staff without a login, leave types, public holidays ---------- */
+function openLvStaff(){
+  if(!canManageInventory()) return; const year = vehUi.lvYear, hidden = new Set(vehUi._lvHid = (vehSettings.leaveHidden || []).slice());
+  const all = lvStaffAll(year);
+  openModal('Staff on the leave plan', vFormOpen + `<p class="text-sm text-slate-500 mb-3">Everyone with a login is listed automatically. Add staff without a login (e.g. cleaners), untick anyone who should not appear, and drag to set the order.</p>
+    <div id="lv-staff-box" class="space-y-1.5 max-h-[45vh] overflow-y-auto pr-1">${all.map(s => `<div class="ut-arr lv-s flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5" draggable="true" data-id="${esc(s.key)}" ondragstart="utDragStart(event)" ondragover="utDragOver(event)" ondrop="utDrop(event)"><span class="text-slate-300 cursor-grab">⋮⋮</span><span class="ut-arr-n hidden"></span><input type="checkbox" class="lv-show" ${hidden.has(s.key) ? '' : 'checked'}><span class="flex-1 text-sm font-semibold text-slate-800 truncate">${esc(s.name)}</span><span class="text-[11px] text-slate-400">${esc(s.department || '')}${s.extra ? ' · no login' : ''}</span>${s.extra ? `<button type="button" onclick="this.closest('.lv-s').remove()" class="px-1 text-slate-400 hover:text-rose-600" title="Remove">×</button>` : ''}</div>`).join('')}</div>
+    ${vSec('Add staff without a login')}<div class="grid grid-cols-[1fr_1fr_auto] gap-2"><input id="lv-new-name" placeholder="Name" class="${VEH_FIELD}"><input id="lv-new-dept" placeholder="Department" list="lv-depts" class="${VEH_FIELD}"><button type="button" onclick="lvAddStaffRow()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Add</button></div><datalist id="lv-depts">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist>` + vFoot('Save', 'saveLvStaff()'), true);
+}
+function lvStaffAll(year){ const keep = vehSettings.leaveHidden; vehSettings.leaveHidden = []; const l = lvStaff(year); vehSettings.leaveHidden = keep; return l; }
+function lvAddStaffRow(){ const n = document.getElementById('lv-new-name'), d = document.getElementById('lv-new-dept'); if(!n.value.trim()) return; const key = 'x:' + lvSlug(n.value);
+  if(document.querySelector('#lv-staff-box [data-id="' + key + '"]')){ toast(n.value + ' is already on the list.', true); return; }
+  document.getElementById('lv-staff-box').insertAdjacentHTML('beforeend', `<div class="ut-arr lv-s flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5" draggable="true" data-id="${esc(key)}" data-name="${esc(n.value.trim())}" data-dept="${esc(d.value.trim())}" ondragstart="utDragStart(event)" ondragover="utDragOver(event)" ondrop="utDrop(event)"><span class="text-slate-300 cursor-grab">⋮⋮</span><span class="ut-arr-n hidden"></span><input type="checkbox" class="lv-show" checked><span class="flex-1 text-sm font-semibold text-slate-800 truncate">${esc(n.value.trim())}</span><span class="text-[11px] text-slate-400">${esc(d.value.trim())} · no login</span><button type="button" onclick="this.closest('.lv-s').remove()" class="px-1 text-slate-400 hover:text-rose-600">×</button></div>`); n.value = ''; d.value = ''; n.focus(); }
+async function saveLvStaff(){
+  const rows = [...document.querySelectorAll('#lv-staff-box .lv-s')], year = vehUi.lvYear, all = lvStaffAll(year);
+  const extras = rows.filter(r => r.dataset.id.startsWith('x:')).map(r => { const s = all.find(x => x.key === r.dataset.id); return { name:s ? s.name : r.dataset.name, department:s ? s.department : r.dataset.dept || '' }; });
+  vehSettings = Object.assign({}, vehSettings, { leaveStaff:extras, leaveHidden:rows.filter(r => !r.querySelector('.lv-show').checked).map(r => r.dataset.id), leaveOrder:rows.map(r => r.dataset.id) });
+  await persistVehSettings(); closeModal(); rerenderMain(); toast('Staff list saved.');
+}
+function openLvTypes(){
+  if(!canManageInventory()) return; const hol = lvHolidays(), y = String(vehUi.lvYear);
+  const trow = t => `<div class="lv-t grid grid-cols-[4rem_1fr_3rem_auto] gap-2 items-center"><input value="${esc(t.code || '')}" maxlength="4" placeholder="Code" class="lv-t-code ${VEH_FIELD} !py-1.5 uppercase font-bold"><input value="${esc(t.name || '')}" placeholder="Name" class="lv-t-name ${VEH_FIELD} !py-1.5"><input type="color" value="${esc(t.color || '#e5e7eb')}" class="lv-t-color h-9 w-12 rounded border border-slate-300"><button type="button" onclick="this.closest('.lv-t').remove()" class="px-1.5 text-slate-400 hover:text-rose-600 text-lg leading-none">×</button></div>`;
+  openModal('Leave types & public holidays', vFormOpen + vSec('Leave types') + `<div id="lv-types" class="space-y-2">${lvTypes().map(trow).join('')}</div><button type="button" onclick="document.getElementById('lv-types').insertAdjacentHTML('beforeend', window.__lvTrow({}))" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ Add type</button>` +
+    vSec('Public holidays ' + y) + `<p class="text-[11.5px] text-slate-400 mb-2">One per line: date and name, e.g. <span class="font-mono">2026-03-20 Eid al-Fitr</span>. These days are shaded and skipped when adding leave by dates.</p>` +
+    `<textarea name="hol" rows="8" class="${VEH_FIELD} font-mono text-[12.5px]">${esc(Object.keys(hol).filter(d => d.startsWith(y)).sort().map(d => d + ' ' + hol[d]).join('\n'))}</textarea>` + vFoot('Save', `saveLvTypes('${y}')`), true);
+  window.__lvTrow = trow;
+}
+async function saveLvTypes(y){
+  const f = document.getElementById('vform'), types = [...f.querySelectorAll('.lv-t')].map(r => ({ code:r.querySelector('.lv-t-code').value.trim().toUpperCase(), name:r.querySelector('.lv-t-name').value.trim(), color:r.querySelector('.lv-t-color').value })).filter(t => t.code);
+  if(new Set(types.map(t => t.code)).size !== types.length) return vFail('Two leave types have the same code.');
+  const hol = Object.assign({}, lvHolidays()); Object.keys(hol).filter(d => d.startsWith(y)).forEach(d => delete hol[d]);
+  for(const ln of f.hol.value.split('\n').map(x => x.trim()).filter(Boolean)){ const d = pcFindDates(ln)[0]; if(!d) return vFail('Could not read a date in: ' + ln); hol[d] = ln.replace(/^\S+\s*/, '').trim() || 'Public holiday'; }
+  vehSettings = Object.assign({}, vehSettings, { leaveTypes:types.map(t => Object.assign(t, { name:t.name || t.code })), leaveHolidays:hol });
+  await persistVehSettings(); closeModal(); rerenderMain(); toast('Saved.');
+}
+/* ---------- import the Excel plan: year in A1, month names on row 1, day numbers on row 3, a name per row in column A, codes in the day cells ---------- */
+async function lvImportFile(input){
+  const file = input.files[0]; input.value = ''; if(!file) return;
+  if(!canManageInventory()){ toast('Only an admin can import.', true); return; }
+  try{
+    const sheets = await readXlsxWorkbook(await file.arrayBuffer()), out = [];
+    for(const sh of sheets){
+      if(sh.hidden) continue; const g = (r, c) => { const v = sh.cells[r] && sh.cells[r][c]; return v == null ? '' : cellText(v).trim(); };
+      const year = +g(1, 1) || +vehUi.lvYear; let month = 0, yr = year; const colDate = {};
+      for(let c = 2; c <= sh.maxCol; c++){ const m = LV_MONTHS.findIndex(x => x.toLowerCase() === g(1, c).toLowerCase()); if(m >= 0){ if(month && m + 1 < month) yr++; month = m + 1; } const d = +g(3, c); if(month && d >= 1 && d <= 31) colDate[c] = lvIso(yr, month, d); }
+      for(let r = 4; r <= sh.maxRow; r++){ const name = g(r, 1); if(!name) continue; const days = {}; Object.keys(colDate).forEach(c => { const v = g(r, +c).toUpperCase(); if(v && v.length <= 4) days[colDate[c]] = v; }); out.push({ name, days }); }
+    }
+    if(!out.length){ toast('No staff were found. The sheet needs names in column A from row 4, month names on row 1 and day numbers on row 3.', true); return; }
+    const codes = new Set(); out.forEach(x => Object.values(x.days).forEach(c => codes.add(c)));
+    const n = out.reduce((t, x) => t + Object.keys(x.days).length, 0);
+    confirmAction(`Import ${out.length} staff and ${n} marked days from ${file.name}? Days in the file replace the same days on the plan.`, async () => {
+      const types = lvTypes().slice(); codes.forEach(c => { if(!types.some(t => t.code === c)) types.push({ code:c, name:c, color:'#E5E7EB' }); });
+      const extras = (vehSettings.leaveStaff || []).slice(), order = [];
+      for(const x of out){
+        const p = hoFindProfile(x.name), key = p && p.uid ? 'u:' + p.uid : 'x:' + lvSlug(x.name);
+        if(!p && !extras.some(e => lvSlug(e.name) === lvSlug(x.name))) extras.push({ name:x.name, department:'' });
+        order.push(key);
+        const byYear = {}; Object.entries(x.days).forEach(([iso, c]) => { (byYear[iso.slice(0, 4)] = byYear[iso.slice(0, 4)] || []).push([iso, c]); });
+        for(const y of Object.keys(byYear)){ const doc = lvDoc(key, +y), days = Object.assign({}, (doc || {}).days || {}); byYear[y].forEach(([iso, c]) => { days[iso.slice(5)] = c; });
+          await vehSave('leavePlans', { id:doc ? doc.id : undefined, staffKey:key, year:+y, name:p ? p.name : x.name, department:p ? p.department || '' : (doc || {}).department || '', days }); }
+      }
+      vehSettings = Object.assign({}, vehSettings, { leaveTypes:types, leaveStaff:extras, leaveOrder:order.concat((vehSettings.leaveOrder || []).filter(k => !order.includes(k))) }); await persistVehSettings();
+      rerenderMain(); toast('Leave plan imported.' + ([...codes].some(c => !LV_DEFAULT_TYPES.some(t => t.code === c)) ? ' New codes were added under Leave types — give them a name.' : ''));
+    });
+  }catch(e){ console.error(e); toast('Could not read that file: ' + (e && e.message ? e.message : e), true); }
+}
+function lvExportCsv(){
+  const year = vehUi.lvYear, days = []; for(let m = 1; m <= 12; m++) for(let d = 1; d <= lvDim(year, m); d++) days.push(lvIso(year, m, d));
+  const rows = lvStaff(year).map(s => { const d = (lvDoc(s.key, year) || {}).days || {}; return [s.name, s.department].concat(days.map(iso => d[iso.slice(5)] || ''), [lvCount(d)]); });
+  downloadCSV('leave-plan-' + year + '.csv', ['Staff', 'Department'].concat(days.map(iso => LV_MONTHS[+iso.slice(5, 7) - 1].slice(0, 3) + ' ' + +iso.slice(8) + ' ' + 'SMTWTFS'[lvDow(iso)]), ['Total']), rows);
+}
+// staff with leave between two dates, for the weekly report: [{name, department, items:[{code, from, to}]}]
+function lvBetween(from, to){
+  const out = [];
+  lvStaff(+from.slice(0, 4)).concat(+to.slice(0, 4) !== +from.slice(0, 4) ? lvStaff(+to.slice(0, 4)) : []).forEach(s => {
+    if(out.some(x => x.key === s.key)) return; const items = []; let cur = null;
+    for(let d = from; d <= to; d = clIsoAdd(d, 1)){ const c = ((lvDoc(s.key, +d.slice(0, 4)) || {}).days || {})[d.slice(5)];
+      if(c && cur && cur.code === c && clIsoAdd(cur.to, 1) === d) cur.to = d; else if(c){ cur = { code:c, from:d, to:d }; items.push(cur); } else cur = cur && !lvWeekend(d) ? null : cur; }
+    if(items.length) out.push({ key:s.key, name:s.name, department:s.department, items });
+  });
+  return out;
+}
+
+/* =====================================================================
+   DEPARTMENT WEEKLY REPORT — the weekly report of a department (as in "Week 42 - 10th October - 15th October"):
+   document entries, dispatch, stock requests, vehicle management, tasks, purchase requisitions and staff leave.
+   Sections can be filled from the app's own records, then edited; tasks carry over from the last report.
+===================================================================== */
+const WR_ENTRY_DEPTS = ['Bureau', 'Operation', 'HR', 'Administration', 'Procurement', 'Finance', 'IT', 'Business Development', 'Legal Affairs', 'Property Management', 'Planning', 'Project Management', 'Marketing'];
+const WR_STOCK_DEPTS = ['Bureau', 'Administration', 'HR', 'Procurement', 'Finance', 'IT', 'Business Development', 'Legal Affairs', 'Property Management', 'Planning', 'Project Management', 'Facilities', 'Internal Audit', 'Risk management', 'Construction', 'Development Services'];
+const WR_TASK_STATUS = ['Pending', 'On going', 'Completed', 'On hold'];
+const wrWeekEnd = iso => { let d = iso || vToday(); while(lvDow(d) !== 4) d = clIsoAdd(d, 1); return d; };            // a report week runs Saturday to Thursday
+const wrWeekNo = thu => { const d = new Date(thu + 'T00:00:00Z'), y0 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return Math.ceil(((d - y0) / 86400000 + 1) / 7 + (((y0.getUTCDay() + 6) % 7) > 3 ? -1 : 0)) || 1; };
+const wrIsoWeek = thu => { const d = new Date(thu + 'T00:00:00Z'); const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7)); const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 86400000 + 1) / 7); };
+const wrTitle = r => 'Week ' + r.weekNo + ' - ' + pcOrdinalDate(r.weekStart).replace(/ \d{4}$/, '').replace(/ (\w+)$/, ' $1') + ' - ' + pcOrdinalDate(r.weekEnd).replace(/ \d{4}$/, '');
+const wrById = id => state.weeklyReports.find(r => r.id === id) || null;
+
+function viewWeeklyReport(){
+  if(vehUi.wrId && wrById(vehUi.wrId)) return wrEditor(wrById(vehUi.wrId));
+  const list = state.weeklyReports.slice().sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)) || String(a.department).localeCompare(String(b.department)));
+  const thisWeek = wrWeekEnd(vToday()), mine = list.filter(r => r.weekEnd === thisWeek);
+  return vHead('Department Weekly Report', 'Each department\'s weekly report: document entries, dispatch, stock requests, vehicles, tasks, PRs and staff on leave — filled from the app and downloaded as a PDF.', vBtnPrimary('+ Weekly report', 'openWrNew()')) +
+    vKpis(statCard('This week', 'Week ' + wrIsoWeek(thisWeek), pcOrdinalDate(clIsoAdd(thisWeek, -5)) + ' – ' + pcOrdinalDate(thisWeek), 'brand') + statCard('Reports this week', fmtNum(mine.length), mine.map(r => r.department).join(', ') || 'None yet', mine.length ? 'emerald' : 'amber') +
+      statCard('Open tasks', fmtNum(list[0] ? (list[0].tasks || []).filter(t => t.status !== 'Completed').length : 0), list[0] ? 'In the latest report (' + esc(list[0].department) + ')' : '—', 'slate') + statCard('Staff on leave this week', fmtNum(lvBetween(clIsoAdd(thisWeek, -5), thisWeek).length), 'From the Staff Leave Plan', 'slate')) +
+    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${new Date(r.updatedAt).toLocaleDateString()}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
+      : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No weekly reports yet. Start one with "+ Weekly report" — the tasks of the last report carry over each week.')}</div>`);
+}
+function openWrNew(){
+  const me = authUser && authUser.department ? authUser.department : 'Administration';
+  openModal('New weekly report', vFormOpen + vGrid(2, `<div><label class="${VEH_LBL}">Department${vReqStar}</label><input name="department" list="wr-depts" value="${esc(me)}" class="${VEH_FIELD}"><datalist id="wr-depts">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist></div>` +
+    vF('Any day in the week', 'day', vToday(), 'date', { req:1 })) + `<p class="text-[11.5px] text-slate-400 mt-2">A report week runs Saturday to Thursday. Tasks still open in the department's last report are carried over; the other sections are filled from the app and can be edited.</p>` + vFoot('Create', 'saveWrNew()'));
+}
+async function saveWrNew(){
+  const o = vehFormObj(document.getElementById('vform')); if(!o.department) return vFail('Enter the department.'); if(!o.day) return vFail('Choose the week.');
+  const end = wrWeekEnd(o.day), start = clIsoAdd(end, -5);
+  const dup = state.weeklyReports.find(r => r.weekEnd === end && String(r.department).toLowerCase() === o.department.toLowerCase()); if(dup){ closeModal(); vehUi.wrId = dup.id; rerenderMain(); toast('That report already exists — opened it.'); return; }
+  const prev = state.weeklyReports.filter(r => String(r.department).toLowerCase() === o.department.toLowerCase() && r.weekEnd < end).sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)))[0];
+  const rec = { department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '',
+    entries:WR_ENTRY_DEPTS.map(d => ({ department:d, lines:[] })), dispatch:[], stock:wrAutoStock(start, end), vehicles:wrAutoVehicles(start, end),
+    tasks:prev ? (prev.tasks || []).filter(t => t.status !== 'Completed').map(t => Object.assign({}, t)) : [], prs:wrAutoPrs(end), notes:'' };
+  closeModal(); vehUi.wrId = await vehSave('weeklyReports', rec); rerenderMain(); toast('Weekly report started' + (prev ? ' — ' + rec.tasks.length + ' open task' + (rec.tasks.length === 1 ? '' : 's') + ' carried over' : '') + '.');
+}
+// from the app's records
+function wrAutoStock(start, end){
+  const sr = state.stockRequests || [], by = {}; const k = r => r.department || 'Not given';
+  sr.forEach(r => { const at = r.requestedAt ? localDateStr(new Date(r.requestedAt)) : '', dec = r.decidedAt ? localDateStr(new Date(r.decidedAt)) : '';
+    if(r.status === 'pending' && at <= end){ (by[k(r)] = by[k(r)] || { p:0, c:0 }).p++; }
+    if(r.status === 'approved' && dec >= start && dec <= end){ (by[k(r)] = by[k(r)] || { p:0, c:0 }).c++; } });
+  const depts = WR_STOCK_DEPTS.concat(Object.keys(by).filter(d => !WR_STOCK_DEPTS.includes(d)));
+  return depts.map(d => ({ department:d, pending:by[d] && by[d].p ? String(by[d].p) : '', completed:by[d] && by[d].c ? String(by[d].c) : '' }));
+}
+function wrAutoVehicles(start, end){
+  const from = clIsoAdd(start, -14);                                                 // fueling of the last few weeks, as in the report
+  return vSorted().filter(v => (v.status || 'Active') === 'Active').map(v => {
+    const fu = state.fuelRecords.filter(r => r.vehicleId === v.id && r.date >= from && r.date <= end).sort((a, b) => a.date.localeCompare(b.date)).map(r => (r.fuelType || 'Fuel') + ' ' + fmtNum(vNum(r.litres)) + 'Lt, ' + pcOrdinalDate(r.date));
+    const sv = state.serviceRecords.filter(r => r.vehicleId === v.id && r.date >= from && r.date <= end).map(r => [r.kind === 'incident' ? (r.issue || 'Issue') + (r.status ? ' (' + r.status + ')' : '') : (r.serviceType || r.type || 'Service'), pcOrdinalDate(r.date)].join(' '));
+    const open = state.serviceRecords.filter(r => r.vehicleId === v.id && r.kind === 'incident' && r.status !== 'Resolved').map(r => (r.issue || 'Issue') + ' (' + pcOrdinalDate(r.date) + ')');
+    return { vehicle:[vName(v), v.plate].filter(Boolean).join('\n'), fueling:fu.join('\n') || '-', service:sv.join('\n') || '-', comment:open.join('\n') };
+  });
+}
+function wrAutoPrs(end){
+  const st = id => (PR_STATUSES.find(s => s.id === (id || 'open')) || {}).label || id;
+  return state.purchaseRequisitions.filter(p => (p.status || 'open') !== 'closed').sort((a, b) => prNumberCollator.compare(b.prNumber || '', a.prNumber || ''))
+    .map(p => ({ number:p.prNumber || '', request:prFirstItem(p) || p.title || '', date:p.requisitionDate ? pcOrdinalDate(p.requisitionDate) : '', status:(p.status || 'open') === 'pending_approval' ? 'Pending Approval' : (p.status || 'open') === 'released' ? 'Released' : 'Pending', details:'' }));
+}
+// the editor: one page, each section an editable table
+const WR_SECTIONS = {
+  dispatch:{ title:'Dispatch', cols:[['department', 'Department', 'dept'], ['item', 'Dispatch item'], ['by', 'Dispatched by', 'person'], ['date', 'Dispatch date', 'date']] },
+  stock:{ title:'Stock Request', cols:[['department', 'Department', 'dept'], ['pending', 'Pending'], ['completed', 'Completed']], auto:'Fill from stock requests' },
+  vehicles:{ title:'Vehicle Management', cols:[['vehicle', 'Vehicle', 'area'], ['fueling', 'Fueling', 'area'], ['service', 'Service', 'area'], ['comment', 'Comment', 'area']], auto:'Fill from fueling & servicing' },
+  tasks:{ title:'Tasks', cols:[['task', 'Task', 'area'], ['assigned', 'Assigned to', 'area'], ['status', 'Status', 'status'], ['progress', 'Progress', 'area']] },
+  prs:{ title:'Purchase Requisition Request', cols:[['number', 'PR number'], ['request', 'PR request', 'area'], ['date', 'Requested date'], ['status', 'Status'], ['details', 'Details', 'area']], auto:'Fill from open PRs' } };
+function wrCell(sec, c, v){
+  const [f, , kind] = c, a = `data-f="${f}" class="wr-in ${VEH_FIELD} !px-2 !py-1.5 text-[13px]"`;
+  if(kind === 'area') return `<textarea ${a} rows="${Math.max(1, String(v || '').split('\n').length)}" oninput="this.rows = Math.max(1, this.value.split('\\n').length)">${esc(v || '')}</textarea>`;
+  if(kind === 'status') return `<select ${a}>${WR_TASK_STATUS.concat(v && !WR_TASK_STATUS.includes(v) ? [v] : []).map(s => `<option ${s === (v || 'Pending') ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>`;
+  return `<input type="text" ${a} value="${esc(v || '')}" ${kind === 'dept' ? 'list="wr-depts"' : kind === 'person' ? 'list="wr-people"' : ''}>`;
+}
+function wrRow(sec, r){ const S = WR_SECTIONS[sec]; return `<tr class="wr-row align-top border-t border-slate-100">${S.cols.map(c => `<td class="p-1">${wrCell(sec, c, r[c[0]])}</td>`).join('')}<td class="p-1 text-center whitespace-nowrap"><button type="button" onclick="const t=this.closest('tr'); if(t.previousElementSibling) t.previousElementSibling.before(t)" class="text-slate-300 hover:text-brand-600 px-0.5" title="Up">▲</button><button type="button" onclick="this.closest('tr').remove()" class="text-slate-400 hover:text-rose-600 px-1 text-lg leading-none" title="Remove">×</button></td></tr>`; }
+function wrAddRow(sec){ const tb = document.querySelector('#wr-' + sec + ' tbody'); tb.insertAdjacentHTML('beforeend', wrRow(sec, {})); tb.lastElementChild.querySelector('.wr-in').focus(); }
+function wrEditor(r){
+  const sec = key => { const S = WR_SECTIONS[key], rows = r[key] || [];
+    return vPanel(S.title, `${S.auto ? `<button onclick="wrAuto('${key}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">${S.auto}</button>` : ''}<button onclick="wrAddRow('${key}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Row</button>`,
+      `<div class="overflow-x-auto"><table id="wr-${key}" class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400">${S.cols.map(c => `<th class="px-2 py-2">${c[1]}</th>`).join('')}<th class="w-12"></th></tr></thead><tbody>${rows.map(x => wrRow(key, x)).join('')}</tbody></table></div>`); };
+  const ent = r.entries || [], leave = lvBetween(r.weekStart, r.weekEnd);
+  const entries = vPanel('Document Entry', `<button onclick="wrAddEntryDept()" class="text-xs font-semibold text-brand-600 hover:underline">+ Department</button>`, `<div class="overflow-x-auto"><table id="wr-entries" class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="px-3 py-2 w-48">Department</th><th class="px-2 py-2">Number of entries · type of entry</th></tr></thead><tbody>${ent.map(e => wrEntryRow(e)).join('')}</tbody></table></div>`);
+  const leaveHtml = vPanel('Staff on Leave', `<button onclick="goTo('leave-plan')" class="text-xs font-semibold text-brand-600 hover:underline">Staff Leave Plan →</button>`, leave.length ? `<div class="divide-y divide-slate-100">${leave.map(x => `<div class="px-5 sm:px-6 py-2.5 flex justify-between gap-3 text-sm"><span><b class="text-slate-800">${esc(x.name)}</b> <span class="text-xs text-slate-400">${esc(x.department || '')}</span></span><span class="text-slate-600 text-right">${x.items.map(i => `<span class="px-1 rounded font-bold text-[11px]" style="background:${esc(lvType(i.code).color)};color:#111">${esc(i.code)}</span> ${pcOrdinalDate(i.from).replace(/ \d{4}$/, '')}${i.to !== i.from ? ' – ' + pcOrdinalDate(i.to).replace(/ \d{4}$/, '') : ''}`).join(' · ')}</span></div>`).join('')}</div>` : vEmpty('Nobody is on leave this week, according to the Staff Leave Plan.'));
+  return `<div class="flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.wrId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All weekly reports</button><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Weekly Report — ${esc(r.department)}</h1><p class="text-sm text-slate-500 mt-0.5">Week ${r.weekNo} · ${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}${r.preparedBy ? ' · prepared by ' + esc(r.preparedBy) : ''}</p></div>
+      <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
+    <datalist id="wr-depts">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist><datalist id="wr-etypes">${['Invoice', 'Statement', 'Letter', 'Memo', 'Contract', 'Agreement', 'Quotation', 'Purchase Order', 'Payment Voucher'].map(t => `<option value="${t}"></option>`).join('')}</datalist><datalist id="wr-people">${state.profiles.map(p => `<option value="${esc(p.name || '')}"></option>`).join('')}</datalist>
+    <div id="wr-form">${entries}${sec('dispatch')}${sec('stock')}${sec('vehicles')}${sec('tasks')}${sec('prs')}${leaveHtml}
+    ${vPanel('Notes', '', `<div class="p-4"><textarea id="wr-notes" rows="3" class="${VEH_FIELD}" placeholder="Anything else for this week">${esc(r.notes || '')}</textarea></div>`)}</div>
+    <div class="flex justify-end gap-2.5 mb-8">${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div>`;
+}
+function wrEntryRow(e){ return `<tr class="wr-erow align-top border-t border-slate-100"><td class="px-1 py-1"><input type="text" value="${esc(e.department || '')}" list="wr-depts" class="wr-edept ${VEH_FIELD} !px-2 !py-1.5 text-[13px] font-semibold"></td><td class="px-1 py-1"><div class="wr-elines space-y-1">${(e.lines && e.lines.length ? e.lines : [{}]).map(wrEntryLine).join('')}</div><button type="button" onclick="this.previousElementSibling.insertAdjacentHTML('beforeend', wrEntryLine({}))" class="text-[11px] font-semibold text-brand-600 hover:underline mt-1">+ type</button></td></tr>`; }
+function wrEntryLine(l){ return `<div class="wr-eline grid grid-cols-[5rem_1fr_auto] gap-1.5"><input type="number" min="0" value="${esc(l.count || '')}" placeholder="No." class="wr-ecount ${VEH_FIELD} !px-2 !py-1.5 text-[13px]"><input type="text" value="${esc(l.type || '')}" placeholder="Type of entry, e.g. Invoice" list="wr-etypes" class="wr-etype ${VEH_FIELD} !px-2 !py-1.5 text-[13px]"><button type="button" onclick="this.closest('.wr-eline').remove()" class="text-slate-300 hover:text-rose-600 px-1">×</button></div>`; }
+function wrAddEntryDept(){ const tb = document.querySelector('#wr-entries tbody'); tb.insertAdjacentHTML('beforeend', wrEntryRow({})); tb.lastElementChild.querySelector('input').focus(); }
+function wrCollect(){
+  const rows = key => [...document.querySelectorAll('#wr-' + key + ' .wr-row')].map(tr => { const o = {}; tr.querySelectorAll('.wr-in').forEach(i => { o[i.dataset.f] = i.value.trim(); }); return o; }).filter(o => Object.values(o).some(v => v && v !== 'Pending'));
+  return { entries:[...document.querySelectorAll('#wr-entries .wr-erow')].map(tr => ({ department:tr.querySelector('.wr-edept').value.trim(), lines:[...tr.querySelectorAll('.wr-eline')].map(l => ({ count:l.querySelector('.wr-ecount').value.trim(), type:l.querySelector('.wr-etype').value.trim() })).filter(l => l.count || l.type) })).filter(e => e.department),
+    dispatch:rows('dispatch'), stock:rows('stock'), vehicles:rows('vehicles'), tasks:rows('tasks'), prs:rows('prs'), notes:(document.getElementById('wr-notes') || {}).value || '' };
+}
+function wrAuto(key){
+  const r = wrById(vehUi.wrId); if(!r) return; const data = key === 'stock' ? wrAutoStock(r.weekStart, r.weekEnd) : key === 'vehicles' ? wrAutoVehicles(r.weekStart, r.weekEnd) : wrAutoPrs(r.weekEnd);
+  const tb = document.querySelector('#wr-' + key + ' tbody'); if(tb.children.length && !confirm('Replace the rows of ' + WR_SECTIONS[key].title + ' with what the app has?')) return;
+  tb.innerHTML = data.map(x => wrRow(key, x)).join(''); toast(WR_SECTIONS[key].title + ' filled — ' + data.length + ' row' + (data.length === 1 ? '' : 's') + '. Save to keep it.');
+}
+async function wrSave(id, pdf, btn){
+  const r = wrById(id); if(!r) return; const data = wrCollect();
+  if(btn) btn.disabled = true;
+  try{ await vehSave('weeklyReports', Object.assign({ id }, data)); if(pdf) await wrPdf(id); else toast('Weekly report saved.'); }
+  finally{ if(btn && btn.isConnected) btn.disabled = false; }
+}
+function deleteWr(id){ if(!vehRequireAdmin('delete weekly reports')) return; const r = wrById(id); if(!r) return; confirmAction('Delete the weekly report of ' + r.department + ', week ' + r.weekNo + '?', async () => { await vehDelete('weeklyReports', id); vehUi.wrId = ''; rerenderMain(); toast('Deleted.'); }); }
+// the PDF: letterhead, title block, then each section as a table that runs over pages
+async function buildWeeklyReportPdf(r){
+  const K = [0, 0, 0], HEAD = [0.85, 0.89, 0.73], GRID = [0.45, 0.45, 0.45], L = 48, R = 547, FS = 8.5, LH = 10.6;
+  const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = PC_TOP + 14;
+  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = PC_TOP + 10; };
+  const center = (x0, x1, b, t, o) => { o = Object.assign({ size:FS }, o || {}); pg.text(x0 + (x1 - x0 - pdfTextWidth(t, !!o.bold, o.size)) / 2, b, t, o); };
+  center(L, R, y, 'WEEKLY REPORT', { bold:true, size:15 }); y += 20; center(L, R, y, r.department, { bold:true, size:11 }); y += 18;
+  pdfRuns(pg, L, y, [{ t:'Week: ', bold:true, size:10 }, { t:String(r.weekNo), size:10 }]); y += 15;
+  const dp = s => { const d = pcReplDateParts(s); return [{ t:d.d.padStart(2, '0'), size:10 }, { t:d.suf, size:6, rise:3.6 }, { t:' ' + PC_MONTH_NAMES[+s.slice(5, 7) - 1], size:10 }]; };
+  pdfRuns(pg, L, y, [{ t:'Date: ', bold:true, size:10 }].concat(dp(r.weekStart), [{ t:' – ', size:10 }], dp(r.weekEnd))); y += 22;
+  const table = (title, cols, rows) => {                                             // cols: [label, width share]; rows: arrays of strings
+    const tw = R - L, tot = cols.reduce((t, c) => t + c[1], 0), xs = [L]; cols.forEach(c => xs.push(xs[xs.length - 1] + tw * c[1] / tot));
+    if(y + 60 > PC_BOTTOM) newPage();
+    pg.text(L, y, title, { bold:true, size:11 }); y += 8;
+    const head = () => { const wr = cols.map((c, i) => pdfWrap(c[0], true, FS, xs[i + 1] - xs[i] - 8)), h = Math.max(...wr.map(w => w.length)) * LH + 8; pg.fill(L, y, tw, h, HEAD); wr.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 11 + k * LH, ln, { bold:true, size:FS }))); xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.5)); pg.line(L, y, R, y, GRID, 0.5); y += h; pg.line(L, y, R, y, GRID, 0.5); };
+    head();
+    (rows.length ? rows : [cols.map(() => '')]).forEach(row => {
+      const wr = row.map((t, i) => pdfWrap(String(t || ''), false, FS, xs[i + 1] - xs[i] - 8)), h = Math.max(16, Math.max(...wr.map(w => w.length)) * LH + 6);
+      if(y + h > PC_BOTTOM){ newPage(); head(); }
+      wr.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 11 + k * LH, ln, { size:FS })));
+      xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.5)); y += h; pg.line(L, y, R, y, GRID, 0.5);
+    });
+    y += 20;
+  };
+  table('Document Entry', [['Department', 2], ['Number of Entries', 1.2], ['Type of Entry', 3]], (r.entries || []).map(e => [e.department, (e.lines || []).map(l => l.count ? String(l.count).padStart(2, '0') : '').join('\n'), (e.lines || []).map(l => l.type || '').join('\n')]));
+  table('Dispatch', [['Department', 1.4], ['Dispatch Item', 2], ['Dispatched By', 1.3], ['Dispatch Date', 1.2]], (r.dispatch || []).map(x => [x.department, x.item, x.by, x.date ? (pcFindDates(x.date)[0] ? pcOrdinalDate(pcFindDates(x.date)[0]) : x.date) : '']));
+  table('Stock Request', [['Department', 2], ['Pending', 1.5], ['Completed', 1.5]], (r.stock || []).map(x => [x.department, x.pending, x.completed]));
+  table('Vehicle Management', [['', 1.1], ['Fueling', 1.6], ['Service', 1.4], ['Comment', 2.4]], (r.vehicles || []).map(x => [x.vehicle, x.fueling, x.service, x.comment]));
+  table('Tasks', [['Task', 2.2], ['Assigned To', 1.2], ['Status', 1], ['Progress', 2.4]], (r.tasks || []).map(x => [x.task, x.assigned, x.status, x.progress]));
+  table('Purchase Requisition Request', [['PR Number', 1.5], ['PR Request', 2], ['Requested Date', 1.2], ['Status', 1], ['Details', 1.5]], (r.prs || []).map(x => [x.number, x.request, x.date, x.status, x.details]));
+  const lv = lvBetween(r.weekStart, r.weekEnd);
+  table('Staff on Leave', [['Staff', 2], ['Department', 1.6], ['Leave', 2.4]], lv.map(x => [x.name, x.department || '', x.items.map(i => lvType(i.code).name + ': ' + pcOrdinalDate(i.from) + (i.to !== i.from ? ' – ' + pcOrdinalDate(i.to) : '')).join('\n')]));
+  if(r.notes){ if(y + 40 > PC_BOTTOM) newPage(); pg.text(L, y, 'Notes', { bold:true, size:11 }); y += 14; pdfWrap(r.notes, false, 9, R - L).forEach(ln => { if(y > PC_BOTTOM){ newPage(); } pg.text(L, y, ln, { size:9 }); y += 12; }); }
+  return pcPdfFinish(pages.map(p => ({ ops:p.ops })), { title:'', number:'', docTitle:'Weekly Report ' + r.department + ' Week ' + r.weekNo, pageNumbers:true });
+}
+async function wrPdf(id, btn){
+  const r = wrById(id); if(!r) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ downloadBlob(await buildWeeklyReportPdf(r), ('Week ' + r.weekNo + ' - ' + pcOrdinalDate(r.weekStart).replace(/ \d{4}$/, '') + ' - ' + pcOrdinalDate(r.weekEnd).replace(/ \d{4}$/, '') + ' - ' + r.department).replace(/[^A-Za-z0-9 -]+/g, '') + '.pdf'); }
+  catch(e){ console.error(e); toast('Could not create the PDF: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+
+/* =====================================================================
    MAINTENANCE — CLEANING CHECKLIST: for each location, its rooms and the tasks in each,
    the cleaners and the supervisor. Every week gets a checklist that is ticked here (or printed,
    filled by hand and the signed copy linked), and can be downloaded as a PDF in the finance layout.
@@ -6015,6 +6352,16 @@ function rhSections(){
         ...UT_TYPE_LIST.map(t => { const tb = bills.filter(b => (utAcc(b.accountId) || {}).type === t), u = tb.reduce((a, b) => a + utUnits(b), 0); return [t, fmtMVR(tb.reduce((a, b) => a + vNum(b.amount), 0)), u ? fmtNum(Math.round(u)) + ' ' + UT_TYPES[t].unit : cnt(tb.length, 'invoice')]; }),
         ['Unpaid invoices now', fmtNum(unpaid.length), fmtMVR(unpaid.reduce((t, b) => t + vNum(b.amount), 0))], ['Overdue now', fmtNum(od.length), fmtMVR(od.reduce((t, b) => t + vNum(b.amount), 0))]],
       lists:[{ title:'Cost by location', items: top(byLoc, 6).map(([k, v]) => [k, fmtMVR(v)]) }] };
+  });
+  safe(() => {
+    const yrs = [...new Set([+R.from.slice(0, 4), +R.to.slice(0, 4)])], byType = {}, byStaff = {}; let days = 0;
+    yrs.forEach(y => lvStaff(y).forEach(st => { const d = (lvDoc(st.key, y) || {}).days || {}; Object.entries(d).forEach(([md, c]) => { const iso = y + '-' + md; if(!R.inR(iso)) return; days++; const t = lvType(c).name; byType[t] = (byType[t] || 0) + 1; byStaff[st.name] = (byStaff[st.name] || 0) + 1; }); }));
+    const today = lvBetween(vToday(), vToday()), wr = state.weeklyReports.filter(r => R.inR(r.weekEnd));
+    if(!days && !wr.length && !state.leavePlans.length) return null;
+    return { key:'staff', title:'Weekly Reports & Leave', icon:'calendar', link:'leave-plan', linkLabel:'Staff Leave Plan',
+      rows:[['Weekly reports', fmtNum(wr.length), [...new Set(wr.map(r => r.department))].join(', ') || 'none in the period'], ['Open tasks', fmtNum(wr.length ? (wr.slice().sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)))[0].tasks || []).filter(t => t.status !== 'Completed').length : 0), 'in the latest report'],
+        ['Leave days planned', fmtNum(days), cnt(Object.keys(byStaff).length, 'staff member')], ['On leave today', fmtNum(today.length), today.map(x => x.name).join(', ')]],
+      lists:[{ title:'Leave by type', items: top(byType, 8).map(([k, v]) => [k, cnt(v, 'day')]) }, { title:'Leave by staff', items: top(byStaff, 8).map(([k, v]) => [k, cnt(v, 'day')]) }] };
   });
   safe(() => {
     const logs = state.vehicleLogs.filter(l => R.inR(l.outDate)), byVeh = {}, byDept = {}, byDest = {};
@@ -6952,6 +7299,8 @@ function render(){
     else if(ui.tab==='servicing') el.innerHTML = viewServicing();
     else if(ui.tab==='vehicle-log') el.innerHTML = viewVehicleLog();
     else if(ui.tab==='cleaning') el.innerHTML = viewCleaning();
+    else if(ui.tab==='weekly-report') el.innerHTML = viewWeeklyReport();
+    else if(ui.tab==='leave-plan') el.innerHTML = viewLeavePlan();
     else if(ui.tab==='vehicle-reports') el.innerHTML = viewVehicleReports();
     else if(ui.tab==='locations') el.innerHTML = viewLocations();
     else if(ui.tab==='admin') el.innerHTML = viewAdmin();

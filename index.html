@@ -5152,7 +5152,7 @@ function vlRange(){
 function viewVehicleLog(){
   const R = vlRange(), veh = vehUi.vlVeh || '', q = String(vehUi.vlQ || '').toLowerCase().trim();
   const all = state.vehicleLogs, open = all.filter(vlOpen).sort((a, b) => vlOutAt(a).localeCompare(vlOutAt(b)));
-  const list = all.filter(l => (!veh || l.vehicleId === veh) && l.outDate >= R.from && l.outDate <= R.to && (!q || [l.staffName, l.destination, l.purpose, vLabel(vehById(l.vehicleId))].join(' ').toLowerCase().includes(q)))
+  const list = all.filter(l => (!veh || l.vehicleId === veh) && l.outDate >= R.from && l.outDate <= R.to && (!q || [l.staffName, l.department, l.driver, l.destination, l.purpose, vLabel(vehById(l.vehicleId))].join(' ').toLowerCase().includes(q)))
     .sort((a, b) => vlOutAt(b).localeCompare(vlOutAt(a)));
   const mins = list.reduce((t, l) => t + vlMinutes(l), 0), byVeh = {}; list.forEach(l => { byVeh[l.vehicleId] = (byVeh[l.vehicleId] || 0) + 1; });
   const topV = Object.entries(byVeh).sort((a, b) => b[1] - a[1])[0];
@@ -5161,7 +5161,7 @@ function viewVehicleLog(){
   const outCell = l => `${vDate(l.outDate)} <span class="text-slate-400">${esc(l.outTime || '')}</span>`;
   const rows = list.map(l => { const v = vehById(l.vehicleId); return `<tr class="${vTr}">
     ${vTd(`<span class="font-semibold">${esc(vLabel(v))}</span><div class="text-[11px] text-slate-400">${esc(v ? vName(v) : '')}</div>`, { first:1 })}
-    ${vTd(esc(l.staffName || '—'))}${vTd(esc(l.destination || '—'))}${vTd(`<div class="max-w-[14rem] text-slate-600">${esc(l.purpose || '—')}</div>`)}
+    ${vTd(`${esc(l.staffName || '—')}${l.department ? `<div class="text-[11px] text-slate-400">${esc(l.department)}</div>` : ''}`)}${vTd(esc(l.driver || '—'), { cls:'text-slate-600' })}${vTd(esc(l.destination || '—'))}${vTd(`<div class="max-w-[14rem] text-slate-600">${esc(l.purpose || '—')}</div>`)}
     ${vTd(outCell(l), { cls:'whitespace-nowrap' })}
     ${vTd(vlOpen(l) ? vPill('warn', 'Out') : `${vDate(l.inDate)} <span class="text-slate-400">${esc(l.inTime || '')}</span>`, { cls:'whitespace-nowrap' })}
     ${vTd(vlOpen(l) ? '' : vlDur(vlMinutes(l)), { cls:'whitespace-nowrap text-slate-500' })}
@@ -5171,14 +5171,14 @@ function viewVehicleLog(){
     ${vHead('Vehicle Log', 'Who takes each vehicle, where and why, and when it comes back. Generate the Vehicle Request Log sheet for any vehicle.',
       vBtnPlain('Generate log (PDF)', 'openVlGenerate()') + vBtnPrimary('+ Vehicle out', 'openVlForm()'))}
     ${kpis}
-    ${open.length ? vPanel('Out now', 'Record the return when the vehicle is back', `<div class="divide-y divide-slate-100">${open.map(l => { const v = vehById(l.vehicleId); return `<div class="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap"><div><span class="font-bold text-slate-800">${esc(vLabel(v))}</span> <span class="text-sm text-slate-600">· ${esc(l.staffName || '—')} · ${esc(l.destination || '—')}</span><div class="text-[11.5px] text-slate-400">Out since ${vDate(l.outDate)} ${esc(l.outTime || '')}${l.purpose ? ' · ' + esc(l.purpose) : ''}</div></div>${vBtnPrimary('Return', `openVlReturn('${l.id}')`)}</div>`; }).join('')}</div>`) : ''}
+    ${open.length ? vPanel('Out now', 'Record the return when the vehicle is back', `<div class="divide-y divide-slate-100">${open.map(l => { const v = vehById(l.vehicleId); return `<div class="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap"><div><span class="font-bold text-slate-800">${esc(vLabel(v))}</span> <span class="text-sm text-slate-600">· ${esc(l.staffName || '—')}${l.department ? ' (' + esc(l.department) + ')' : ''} · ${esc(l.destination || '—')}</span><div class="text-[11.5px] text-slate-400">Out since ${vDate(l.outDate)} ${esc(l.outTime || '')}${l.driver ? ' · driver ' + esc(l.driver) : ''}${l.purpose ? ' · ' + esc(l.purpose) : ''}</div></div>${vBtnPrimary('Return', `openVlReturn('${l.id}')`)}</div>`; }).join('')}</div>`) : ''}
     <div class="flex flex-wrap items-end gap-3 mb-4">
       <label class="text-xs font-semibold text-slate-600">Vehicle${vVehSelect('vlVeh', veh).replace('class="', 'class="block mt-1 ')}</label>
       <label class="text-xs font-semibold text-slate-600">From<input type="date" value="${esc(R.from)}" onchange="vehSet('vlFrom', this.value)" class="${VEH_INPUT} block mt-1"></label>
       <label class="text-xs font-semibold text-slate-600">To<input type="date" value="${esc(R.to)}" onchange="vehSet('vlTo', this.value)" class="${VEH_INPUT} block mt-1"></label>
       <input id="vl-q" type="search" value="${esc(vehUi.vlQ || '')}" oninput="vehUi.vlQ = this.value; clearTimeout(window._vlQt); window._vlQt = setTimeout(rerenderMain, 250)" placeholder="Search staff, destination, purpose…" class="${VEH_INPUT} flex-1 min-w-[14rem]">
     </div>
-    ${list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Vehicle' }, { t:'Staff' }, { t:'Destination' }, { t:'Purpose' }, { t:'Out' }, { t:'Returned' }, { t:'Time out' }, { t:'' }])}<tbody>${rows}</tbody></table>`)
+    ${list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Vehicle' }, { t:'Requested by' }, { t:'Driver' }, { t:'Destination' }, { t:'Purpose' }, { t:'Out' }, { t:'Returned' }, { t:'Time out' }, { t:'' }])}<tbody>${rows}</tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(all.length ? 'No trips in this period.' : 'No trips logged yet. Use "+ Vehicle out" when a vehicle is taken.')}</div>`}`;
 }
 function openVlForm(id, vehicleId){
@@ -5190,8 +5190,11 @@ function openVlForm(id, vehicleId){
   openModal(l ? 'Edit trip' : 'Vehicle out', vFormOpen + `
     <datalist id="vl-people">${people}</datalist><datalist id="vl-dests">${dests}</datalist><datalist id="vl-purps">${purps}</datalist>
     ${vSec('Requesting')}
-    ${vGrid(2, vS('Vehicle', 'vehicleId', vSorted().map(v => [v.id, v.plate + (vName(v) ? ' — ' + vName(v) : '')]), vid, 'Choose a vehicle…', { req:1, span:'sm:col-span-2' }) +
-      vF('Staff name', 'staffName', l ? l.staffName : '', 'text', { req:1, attrs:' list="vl-people" autocomplete="off"' }) + vF('Destination', 'destination', l ? l.destination : '', 'text', { req:1, attrs:' list="vl-dests" autocomplete="off"' }) +
+    ${vGrid(2, vS('Vehicle', 'vehicleId', vSorted().map(v => [v.id, v.plate + (vName(v) ? ' — ' + vName(v) : '')]), vid, 'Choose a vehicle…', { req:1, span:'sm:col-span-2', attrs:' onchange="vlVehChanged(this)"' }) +
+      vF('Driver', 'driver', l ? l.driver || '' : (vehById(vid) || {}).assignedTo || '', 'text', { attrs:' list="vl-people" autocomplete="off" placeholder="The vehicle\'s assigned driver"' }) + '<div></div>' +
+      vF('Requested by (staff)', 'staffName', l ? l.staffName : '', 'text', { req:1, attrs:' list="vl-people" autocomplete="off" oninput="vlStaffChanged(this)"' }) +
+      `<div class="relative"><label class="${VEH_LBL}">Department</label><input type="text" id="vl-department" name="department" autocomplete="off" value="${esc(l ? l.department || '' : '')}" placeholder="Search by name or code…" oninput="this.dataset.touched='1'; filterDepartmentDropdown('vl')" onfocus="filterDepartmentDropdown('vl')" onblur="hideDepartmentDropdown('vl')" class="${VEH_FIELD}"><div id="vl-department-dropdown" class="hidden absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg"></div></div>` +
+      vF('Destination', 'destination', l ? l.destination : '', 'text', { req:1, span:'sm:col-span-2', attrs:' list="vl-dests" autocomplete="off"' }) +
       vF('Purpose', 'purpose', l ? l.purpose : '', 'text', { span:'sm:col-span-2', attrs:' list="vl-purps" autocomplete="off"' }) +
       vF('Date', 'outDate', l ? l.outDate : vToday(), 'date', { req:1 }) + vF('Time', 'outTime', l ? l.outTime : vlNowTime(), 'time', { req:1 }))}
     ${vSec('Returning')}
@@ -5200,19 +5203,21 @@ function openVlForm(id, vehicleId){
     ${vTa('Note', 'note', l ? l.note : '', { rows:2 })}
     ${vFoot(l ? 'Save' : 'Log vehicle out', `saveVl('${l ? l.id : ''}')`, l && canManageInventory() ? `deleteVl('${l.id}')` : '')}`, true);
 }
+function vlVehChanged(sel){ const f = sel.form, v = vehById(sel.value); if(f && f.driver && v && v.assignedTo && (!f.driver.value.trim() || f.driver.dataset.auto !== '0')) f.driver.value = v.assignedTo; }
+function vlStaffChanged(el){ const p = hoFindProfile(el.value), d = document.getElementById('vl-department'); if(p && p.department && d && !d.dataset.touched) d.value = p.department; }
 async function saveVl(id){
   const o = vehFormObj(document.getElementById('vform'));
   if(!o.vehicleId) return vFail('Choose the vehicle.');
-  if(!o.staffName) return vFail('Enter the staff name.');
+  if(!o.staffName) return vFail('Enter who is requesting the vehicle.');
   if(!o.destination) return vFail('Enter the destination.');
   if(!o.outDate || !o.outTime) return vFail('Enter the date and time it went out.');
   if((o.inDate && !o.inTime) || (!o.inDate && o.inTime)) return vFail('Enter both the return date and time, or leave both empty.');
-  const rec = { id:id || undefined, vehicleId:o.vehicleId, staffName:o.staffName, destination:o.destination, purpose:o.purpose || '', outDate:o.outDate, outTime:o.outTime, inDate:o.inDate || '', inTime:o.inTime || '', note:o.note || '' };
+  const rec = { id:id || undefined, vehicleId:o.vehicleId, driver:o.driver || '', staffName:o.staffName, department:o.department || '', destination:o.destination, purpose:o.purpose || '', outDate:o.outDate, outTime:o.outTime, inDate:o.inDate || '', inTime:o.inTime || '', note:o.note || '' };
   if(rec.inDate && vlOutAt(rec) > rec.inDate + 'T' + rec.inTime) return vFail('The return is before it went out.');
   if(!rec.inDate){ const busy = state.vehicleLogs.find(x => x.id !== id && x.vehicleId === rec.vehicleId && vlOpen(x)); if(busy) return vFail(vLabel(vehById(rec.vehicleId)) + ' is already out with ' + (busy.staffName || '—') + ' since ' + vDate(busy.outDate) + ' ' + (busy.outTime || '') + '. Record that return first.'); }
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   await vehSave('vehicleLogs', rec);
-  closeModal(); rerenderMain(); toast(id ? 'Trip updated.' : rec.inDate ? 'Trip logged.' : vLabel(vehById(rec.vehicleId)) + ' logged out to ' + rec.staffName + '.');
+  closeModal(); rerenderMain(); toast(id ? 'Trip updated.' : rec.inDate ? 'Trip logged.' : vLabel(vehById(rec.vehicleId)) + ' logged out for ' + rec.staffName + '.');
 }
 function openVlReturn(id){
   const l = state.vehicleLogs.find(x => x.id === id); if(!l) return;
@@ -5274,14 +5279,19 @@ async function buildVehicleLogPdf(v, logs){
       const l = rows[r];
       if(l){
         const cell = (i, t) => { const lines = pdfWrap(t || '', false, 8.5, X[i + 1] - X[i] - 8).slice(0, 2), b0 = y + (RH - lines.length * 10.5) / 2 + 8; lines.forEach((ln, k) => center(X[i], X[i + 1], b0 + k * 10.5, ln, { size:8.5 })); };
-        cell(0, l.staffName); cell(1, l.destination); cell(2, l.purpose); cell(3, vlDm(l.outDate)); cell(4, l.outTime); cell(6, vlDm(l.inDate)); cell(7, l.inTime);
+        { const nm = pdfWrap(l.staffName || '', false, 8.5, X[1] - X[0] - 8).slice(0, 1), dp = l.department ? pdfWrap(l.department, false, 6.8, X[1] - X[0] - 8).slice(0, 1) : [];
+          const b0 = y + (RH - (nm.length * 10.5 + dp.length * 8.5)) / 2 + 8; nm.forEach(ln => center(X[0], X[1], b0, ln, { size:8.5 })); dp.forEach(ln => center(X[0], X[1], b0 + 9.5, ln, { size:6.8, color:[0.35, 0.35, 0.35] })); }
+        cell(1, l.destination); cell(2, l.purpose); cell(3, vlDm(l.outDate)); cell(4, l.outTime); cell(6, vlDm(l.inDate)); cell(7, l.inTime);
       }
       y += RH; pg.line(X[0], y, X[9], y, K, 0.5);
     }
     pg.line(X[0], top, X[9], top, K, 0.6);
     X.forEach((x, i) => pg.line(x, i === 0 || i === 6 || i === 9 ? top : top + h1, x, y, K, i === 6 ? 1 : 0.6));
     pg.text(X0, y + 16, 'Vehicle Number: ' + (v.plate || ''), { bold:true, size:10 });
-    if(vName(v)) pg.text(X0 + pdfTextWidth('Vehicle Number: ' + (v.plate || '') + '   ', true, 10), y + 16, vName(v), { size:9, color:[0.35, 0.35, 0.35] });
+    const drivers = [...new Set(rows.map(l => l.driver).filter(Boolean))], drv = drivers.length ? drivers.join(', ') : (v.assignedTo || '');
+    let nx = X0 + pdfTextWidth('Vehicle Number: ' + (v.plate || '') + '   ', true, 10);
+    if(vName(v)){ pg.text(nx, y + 16, vName(v), { size:9, color:[0.35, 0.35, 0.35] }); nx += pdfTextWidth(vName(v) + '      ', false, 9); }
+    if(drv){ pg.text(nx, y + 16, 'Driver: ', { bold:true, size:9 }); pg.text(nx + pdfTextWidth('Driver: ', true, 9), y + 16, drv, { size:9 }); }
     if(chunks.length > 1) pg.text(X[9] - pdfTextWidth('Page ' + (pi + 1) + ' of ' + chunks.length, false, 8), y + 16, 'Page ' + (pi + 1) + ' of ' + chunks.length, { size:8 });
     pg.image('Ftr', (W - 300) / 2, H - 46, 300, 33.1);
     pages.push(pg);

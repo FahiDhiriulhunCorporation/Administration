@@ -1626,6 +1626,8 @@ const ICONS = {
   vehicle:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11l1.5-4.5A2 2 0 0 1 6.4 5h7.2a2 2 0 0 1 1.9 1.5L17 11"/><rect x="2.5" y="11" width="15" height="4.5" rx="1.5"/><circle cx="6" cy="13.3" r=".7"/><circle cx="14" cy="13.3" r=".7"/></svg>',
   fuel:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 17V4.5A1.5 1.5 0 0 1 5.5 3h5A1.5 1.5 0 0 1 12 4.5V17"/><path d="M3 17h10"/><path d="M6 6.5h4"/><path d="M12 8h1.5A1.5 1.5 0 0 1 15 9.5V13a1 1 0 0 0 2 0V7l-2-2"/></svg>',
   service:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12.5 3a4 4 0 0 0-3.7 5.4L3.5 13.7a1.6 1.6 0 0 0 2.3 2.3l5.3-5.3A4 4 0 0 0 16.5 7.5l-2.3 2.3-2-.5-.5-2 2.3-2.3A4 4 0 0 0 12.5 3z"/></svg>',
+  plane:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8.5 11.5 3 9.5l1.2-1.2 5.8.6 3.6-3.6c.8-.8 2-.9 2.4-.5s.3 1.6-.5 2.4L11.9 10.8l.6 5.8-1.2 1.2-2-5.5-2.6 2.4.2 1.8-1 1-1-2.6-2.6-1 1-1 1.8.2z"/></svg>',
+  globe:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.2 2.3 3.2 4.8 3.2 7.5s-1 5.2-3.2 7.5c-2.2-2.3-3.2-4.8-3.2-7.5s1-5.2 3.2-7.5z"/></svg>',
   chart:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17V3"/><path d="M3 17h14"/><path d="M6 13l3-4 3 2 4-6"/></svg>',
   handover:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 7 7 3l2 2-4.5 4z"/><path d="M4 5.5 7.5 9"/><path d="M17.5 13 13 17l-2-2 4.5-4z"/><path d="M16 14.5 12.5 11"/></svg>',
 };
@@ -1662,6 +1664,9 @@ function currentNav(){
     { section:'Facilities' },
     ...UT_TYPE_LIST.map(t => ({ id:'utility-' + UT_TYPES[t].slug, label:t, icon:UT_TYPES[t].icon, badge:utAl.filter(a=>a.type===t).length, tone:utAl.some(a=>a.type===t && a.st.k==='crit') ? 'crit' : 'warn' })),
     { id:'utility-report', label:'Report', icon:'chart' },
+    { section:'Travel' },
+    { id:'travel-local', label:'Local Travel', icon:'plane', badge:(()=>{ try{ return state.travelRequests.filter(t => (t.scope || 'local') === 'local' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
+    { id:'travel-foreign', label:'Foreign Travel', icon:'globe', badge:(()=>{ try{ return state.travelRequests.filter(t => t.scope === 'foreign' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
     { section:'Finance' },
     { id:'purchase-requisitions', label:'Purchase Requisitions', icon:'pr' },
     { id:'petty-cash', label:'Petty Cash Requests', icon:'cash', badge:pcAwaiting, tone:'warn' },
@@ -1823,6 +1828,7 @@ const VEH_COLS = {
   stockRequests:    { collection:'fdc_inventory_stock_requests',        label:'stock requests', one:'stock request' },
   utilityAccounts:  { collection:'fdc_inventory_utility_accounts',      label:'utility accounts', one:'utility account' },
   utilityBills:     { collection:'fdc_inventory_utility_bills',         label:'utility bills', one:'utility bill' },
+  travelRequests:   { collection:'fdc_inventory_travel_requests',       label:'travel requests', one:'travel request' },
 };
 const vehRefs = {}, vehUnsubs = {};
 let vehSettingsUnsub = null;
@@ -2827,7 +2833,7 @@ async function saveVehSettings(){
   const sp = o.spBase ? normalizeWebUrl(o.spBase) : '';
   if(sp === null) return vFail('The SharePoint address must be a web address (starting with https://).');
   const fc = state.profiles.find(p => p.uid === o.fuelCustodian);
-  vehSettings = { remindDays:Math.max(1, Math.round(vNum(o.remindDays)) || 30), currency:o.currency || 'MVR', spBase:sp, fuelPettyCashFloat:vNum(o.fuelFloat), fuelCustodianUid:o.fuelCustodian || '', fuelCustodianName:fc ? (fc.name || fc.email) : '' };
+  vehSettings = Object.assign({}, vehSettings, { remindDays:Math.max(1, Math.round(vNum(o.remindDays)) || 30), currency:o.currency || 'MVR', spBase:sp, fuelPettyCashFloat:vNum(o.fuelFloat), fuelCustodianUid:o.fuelCustodian || '', fuelCustodianName:fc ? (fc.name || fc.email) : '' });     // other settings (DSA rates) are kept
   await persistVehSettings();
   closeModal(); rerenderMain(); toast('Settings saved.');
 }
@@ -4265,27 +4271,40 @@ function pcFillStatementSheet(xml, s, ctx){
     const re = doc.querySelector('row[r="' + r + '"]'); re.setAttribute('ht', '30'); re.setAttribute('customHeight', '1');
   }
   setStr('A1', 'Statement of Petty Cash  Reimbursed – ' + ctx.loc.name);
-  const colTot = {}; PC_CAT_COLS.forEach(c => { colTot[c] = 0; }); let grand = 0;
+  const colTot = {}; PC_CAT_COLS.forEach(c => { colTot[c] = 0; }); let grand = 0; const rowAmt = {};
   const wrapN = (t, chars) => Math.max(1, String(t || '').split(String.fromCharCode(10)).reduce((n, ln) => n + Math.max(1, Math.ceil(ln.length / chars)), 0)), hods = {};
   s.list.slice(0, PC_STATEMENT_ROWS).forEach((r, i) => {
     const row = 5 + i, d = pcStatementRow(r), col = PC_CAT_COLS[PC_CATEGORIES.indexOf(d.category)];
     setStr('B' + row, d.supplier); setStr('C' + row, d.date); setStr('D' + row, d.bill); setStr('E' + row, d.voucher); setStr('F' + row, d.details); setStr('G' + row, d.dept);
     if(col){ setNum(col + row, d.amount); const ys = catS(col).yellow; if(ys != null) cell(col + row).setAttribute('s', ys); colTot[col] = pcRound(colTot[col] + d.amount); }
-    setCached('T' + row, d.amount); grand = pcRound(grand + d.amount);
+    rowAmt[row] = d.amount; grand = pcRound(grand + d.amount);
     const lines = Math.max(wrapN(d.supplier, 22), wrapN(d.date, 18), wrapN(d.bill, 24), wrapN(d.details, 36), wrapN(d.dept, 14)), re = doc.querySelector('row[r="' + row + '"]');
     re.setAttribute('ht', String(Math.max(36, lines * 22 + 10))); re.setAttribute('customHeight', '1');
     if(r.hodName) hods[r.hodName] = (hods[r.hodName] || 0) + 1;
   });
-  PC_CAT_COLS.forEach(c => setCached(c + '28', colTot[c])); setCached('T28', grand);
-  if(ctx.prev){ const pv = "'" + ctx.prev.replace(/'/g, "''") + "'"; setFormula('X4', pv + '!X27', 0); setFormula('X5', pv + '!T28', ctx.prevTotal); setCached('X6', ctx.prevTotal); }
+  // live formulas: each voucher row adds across the categories, each category adds down the rows
+  for(let r = 5; r <= 27; r++) setFormula('T' + r, 'SUM(H' + r + ':S' + r + ')', rowAmt[r] || 0);
+  PC_CAT_COLS.forEach(c => setFormula(c + '28', 'SUM(' + c + '5:' + c + '27)', colTot[c])); setFormula('T28', 'SUM(H28:S28)', grand);
+  // brought forward from the previous closed statement of this location (also across years):
+  // Balance B/F = its cash at hand, Last Period Replenished = its total (cash used), Total C/D = the two together
+  const P = ctx.prevS;
+  if(P){
+    const bf = pcRound(P.rec && P.rec.cashTotal != null ? vNum(P.rec.cashTotal) : 0), used = pcRound(P.total);
+    if(ctx.prev){ const pv = "'" + ctx.prev.replace(/'/g, "''") + "'"; setFormula('X4', pv + '!X27', bf); setFormula('X5', pv + '!T28', used); }
+    else { setNum('X4', bf); setNum('X5', used); }
+    setFormula('X6', 'X4+X5', pcRound(bf + used));
+    const rd = (P.rec && (P.rec.replenishedDate || P.rec.closedDate)) || P.closedDate;
+    if(rd) setStr('V2', 'Last Replenished Date: ' + pcOrdinalDate(rd));
+  }
   // cash at hand: the quantity counted for each denomination
   const counts = ctx.cash || {}; let cashTotal = 0;
-  PC_DENOMS.forEach((d, i) => { const q = Math.max(0, Math.floor(vNum(counts[String(d)]))), t = pcRound(d * q); cashTotal += t; setNum('W' + (14 + i), q); setCached('X' + (14 + i), t); });
-  cashTotal = pcRound(cashTotal); setCached('X27', cashTotal);
+  PC_DENOMS.forEach((d, i) => { const q = Math.max(0, Math.floor(vNum(counts[String(d)]))), t = pcRound(d * q); cashTotal += t; setNum('W' + (14 + i), q); setFormula('X' + (14 + i), 'V' + (14 + i) + '*W' + (14 + i), t); });
+  cashTotal = pcRound(cashTotal); setFormula('X27', 'SUM(X14:X26)', cashTotal);
   const adv = pcRound(vNum(ctx.pending)); if(adv > 0) setNum('X10', adv);          // pending replenishment: closed statements not yet paid back, and cash handed out awaiting an invoice
   const totalCash = pcRound(grand + cashTotal + adv), unbalanced = pcRound(vNum(ctx.float) - totalCash);
-  setCached('X8', grand); setCached('X9', cashTotal); setCached('X11', totalCash); setCached('AB7', grand); setCached('AB8', cashTotal);
-  setFormula('AB9', 'SUM(' + vNum(ctx.float) + '-X11)', unbalanced);
+  setFormula('X8', 'T28', grand); setFormula('X9', 'X27', cashTotal); setFormula('X11', 'SUM(X8:X10)', totalCash); setFormula('AB7', 'T28', grand); setFormula('AB8', 'X27', cashTotal);
+  setFormula('AB9', 'ROUND(' + vNum(ctx.float) + '-X11,2)', unbalanced);
+  const sv = doc.querySelector('sheetView'); if(sv) sv.setAttribute('tabSelected', ctx.active ? 'true' : 'false');   // only one sheet selected, so Excel does not open them grouped
   const s8 = cell('Z8').getAttribute('s'); if(s8) cell('Z9').setAttribute('s', s8); setStr('Z9', 'Unbalanced');
   clear(cell('AB13')).removeAttribute('s');                                         // a scratch calculation (and its highlight) in the sample
   const mc = doc.querySelector('mergeCells');                                       // red when the cash has been counted and the statement does not balance
@@ -4301,10 +4320,11 @@ function pcFillStatementSheet(xml, s, ctx){
   if(cols) [...cols.children].forEach(c => { const idx = +c.getAttribute('min'), letter = PC_CAT_COLS.find(l => pcColIndex(l) === idx); if(letter && colTot[letter] > 0){ c.removeAttribute('hidden'); if(hCol && hCol.getAttribute('width')){ c.setAttribute('width', hCol.getAttribute('width')); c.setAttribute('customWidth', '1'); } } });   // a column shown now is as wide as the others
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + new XMLSerializer().serializeToString(doc).replace(/^<\?xml[^>]*\?>\s*/, '');   // the serializer may add its own declaration
 }
-async function buildPettyCashStatementXlsx(locId, yy){
+// one workbook for every statement: one sheet per statement, for every location and the Fueling fund, all years
+async function buildPettyCashStatementXlsx(focusNo){
   try{ await loadScriptOnce(JSZIP_URL); }catch(e){ throw new Error('The document builder could not be loaded. Check your internet connection and try again.'); }
-  const sts = pcStatements(locId, yy);
-  if(!sts.length) throw new Error('There are no statements yet for this location and year.');
+  const groups = pcFundList().map(f => ({ fund:f, sts:pcStatements(f.id) })).filter(g => g.sts.length);
+  if(!groups.length) throw new Error('There are no statements yet.');
   const tpl = await JSZip.loadAsync(PC_STATEMENT_TEMPLATE_B64, { base64:true });
   let stylesXml = await tpl.file('xl/styles.xml').async('string');
   stylesXml = stylesXml.replace(/<fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"\/>(?:<bgColor [^>]*\/>)?<\/patternFill><\/fill>/g, '<fill><patternFill patternType="none"/></fill>');     // no yellow highlighting anywhere
@@ -4322,22 +4342,33 @@ async function buildPettyCashStatementXlsx(locId, yy){
   let wbXml = await tpl.file('xl/workbook.xml').async('string'), rels = await tpl.file('xl/_rels/workbook.xml.rels').async('string'), ct = await tpl.file('[Content_Types].xml').async('string');
   const out = new JSZip(), skip = ['xl/worksheets/sheet1.xml', 'xl/styles.xml', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', '[Content_Types].xml'];
   for(const name of Object.keys(tpl.files)){ const f = tpl.files[name]; if(!f.dir && !skip.includes(name)) out.file(name, await f.async('uint8array'), { createFolders:false }); }
-  const loc = pcFund(locId), cust = pcPerson(loc && loc.pettyCashCustodianUid, loc && loc.pettyCashCustodianName), float = pcFloatOf(loc);
-  let prev = null, prevTotal = 0;
-  const live = pcCountOf(locId), livePending = pcReconcile(loc).pending;
-  sts.forEach((s, i) => { const rec = s.rec || {}; out.file('xl/worksheets/sheet' + (i + 1) + '.xml', pcFillStatementSheet(sheetXml, s, { loc, float:s.closed && rec.float != null ? rec.float : float, custodian:cust.name, prev, prevTotal, yellow, cash:s.closed ? rec.cash : (live ? live.counts : null), pending:s.closed ? (rec.pendingAtClose != null ? vNum(rec.pendingAtClose) : vNum(rec.advances)) : livePending, closedDate:s.closed ? s.closedDate : '' }), { createFolders:false }); prev = s.no; prevTotal = s.total; });
-  wbXml = wbXml.replace(/<sheets>[\s\S]*?<\/sheets>/, '<sheets>' + sts.map((s, i) => '<sheet name="' + xmlEsc(s.no) + '" sheetId="' + (i + 1) + '" r:id="rIdS' + (i + 1) + '"/>').join('') + '</sheets>');
-  rels = rels.replace(/<Relationship [^>]*relationships\/worksheet"[^>]*\/>/g, '').replace('</Relationships>', sts.map((s, i) => '<Relationship Id="rIdS' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') + '</Relationships>');
-  ct = ct.replace(/<Override PartName="\/xl\/worksheets\/sheet1\.xml"[^>]*\/>/, '').replace('</Types>', sts.map((s, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('') + '</Types>');
+  // sheet names: the statement number (unique, at most 31 characters, no characters Excel refuses)
+  const used = new Set(), names = {}, sheets = [];
+  groups.forEach(g => g.sts.forEach(s => { let base = String(s.no).replace(/[\\\/?*\[\]:]/g, '-').replace(/^'+|'+$/g, '').slice(0, 31) || 'Statement', n = base, k = 2;
+    while(used.has(n.toLowerCase())){ const suf = ' (' + (k++) + ')'; n = base.slice(0, 31 - suf.length) + suf; }
+    used.add(n.toLowerCase()); names[g.fund.id + '|' + s.no] = n; sheets.push({ g, s, name:n }); }));
+  let active = sheets.findIndex(x => x.s.no === focusNo); if(active < 0) active = 0;
+  sheets.forEach((x, i) => {
+    const { g, s } = x, loc = g.fund, locId = loc.id, rec = s.rec || {}, cust = pcPerson(loc.pettyCashCustodianUid, loc.pettyCashCustodianName), float = pcFloatOf(loc);
+    const live = pcCountOf(locId), k = g.sts.findIndex(y => y.no === s.no), prevS = k > 0 ? g.sts.slice(0, k).reverse().find(y => y.closed) || null : null;   // the previous closed statement of the same location or fund
+    out.file('xl/worksheets/sheet' + (i + 1) + '.xml', pcFillStatementSheet(sheetXml, s, { loc, float:s.closed && rec.float != null ? rec.float : float, custodian:cust.name, prev:prevS ? names[locId + '|' + prevS.no] : null, prevS, yellow, active:i === active,
+      cash:s.closed ? rec.cash : (live ? live.counts : null), pending:s.closed ? (rec.pendingAtClose != null ? vNum(rec.pendingAtClose) : vNum(rec.advances)) : pcReconcile(loc).pending, closedDate:s.closed ? s.closedDate : '' }), { createFolders:false });
+  });
+  wbXml = wbXml.replace(/<sheets>[\s\S]*?<\/sheets>/, '<sheets>' + sheets.map((x, i) => '<sheet name="' + xmlEsc(x.name) + '" sheetId="' + (i + 1) + '" r:id="rIdS' + (i + 1) + '"/>').join('') + '</sheets>')
+    .replace(/activeTab="\d+"/, 'activeTab="' + active + '"').replace(/firstSheet="\d+"/, 'firstSheet="0"')
+    .replace(/<calcPr\b[^>]*\/>/, '<calcPr calcId="191029" fullCalcOnLoad="1" iterateCount="100" refMode="A1" iterate="false" iterateDelta="0.0001"/>');   // Excel works out every formula when it opens the file
+  rels = rels.replace(/<Relationship [^>]*relationships\/worksheet"[^>]*\/>/g, '').replace('</Relationships>', sheets.map((x, i) => '<Relationship Id="rIdS' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') + '</Relationships>');
+  ct = ct.replace(/<Override PartName="\/xl\/worksheets\/sheet1\.xml"[^>]*\/>/, '').replace('</Types>', sheets.map((x, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('') + '</Types>');
   out.file('xl/styles.xml', stylesXml, { createFolders:false }); out.file('xl/workbook.xml', wbXml, { createFolders:false }); out.file('xl/_rels/workbook.xml.rels', rels, { createFolders:false }); out.file('[Content_Types].xml', ct, { createFolders:false });
   return out.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE' });
 }
-async function pcDownloadStatements(locId, yy, btn){
-  const label = btn ? btn.textContent : '';
+// downloads the one workbook of all statements; it opens on the given statement's sheet
+async function pcDownloadStatements(focusNo, btn){
+  const label = btn ? btn.innerHTML : '';
   if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
-  try{ downloadBlob(await buildPettyCashStatementXlsx(locId, yy), 'Petty_Cash_Statement_' + pcLocCode(locId) + '_20' + yy + '.xlsx'); return true; }
+  try{ downloadBlob(await buildPettyCashStatementXlsx(focusNo), 'Petty_Cash_Statements_' + vToday() + '.xlsx'); return true; }
   catch(e){ console.error(e); toast('Could not create the workbook: ' + (e && e.message ? e.message : e), true); return false; }
-  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = label; } }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
 
 /* ---------- the Statement page: Excel statements, plus the summary report ---------- */
@@ -4699,7 +4730,7 @@ async function pcGenerateStatement(btn){                          // start a new
   for(const id of sel) await vehSave('pettyCash', { id, statementNo:no, statementDate:today, statementAt:stamp });
   vehUi.stSelLoc = ''; rerenderMain();
   if(!sel.length){ toast('Statement ' + no + ' started. Add vouchers to it as their invoices come in.'); return; }
-  if(await pcDownloadStatements(locId, yy, btn)) toast('Statement ' + no + ' started and downloaded.');
+  if(await pcDownloadStatements(no, btn)) toast('Statement ' + no + ' started and downloaded.');
   else toast('Statement ' + no + ' was started, but the file could not be built. Use Download below.', true);
 }
 async function pcAddToStatement(){
@@ -4726,7 +4757,7 @@ function pcCloseStatement(no){
     const cnt = pcCountOf(locId), today = vToday();
     await vehSave('pettyStatements', { id:s.rec ? s.rec.id : undefined, no, locationId:locId, status:'closed', openedDate:(s.rec && s.rec.openedDate) || today, openedAt:s.at || Date.now(), closedDate:today, closedAt:Date.now(), closedBy:authUser ? authUser.name : '', cash:cnt ? cnt.counts : null, cashTotal:cnt ? pcCountTotal(cnt.counts) : 0, advances:rc.advances, pendingAtClose:rc.pending, float:rc.assigned, diffAtClose:rc.counted ? rc.diff : null, replenishedAmount:0, replenishedDate:null, replenishNote:null });
     vehUi.stSelLoc = ''; vehUi.stNo = ''; rerenderMain();
-    if(await pcDownloadStatements(locId, s.yy)) toast('Statement ' + no + ' closed and downloaded. New requests go into a new statement.'); else toast('Statement ' + no + ' closed, but the file could not be built. Use Download below.', true);
+    if(await pcDownloadStatements(no)) toast('Statement ' + no + ' closed and downloaded. New requests go into a new statement.'); else toast('Statement ' + no + ' closed, but the file could not be built. Use Download below.', true);
     openPcReplRequest(no);                                          // next step: the replenishment request for this statement
   });
 }
@@ -4782,6 +4813,8 @@ function pcNextReplNo(){
   state.pettyStatements.forEach(x => { const m = pcReplNoRe.exec((x.replRequest && x.replRequest.number) || ''); if(m && m[1] === yy) max = Math.max(max, +m[2]); });
   return 'FDC-PTC-' + yy + '-' + (max + 1);
 }
+// the replenishment request carries the statement's number (an older auto number FDC-PTC-yy-n counts as not set)
+function pcReplNo(st){ const r = (st && st.rec && st.rec.replRequest) || {}, n = String(r.number || '').trim(); return n && !pcReplNoRe.test(n) ? n : (st ? st.no : ''); }
 function pcLastReplApprover(){
   const list = state.pettyStatements.filter(x => x.replRequest && x.replRequest.hodName).sort((a, b) => (b.replRequest.createdAt || 0) - (a.replRequest.createdAt || 0));
   return list.length ? { name: list[0].replRequest.hodName } : { name: '' };
@@ -4795,7 +4828,7 @@ function openPcReplRequest(no){
   openModal((r.number ? 'Edit' : 'New') + ' replenishment request', vFormOpen + `
     <datalist id="pr-people">${people}</datalist>
     <p class="text-sm text-slate-500 mb-4">Statement <b class="text-slate-800">${esc(no)}</b> · ${s.list.length} voucher${s.list.length === 1 ? '' : 's'} · total ${fmtMVR(s.total)}${pend < s.total ? ' · ' + fmtMVR(pend) + ' still pending' : ''}</p>
-    ${vGrid(2, vF('Form number', 'number', r.number || pcNextReplNo(), 'text', { req:1 }) + vF('Request date', 'date', r.date || vToday(), 'date', { req:1 }))}
+    ${vGrid(2, vF('Form number', 'number', pcReplNo(s), 'text', { req:1 }) + vF('Request date', 'date', r.date || vToday(), 'date', { req:1 }))}
     ${vSec('Request (Custodian)')}
     ${vGrid(2, vF('Requested by', 'reqName', r.reqName || cus.name, 'text', { req:1, attrs:' list="pr-people"' }) + vF('Department', 'reqDept', r.reqDept || cusP.department || (authUser && authUser.department) || 'Administration') + vF('Amount (MVR)', 'amount', r.amount != null ? r.amount : (pend || s.total), 'number', { req:1 }) + vF('Comments', 'comments', r.comments || ((f ? f.name : '') + ' petty cash — statement ' + no)))}
     ${vSec('Approval (HOD Admin)')}
@@ -4814,21 +4847,21 @@ async function savePcReplRequest(no){
   if(!String(o.reqName || '').trim()) return vFail('Enter who is requesting.');
   if(!(vNum(o.amount) > 0)) return vFail('Enter the amount.');
   const url = o.docUrl ? vSafeUrl(o.docUrl) : ''; if(o.docUrl && !url) return vFail('Enter a full web link starting with https://');
-  const dup = state.pettyStatements.find(x => x.id !== s.rec.id && x.replRequest && String(x.replRequest.number).trim().toLowerCase() === String(o.number).trim().toLowerCase());
+  const dup = state.pettyStatements.find(x => x.id !== s.rec.id && x.replRequest && pcReplNo({ no:x.no, rec:x }).toLowerCase() === String(o.number).trim().toLowerCase());
   if(dup) return vFail('Form number ' + o.number + ' is already used on statement ' + dup.no + '.');
   const prev = s.rec.replRequest || {};
-  const rr = { number: String(o.number).trim(), date: o.date, reqName: o.reqName.trim(), reqDept: (o.reqDept || '').trim(), amount: pcRound(vNum(o.amount)), comments: (o.comments || '').trim(),
+  const rr = { number: String(o.number).trim() === no ? '' : String(o.number).trim(), date: o.date, reqName: o.reqName.trim(), reqDept: (o.reqDept || '').trim(), amount: pcRound(vNum(o.amount)), comments: (o.comments || '').trim(),
     hodName: (o.hodName || '').trim(), hodDate: o.hodDate || '', hodAmount: o.hodAmount === '' || o.hodAmount == null ? null : pcRound(vNum(o.hodAmount)), hodRemarks: (o.hodRemarks || '').trim(),
     docUrl: url, createdAt: prev.createdAt || Date.now(), createdBy: prev.createdBy || (authUser ? authUser.name : ''), updatedAt: Date.now() };
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   await vehSave('pettyStatements', { id: s.rec.id, replRequest: rr });
-  closeModal(); rerenderMain(); toast('Replenishment request ' + rr.number + ' saved. Download the form from the Closed statements list.');
+  closeModal(); rerenderMain(); toast('Replenishment request ' + (rr.number || no) + ' saved.'); openPcStatementDetail(no);
 }
 function deletePcReplRequest(no){
   const locId = pcStLocation(); if(!pcCanStatement(locId)) return;
   const s = pcStatements(locId).find(x => x.no === no); if(!s || !s.rec) return;
   closeModal();
-  confirmAction('Delete replenishment request ' + ((s.rec.replRequest || {}).number || '') + '?', async () => { await vehSave('pettyStatements', { id: s.rec.id, replRequest: null }); rerenderMain(); toast('Replenishment request deleted.'); });
+  confirmAction('Delete replenishment request ' + pcReplNo(s) + '?', async () => { await vehSave('pettyStatements', { id: s.rec.id, replRequest: null }); rerenderMain(); toast('Replenishment request deleted.'); });
 }
 function pcReplDateParts(iso){
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); if(!m) return { d:'', suf:'', my:'' };
@@ -4843,7 +4876,7 @@ async function buildPcReplDocx(s){
   const r = s.rec.replRequest, zip = await JSZip.loadAsync(PC_REPL_TEMPLATE_B64, { base64:true });
   const rd = pcReplDateParts(r.date), hd = pcReplDateParts(r.hodDate);
   const hodAmt = r.hodAmount != null ? r.hodAmount : (r.hodName ? r.amount : null);
-  const vals = { NO: r.number, COMMENTS: r.comments, REQ_BY: r.reqName, REQ_DEPT: r.reqDept, REQ_AMT: pcMoneyPlain(r.amount), REQ_D: rd.d, REQ_SUF: rd.suf, REQ_MY: rd.my,
+  const vals = { NO: pcReplNo(s), COMMENTS: r.comments, REQ_BY: r.reqName, REQ_DEPT: r.reqDept, REQ_AMT: pcMoneyPlain(r.amount), REQ_D: rd.d, REQ_SUF: rd.suf, REQ_MY: rd.my,
     HOD_REMARKS: r.hodRemarks, HOD_NAME: r.hodName, HOD_AMT: hodAmt != null ? pcMoneyPlain(hodAmt) : '', HOD_D: hd.d, HOD_SUF: hd.suf, HOD_MY: hd.my };
   let xml = await zip.file('word/document.xml').async('string');
   xml = xml.replace(/\{\{([A-Z_]+)\}\}/g, (m0, k) => xmlText(vals[k] == null ? '' : String(vals[k])));
@@ -4858,18 +4891,172 @@ async function buildPcReplDocx(s){
 }
 async function pcReplForm(no, btn){
   const locId = pcStLocation(), s = pcStatements(locId).find(x => x.no === no); if(!s || !s.rec || !s.rec.replRequest) return;
-  const label = btn ? btn.textContent : '';
+  const label = btn ? btn.innerHTML : '';
   if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
-  try{ downloadBlob(await buildPcReplDocx(s), 'Petty_Cash_Replenishment_' + String(s.rec.replRequest.number).replace(/[^A-Za-z0-9-]+/g, '_') + '.docx'); toast('Replenishment form downloaded.'); }
+  try{ downloadBlob(await buildPcReplDocx(s), 'Petty_Cash_Replenishment_' + pcReplNo(s).replace(/[^A-Za-z0-9-]+/g, '_') + '.docx'); toast('Replenishment form downloaded.'); }
   catch(e){ console.error(e); toast('Could not create the form: ' + (e && e.message ? e.message : e), true); }
-  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = label; } }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
 
 function pcReplCell(s){
   if(!s.rec) return '<span class="text-slate-300">—</span>';
   const pend = pcStmtPending(s), got = vNum(s.rec.replenishedAmount), rr = s.rec.replRequest;
-  const req = rr ? `<div class="text-[11px] text-slate-500 mt-1">Requested ${esc(rr.number)} · ${vDate(rr.date)}${rr.docUrl ? ' · ' + vLink(rr.docUrl, 'Signed form') : ''}</div>` : '';
+  const req = rr ? `<div class="text-[11px] text-slate-500 mt-1">Requested ${vDate(rr.date)}${rr.docUrl ? ' · ' + vLink(rr.docUrl, 'Signed form') : ''}</div>` : '';
   return (pend > 0 ? vPill('warn', 'Pending ' + fmtMVR(pend)) + (got ? `<div class="text-[11px] text-slate-400 mt-0.5">${fmtMVR(got)} received</div>` : '') : vPill('good', 'Replenished' + (s.rec.replenishedDate ? ' ' + vDate(s.rec.replenishedDate) : ''))) + req;
+}
+// a short status for the closed-statements list
+function pcReplStatusPill(s){
+  if(!s.rec) return '<span class="text-slate-300">—</span>';
+  const pend = pcStmtPending(s), rr = s.rec.replRequest;
+  if(pend <= 0) return vPill('good', 'Replenished');
+  return vPill('warn', 'Pending ' + fmtMVR(pend)) + (rr ? '' : '<div class="text-[11px] text-slate-400 mt-0.5">No request yet</div>');
+}
+// a closed statement in full: its figures, vouchers, replenishment, downloads and actions
+function openPcStatementDetail(no){
+  const locId = pcStLocation(), s = pcStatements(locId).find(x => x.no === no); if(!s) return;
+  const can = pcCanStatement(locId), rec = s.rec || {}, rr = rec.replRequest, pend = pcStmtPending(s), got = vNum(rec.replenishedAmount), fig = pcStmtFigures(locId, s);
+  const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v}</div></div>`;
+  const dl = (label, sub, fn) => `<button onclick="${fn}" class="flex items-center gap-3 rounded-lg border border-slate-200 hover:border-brand-400 hover:bg-brand-50 px-3.5 py-2.5 text-left"><span class="text-[10px] font-bold rounded px-1.5 py-0.5 ${sub === 'PDF' ? 'bg-rose-100 text-rose-700' : sub === 'Excel' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}">${sub}</span><span class="text-sm font-semibold text-slate-700">${label}</span></button>`;
+  const act = (label, fn, cls) => `<button onclick="${fn}" class="text-xs font-semibold ${cls || 'text-brand-600'} hover:underline">${label}</button>`;
+  const rows = s.list.map(r => { const d = pcStatementRow(r); return `<tr class="${vTr}">${vTd(`<span class="font-semibold">${esc(d.voucher)}</span><div class="text-[11px] text-slate-400">${esc(d.date).replace(/\n/g, '<br>')}</div>`, { first:1 })}${vTd(esc(d.supplier || '—') + (d.bill ? `<div class="text-[11px] text-slate-400">${esc(d.bill).replace(/\n/g, ', ')}</div>` : ''))}${vTd(`<div class="max-w-[18rem] text-slate-600">${esc(d.details || '—').replace(/\n/g, '<br>')}</div>`)}${vTd(esc(d.category || '—'), { cls:'text-slate-500' })}${vTd(`<b>${fmtMVR(d.amount)}</b>`, { n:1, last:1 })}</tr>`; }).join('');
+  const recon = [['Balance B/F', fig.bf], ['Last period replenished', fig.used], ['This statement', s.total], ['Cash at hand', fig.cash], ['Pending replenishment', fig.pending], ['Total cash', fig.totalCash], ['Assigned balance', fig.float]];
+  openModal('Statement ' + no, `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Total', fmtMVR(s.total))}${item('Vouchers', s.list.length)}${item('Invoice dates', s.from ? vDate(s.from) + (s.to !== s.from ? ' – ' + vDate(s.to) : '') : '—')}${item('Closed', s.closedDate ? vDate(s.closedDate) : '—')}</div>
+    <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Download</div>
+    <div class="grid sm:grid-cols-2 gap-2 mb-5">
+      ${dl('Statement', 'PDF', `pcStatementPdf('${esc(no)}', this)`)}${dl('Statement workbook (all statements)', 'Excel', `pcDownloadStatements('${esc(no)}', this)`)}
+      ${rr ? dl('Replenishment form', 'PDF', `pcReplFormPdf('${esc(no)}', this)`) + dl('Replenishment form', 'Word', `pcReplForm('${esc(no)}', this)`) : ''}
+    </div>
+    <div class="rounded-xl border border-slate-200 p-4 mb-5">
+      <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Replenishment</div><div class="mt-1.5">${pend > 0 ? vPill('warn', 'Pending ' + fmtMVR(pend)) : vPill('good', 'Replenished' + (rec.replenishedDate ? ' ' + vDate(rec.replenishedDate) : ''))}${got && pend > 0 ? `<span class="text-xs text-slate-500 ml-2">${fmtMVR(got)} received</span>` : ''}</div></div>
+        <div class="flex items-center gap-4 flex-wrap">${can && s.rec ? act(rr ? 'Edit request' : 'Raise request', `openPcReplRequest('${esc(no)}')`, rr ? 'text-slate-500 hover:text-brand-600' : '') : ''}${can && s.rec && pend > 0 ? act('Mark replenished', `openPcReplenish('${esc(no)}')`) : ''}${can && got > 0 ? act('Undo', `pcUndoReplenish('${esc(no)}')`, 'text-slate-400 hover:text-rose-600') : ''}</div></div>
+      ${rr ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-sm">${item('Request no.', esc(pcReplNo(s)))}${item('Requested', vDate(rr.date) + ' · ' + fmtMVR(rr.amount))}${item('Approved by', esc(rr.hodName || '—') + (rr.hodDate ? ' · ' + vDate(rr.hodDate) : ''))}${item('Signed form', rr.docUrl ? vLink(rr.docUrl, 'Open') : '—')}</div>` : `<div class="text-xs text-slate-500 mt-2">No replenishment request yet.</div>`}
+      ${rec.replenishNote ? `<div class="text-xs text-slate-500 mt-2">Note: ${esc(rec.replenishNote)}</div>` : ''}
+    </div>
+    <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Reconciliation</div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">${recon.map(([l, v]) => item(l, fmtMVR(v))).join('')}${item('Unbalanced', Math.abs(fig.unbalanced) < 0.005 ? '<span class="text-emerald-600">Balanced ✓</span>' : `<span class="text-rose-600">${fmtMVR(fig.unbalanced)}</span>`)}</div>
+    <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Vouchers</div>
+    <div class="overflow-x-auto -mx-1 border border-slate-100 rounded-lg mb-5"><table class="w-full text-sm">${vTHead([{ t:'Voucher' }, { t:'Supplier' }, { t:'Details' }, { t:'Category' }, { t:'Amount', n:1 }])}<tbody>${rows || `<tr><td colspan="5" class="py-6 text-center text-slate-400 text-sm">No vouchers</td></tr>`}</tbody></table></div>
+    ${can && s.rec ? `<div class="flex items-center justify-end gap-4 pt-3 border-t border-slate-100">${act('Rename', `openPcRenameStatement('${esc(no)}')`, 'text-slate-400 hover:text-brand-600')}${act('Reopen statement', `pcReopenStatement('${esc(no)}')`, 'text-slate-500 hover:text-brand-600')}</div>` : ''}`, true);
+}
+// the figures of a statement's reconciliation, as on its sheet
+function pcStmtFigures(locId, s){
+  const fund = pcFund(locId), rec = s.rec || {}, all = pcStatements(locId), k = all.findIndex(x => x.no === s.no), prevS = k > 0 ? all.slice(0, k).reverse().find(x => x.closed) || null : null;
+  const live = pcCountOf(locId), counts = s.closed ? rec.cash : (live ? live.counts : null);
+  const cash = pcCountTotal(counts || {}), float = pcRound(s.closed && rec.float != null ? vNum(rec.float) : pcFloatOf(fund));
+  const pending = pcRound(s.closed ? (rec.pendingAtClose != null ? vNum(rec.pendingAtClose) : vNum(rec.advances)) : pcReconcile(fund).pending);
+  const bf = prevS ? pcRound(prevS.rec && prevS.rec.cashTotal != null ? vNum(prevS.rec.cashTotal) : 0) : 0, used = prevS ? pcRound(prevS.total) : 0;
+  const totalCash = pcRound(s.total + cash + pending);
+  return { fund, prevS, counts:counts || {}, cash, float, pending, bf, used, totalCash, unbalanced:pcRound(float - totalCash) };
+}
+/* ---------- the statement as a PDF (A4, letterhead) ---------- */
+async function buildPcStatementPdf(locId, s){
+  const fig = pcStmtFigures(locId, s), fund = fig.fund, rec = s.rec || {}, cust = pcPerson(fund.pettyCashCustodianUid, fund.pettyCashCustodianName);
+  const K = [0, 0, 0], GRID = [0.62, 0.62, 0.66], HEAD = [0.93, 0.94, 0.96], MUTED = [0.38, 0.4, 0.45];
+  const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = PC_TOP + 22;
+  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = PC_TOP + 18; };
+  const L = 36, R = 559.3;
+  const txt = (x, b, t, o) => pg.text(x, b, t, Object.assign({ size:8.5 }, o || {}));
+  const rtxt = (x, b, t, o) => { o = Object.assign({ size:8.5 }, o || {}); pg.text(x - pdfTextWidth(t, !!o.bold, o.size), b, t, o); };
+  // heading block
+  txt(L, y, 'Statement of Petty Cash Reimbursed – ' + fund.name, { bold:true, size:11.5 }); y += 18;
+  const sd = iso => pcOrdinalDate(iso).replace(/([A-Z][a-z]{2})[a-z]+/, '$1');          // 25th Sep 2026
+  const info = [['Petty cash custodian', cust.name || '—'], ['Assigned balance', 'MVR ' + pcMoneyPlain(fig.float)], ['Invoice dates', s.from ? sd(s.from) + (s.to !== s.from ? ' – ' + sd(s.to) : '') : '—'], ['Status', s.closed ? 'Closed ' + sd(s.closedDate) : 'Open']];
+  if(fig.prevS){ const rd = (fig.prevS.rec && (fig.prevS.rec.replenishedDate || fig.prevS.rec.closedDate)) || fig.prevS.closedDate; if(rd) info.push(['Last replenished', sd(rd)]); }
+  if(rec.replRequest) info.push(['Replenishment request', pcReplNo(s)]);
+  info.forEach((it, i) => { const x = i % 2 ? 315 : L, b = y + Math.floor(i / 2) * 13; txt(x, b, it[0] + ':', { color:MUTED }); txt(x + (i % 2 ? 108 : 98), b, it[1], { bold:true }); });
+  y += Math.ceil(info.length / 2) * 13 + 10;
+  // vouchers
+  const C = [L, 52, 126, 178, 244, 290, 432, 494, R], AL = ['c', 'l', 'l', 'l', 'l', 'l', 'l', 'r'], FS = 7.6, LH = 9.6;
+  const head = ['#', 'Voucher', 'Date', 'Supplier', 'Bill no.', 'Details', 'Category', 'Amount (MVR)'];
+  const cellText = (i, top, h, lines, bold) => { const b0 = top + (h - lines.length * LH) / 2 + 7; lines.forEach((ln, k) => { const w = pdfTextWidth(ln, bold, FS), x = AL[i] === 'c' ? C[i] + (C[i + 1] - C[i] - w) / 2 : AL[i] === 'r' ? C[i + 1] - 3 - w : C[i] + 3; if(ln) pg.text(x, b0 + k * LH, ln, { size:FS, bold }); }); };
+  const vlines = (top, bot) => C.forEach(x => pg.line(x, top, x, bot, GRID, 0.5));
+  let fTop = y;
+  const header = () => { const h = 24; pg.fill(L, y, R - L, h, HEAD); head.forEach((t, i) => cellText(i, y, h, pdfWrap(t, true, FS, C[i + 1] - C[i] - 6), true)); pg.line(L, y, R, y, GRID, 0.5); y += h; pg.line(L, y, R, y, GRID, 0.5); };
+  header();
+  const catTot = {};
+  s.list.forEach((r, n) => {
+    const d = pcStatementRow(r); catTot[d.category || 'Other'] = pcRound((catTot[d.category || 'Other'] || 0) + d.amount);
+    const vals = [String(n + 1), d.voucher, d.date.split('\n').map(x => x.replace(/([A-Z][a-z]{2})[a-z]+/, '$1')).join('\n'), d.supplier, d.bill, d.details, d.category || '', pcMoneyPlain(d.amount)];
+    const wr = vals.map((v, i) => pdfWrap(v || '', false, FS, C[i + 1] - C[i] - 6)), h = Math.max(16, Math.max(...wr.map(w => w.length)) * LH + 6);
+    if(y + h > PC_BOTTOM - 20){ vlines(fTop, y); newPage(); fTop = y; header(); }
+    wr.forEach((w, i) => cellText(i, y, h, w, false)); y += h; pg.line(L, y, R, y, GRID, 0.5);
+  });
+  if(!s.list.length){ txt(L + 6, y + 12, 'No vouchers', { color:MUTED }); y += 18; pg.line(L, y, R, y, GRID, 0.5); }
+  vlines(fTop, y);
+  pg.fill(L, y, R - L, 18, HEAD); txt(C[6] + 3, y + 12.3, 'Total', { bold:true }); rtxt(R - 3, y + 12.3, pcMoneyPlain(s.total), { bold:true }); pg.line(L, y + 18, R, y + 18, GRID, 0.5); pg.line(L, y, L, y + 18, GRID, 0.5); pg.line(R, y, R, y + 18, GRID, 0.5); y += 32;
+  // by category + reconciliation, side by side
+  const cats = Object.keys(catTot).sort((a, b) => PC_CATEGORIES.indexOf(a) - PC_CATEGORIES.indexOf(b));
+  const recon = [['Balance B/F', fig.bf], ['Last period replenished', fig.used], ['Total C/D', pcRound(fig.bf + fig.used)], null, ['Amount used (this statement)', s.total], ['Cash at hand', fig.cash], ['Pending replenishment', fig.pending], ['Total cash', fig.totalCash, 1], ['Assigned balance', fig.float], ['Unbalanced', fig.unbalanced, 1]];
+  const blockH = 18 + Math.max(cats.length, recon.length) * 14 + 6;
+  if(y + blockH > PC_BOTTOM - 120) newPage();
+  const box = (x0, x1, title, list) => { let b = y; pg.fill(x0, b, x1 - x0, 18, HEAD); txt(x0 + 6, b + 12.3, title, { bold:true }); b += 18;
+    list.forEach(it => { if(!it){ b += 6; return; } txt(x0 + 6, b + 10.5, it[0], { bold:!!it[2] }); rtxt(x1 - 6, b + 10.5, pcMoneyPlain(it[1]), { bold:!!it[2], color:it[0] === 'Unbalanced' && Math.abs(it[1]) >= 0.005 ? [0.75, 0, 0] : K }); b += 14; });
+    b += 4; pg.line(x0, y, x1, y, GRID, 0.5); pg.line(x0, b, x1, b, GRID, 0.5); pg.line(x0, y, x0, b, GRID, 0.5); pg.line(x1, y, x1, b, GRID, 0.5); return b; };
+  const b1 = box(L, 286, 'By category', cats.length ? cats.map(c => [c, catTot[c]]) : [['—', 0]]), b2 = box(310, R, 'Petty cash reconciliation', recon);
+  y = Math.max(b1, b2) + 24;
+  // cash at hand, by denomination (only those counted)
+  const den = PC_DENOMS.map(d => [d, Math.max(0, Math.floor(vNum(fig.counts[String(d)])))]).filter(x => x[1] > 0);
+  if(den.length){
+    if(y + 40 > PC_BOTTOM - 100) newPage();
+    txt(L, y, 'Cash at hand: ', { bold:true }); txt(L + pdfTextWidth('Cash at hand: ', true, 8.5) + 4, y, den.map(([d, q]) => 'MVR ' + (d < 1 ? d.toFixed(2) : d) + ' x ' + q).join('   ·   '), { size:8, color:MUTED }); y += 26;
+  }
+  // signatures
+  if(y + 80 > PC_BOTTOM) newPage();
+  const hods = {}; s.list.forEach(r => { if(r.hodName) hods[r.hodName] = (hods[r.hodName] || 0) + 1; }); const hod = Object.keys(hods).sort((a, b) => hods[b] - hods[a])[0] || '';
+  [[L, 'Petty cash custodian', cust.name || ''], [310, 'HOD', hod]].forEach(([x, t, n]) => { txt(x, y, t, { bold:true }); pg.line(x, y + 40, x + 200, y + 40, GRID, 0.6); txt(x, y + 52, 'Name: ' + n); txt(x, y + 65, 'Date:'); });
+  return pcPdfFinish(pages.map(p => ({ ops:p.ops })), { title:'Petty Cash Statement', number:s.no, docTitle:'Petty Cash Statement ' + s.no, pageNumbers:true });
+}
+async function pcStatementPdf(no, btn){
+  const locId = pcStLocation(), s = pcStatements(locId).find(x => x.no === no); if(!s) return;
+  const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
+  try{ downloadBlob(await buildPcStatementPdf(locId, s), 'Petty_Cash_Statement_' + no.replace(/[^A-Za-z0-9-]+/g, '_') + '.pdf'); toast('Statement PDF downloaded.'); }
+  catch(e){ console.error(e); toast('Could not create the PDF: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = label; } }
+}
+/* ---------- the replenishment form as a PDF, in the layout of the finance "Petty Cash Request Form" ---------- */
+async function buildPcReplPdf(s){
+  const r = s.rec.replRequest, pg = new PdfPage(PCA4_H), K = [0, 0, 0], PEACH = [0.98, 0.87, 0.8], FS = 9;
+  const X0 = 62, X1 = 533, LBL = 150; let y = 64;
+  const tx = (x0, x1, top, h, t, o) => { o = o || {}; const size = o.size || FS, lines = pdfWrap(t || '', !!o.bold, size, x1 - x0 - 10), b0 = top + (h - lines.length * 11.5) / 2 + 8.6;
+    lines.forEach((ln, i) => { const w = pdfTextWidth(ln, !!o.bold, size), x = o.align === 'c' ? x0 + (x1 - x0 - w) / 2 : o.align === 'r' ? x1 - 5 - w : x0 + 5; if(ln) pg.text(x, b0 + i * 11.5, ln, { bold:!!o.bold, size }); }); };
+  // cells: [x0, x1, text, opts]; each row draws its own top line, cell borders and fills
+  const row = (h, cells) => { cells.forEach(c => { if(c[3] && c[3].fill) pg.fill(c[0], y, c[1] - c[0], h, PEACH); });
+    pg.line(X0, y, X1, y, K, 0.6); cells.forEach(c => { pg.line(c[0], y, c[0], y + h, K, 0.6); if(typeof c[2] === 'function') c[2](c[0], c[1], y, h); else tx(c[0], c[1], y, h, c[2], c[3]); }); pg.line(X1, y, X1, y + h, K, 0.6); y += h; };
+  const section = t => row(20, [[X0, X1, t, { bold:true, align:'c', fill:1 }]]);
+  const date = iso => (x0, x1, top, h) => { const d = pcReplDateParts(iso); if(!d.d) return; const b = top + h / 2 + 3; pdfRuns(pg, x0 + 5, b, [{ t:d.d }, { t:d.suf, size:5.5, rise:3.5 }, { t:d.my }]); };
+  const C1 = 355, C2 = 425;
+  row(40, [[X0, X1, 'Petty Cash Request Form', { bold:true, align:'c', size:12, fill:1 }]]);
+  row(22, [[X0, X1, (x0, x1, top, h) => pdfRuns(pg, x0 + 5, top + 14.5, [{ t:'No: ', bold:true }, { t:pcReplNo(s), bold:true }])]]);
+  section('Request (Custodian)');
+  row(26, [[X0, LBL, (x0, x1, top, h) => { const b = top + h / 2 + 3.2, w = pdfTextWidth('Details [', false, FS); pg.text(x0 + 5, b, 'Details [', { size:FS }); pg.text(x0 + 5 + w + 15, b, ']', { size:FS }); }], [LBL, 305, 'Replenish', { align:'r' }], [305, 340, (x0, x1, top, h) => pcTick(pg, (x0 + x1) / 2, top + h / 2)], [340, 460, 'New', { align:'r' }], [460, X1, '']]);
+  pcTick(pg, X0 + 5 + pdfTextWidth('Details [', false, FS) + 7.5, y - 13);
+  row(36, [[X0, LBL, 'Comments'], [LBL, X1, r.comments]]);
+  row(22, [[X0, LBL, 'Requested By'], [LBL, X1, r.reqName]]);
+  row(30, [[X0, LBL, 'Department'], [LBL, C1, r.reqDept], [C1, C2, 'Amount'], [C2, X1, 'MVR ' + pcMoneyPlain(r.amount)]]);
+  row(44, [[X0, LBL, 'Signature'], [LBL, C1, ''], [C1, C2, 'Date'], [C2, X1, date(r.date)]]);
+  section('Approval (HOD Admin)');
+  const hodAmt = r.hodAmount != null ? r.hodAmount : (r.hodName ? r.amount : null);
+  row(28, [[X0, LBL, 'Remarks'], [LBL, X1, r.hodRemarks]]);
+  row(30, [[X0, LBL, 'Approved by'], [LBL, C1, r.hodName], [C1, C2, 'Amount'], [C2, X1, hodAmt != null ? 'MVR ' + pcMoneyPlain(hodAmt) : 'MVR']]);
+  row(44, [[X0, LBL, 'Signature'], [LBL, C1, ''], [C1, C2, 'Date'], [C2, X1, date(r.hodDate)]]);
+  section('Received (Finance)');
+  const F1 = 300, F2 = 412;
+  row(28, [[X0, LBL, 'Received by'], [LBL, X1, '']]);
+  row(28, [[X0, LBL, 'Department'], [LBL, F1, ''], [F1, X1, 'For Finance Use', { fill:1 }]]);
+  [['Amount', 'Bill Totals'], ['Date', 'Balance in Cash +/-'], ['Signature', 'Date']].forEach(([a, b]) => row(28, [[X0, LBL, a], [LBL, F1, ''], [F1, F2, b], [F2, X1, '']]));
+  section('Approved by HOD Finance');
+  row(28, [[X0, LBL, 'Name'], [LBL, X1, '']]);
+  row(22, [[X0, LBL, 'Date & Sign'], [LBL, X1, '']]);
+  pg.line(X0, y, X1, y, K, 0.6);
+  return pcPdfFinish([{ ops:pg.ops, bare:true }], { title:'', number:'', docTitle:'Petty Cash Replenishment ' + pcReplNo(s), pageNumbers:false });
+}
+async function pcReplFormPdf(no, btn){
+  const locId = pcStLocation(), s = pcStatements(locId).find(x => x.no === no); if(!s || !s.rec || !s.rec.replRequest) return;
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
+  try{ downloadBlob(await buildPcReplPdf(s), 'Petty_Cash_Replenishment_' + pcReplNo(s).replace(/[^A-Za-z0-9-]+/g, '_') + '.pdf'); toast('Replenishment form PDF downloaded.'); }
+  catch(e){ console.error(e); toast('Could not create the PDF: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.style.opacity = ''; } }
 }
 function openPcReplenish(no){
   const locId = pcStLocation(); if(!pcCanStatement(locId)){ toast('Only ' + pcStatementWho(locId) + ' can record a replenishment.', true); return; }
@@ -4889,7 +5076,7 @@ async function savePcReplenish(no){
   if(amt > pend + 0.005) return vFail('That is more than is pending (' + fmtMVR(pend) + ').');
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   await vehSave('pettyStatements', { id:s.rec.id, replenishedAmount:pcRound(vNum(s.rec.replenishedAmount) + amt), replenishedDate:o.replenishedDate, replenishNote:o.replenishNote || '', replenishedBy:authUser ? authUser.name : '' });
-  closeModal(); rerenderMain(); toast(Math.abs(amt - pend) < 0.005 ? 'Statement marked replenished.' : 'Replenishment recorded. ' + fmtMVR(pcRound(pend - amt)) + ' is still pending.');
+  closeModal(); rerenderMain(); openPcStatementDetail(no); toast(Math.abs(amt - pend) < 0.005 ? 'Statement marked replenished.' : 'Replenishment recorded. ' + fmtMVR(pcRound(pend - amt)) + ' is still pending.');
 }
 function pcUndoReplenish(no){
   const locId = pcStLocation(); if(!pcCanStatement(locId)){ toast('Only ' + pcStatementWho(locId) + ' can change this.', true); return; }
@@ -4927,7 +5114,7 @@ function viewPcStatementsExcel(){
     ${vPanel('Open statement', open ? `<span class="text-xs text-slate-400">Vouchers are added as their invoices come in</span>` : '', open ? `
       <div class="px-5 sm:px-6 py-4 flex items-start justify-between gap-3 flex-wrap">
         <div><div class="flex items-center gap-2.5"><div class="text-base font-bold text-slate-900 num">${esc(open.no)}</div>${can ? `<button onclick="openPcRenameStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-brand-600 hover:underline" title="Edit the statement number">Edit number</button>` : ''}</div><div class="text-xs text-slate-500 mt-0.5">${open.list.length} of ${PC_STATEMENT_ROWS} vouchers · ${fmtMVR(open.total)}${open.from ? ' · invoices ' + vDate(open.from) + (open.to !== open.from ? ' – ' + vDate(open.to) : '') : ''}</div>${unprocOpen ? `<div class="text-xs text-amber-700 mt-1">${unprocOpen} voucher${unprocOpen === 1 ? ' is' : 's are'} not processed yet</div>` : ''}</div>
-        <div class="flex items-center gap-2 flex-wrap"><button onclick="pcDownloadStatements('${esc(locId)}', '${open.yy}', this)" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Download workbook</button>${can ? `<button onclick="pcCloseStatement('${esc(open.no)}')" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700">Close statement</button><button onclick="pcReleaseStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Release</button>` : ''}</div></div>
+        <div class="flex items-center gap-2 flex-wrap"><button onclick="pcDownloadStatements('${esc(open.no)}', this)" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Download workbook</button>${can ? `<button onclick="pcCloseStatement('${esc(open.no)}')" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700">Close statement</button><button onclick="pcReleaseStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Release</button>` : ''}</div></div>
       ${open.list.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Voucher' }, { t:'Supplier' }, { t:'Bill no.' }, { t:'Details' }, { t:'Category' }, { t:'Processed' }, { t:'Amount', n:1 }, { t:'' }])}<tbody>${openRows}</tbody></table></div>` : vEmpty('No vouchers in this statement yet. Add them from the list below.')}`
       : vEmpty(can ? 'No statement is open. Pick vouchers below, give the statement a number and start it. New requests then go into it.' : 'No statement is open.'))}
     ${pcCashBoxHtml(loc)}
@@ -4935,13 +5122,301 @@ function viewPcStatementsExcel(){
       elig.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'' }, { t:'Voucher' }, { t:'Invoice date' }, { t:'Supplier' }, { t:'Bill no.' }, { t:'Details' }, { t:'Category' }, { t:'Amount', n:1 }, { t:'' }])}<tbody>${readyRows}</tbody></table></div>
         <div class="px-5 sm:px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">${footer}</div>`
       : `${vEmpty('No vouchers are ready. A voucher joins a statement once it has an invoice.')}${!elig.length && !open && can ? `<div class="px-5 sm:px-6 pb-4 flex justify-end items-end gap-3 flex-wrap"><label class="text-xs font-semibold text-slate-600">Statement number<input id="pc-st-no" type="text" maxlength="31" value="${esc(vehUi.stNo || pcNextStatementNo(locId, yy))}" oninput="vehUi.stNo = this.value" class="${VEH_INPUT} block mt-1 w-64"></label>${vBtnPrimary('Start empty statement', 'pcGenerateStatement(this)')}</div>` : ''}`)}
-    ${vPanel('Closed statements', 'Their vouchers are locked. The workbook has one sheet per statement, for the year', closed.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Statement' }, { t:'Vouchers', n:1 }, { t:'Invoice dates' }, { t:'Total', n:1 }, { t:'Closed' }, { t:'Replenishment' }, { t:'' }])}<tbody>${closed.map(s => `<tr class="${vTr}">${vTd(`<span class="font-semibold">${esc(s.no)}</span>`, { first:1 })}${vTd(String(s.list.length), { n:1 })}${vTd(s.from ? vDate(s.from) + (s.to !== s.from ? ' – ' + vDate(s.to) : '') : '—')}${vTd(`<b>${fmtMVR(s.total)}</b>`, { n:1 })}${vTd(s.closedDate ? vDate(s.closedDate) : '—')}${vTd(pcReplCell(s))}${vTd(`<button onclick="pcDownloadStatements('${esc(locId)}', '${s.yy}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Download workbook</button>${s.rec && s.rec.replRequest ? `<button onclick="pcReplForm('${esc(s.no)}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Replenishment form</button>` : ''}${can && s.rec ? `<button onclick="openPcReplRequest('${esc(s.no)}')" class="text-xs font-semibold ${s.rec.replRequest ? 'text-slate-500 hover:text-brand-600' : 'text-brand-600'} hover:underline mr-3">${s.rec.replRequest ? 'Edit request' : 'Replenishment request'}</button>` : ''}${can && s.rec && pcStmtPending(s) > 0 ? `<button onclick="openPcReplenish('${esc(s.no)}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Mark replenished</button>` : ''}${can && s.rec && vNum(s.rec.replenishedAmount) > 0 ? `<button onclick="pcUndoReplenish('${esc(s.no)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline mr-3">Undo</button>` : ''}${can ? `<button onclick="openPcRenameStatement('${esc(s.no)}')" class="text-xs text-slate-400 hover:text-brand-600 hover:underline mr-3">Rename</button>` : ''}${can ? `<button onclick="pcReopenStatement('${esc(s.no)}')" class="text-xs font-semibold text-slate-500 hover:text-brand-600 hover:underline">Reopen</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`).join('')}</tbody></table></div>` : vEmpty('No closed statements yet.'))}`;
+    ${vPanel('Closed statements', 'Click a statement for its vouchers, downloads and replenishment', closed.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Statement' }, { t:'Invoice dates' }, { t:'Closed' }, { t:'Total', n:1 }, { t:'Replenishment' }, { t:'' }])}<tbody>${closed.map(s => `<tr class="${vTr} cursor-pointer" onclick="openPcStatementDetail('${esc(s.no)}')">${vTd(`<span class="font-semibold">${esc(s.no)}</span><div class="text-[11.5px] text-slate-400">${s.list.length} voucher${s.list.length === 1 ? '' : 's'}</div>`, { first:1 })}${vTd(s.from ? vDate(s.from) + (s.to !== s.from ? ' – ' + vDate(s.to) : '') : '—', { cls:'text-slate-500' })}${vTd(s.closedDate ? vDate(s.closedDate) : '—', { cls:'text-slate-500' })}${vTd(`<b>${fmtMVR(s.total)}</b>`, { n:1 })}${vTd(pcReplStatusPill(s))}${vTd(`<span class="text-xs font-semibold text-brand-600">View ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`).join('')}</tbody></table></div>` : vEmpty('No closed statements yet.'))}`;
 }
 function viewPettyCashStatement(){
   const tabs = `<div class="mb-5">${vTabs([['excel', 'Statements (Excel)'], ['summary', 'Summary report']], vehUi.stTab || 'excel', 'pcStTab')}</div>`;
   return tabs + ((vehUi.stTab || 'excel') === 'summary' ? viewPcStatementSummary() : viewPcStatementsExcel());
 }
 
+
+/* =====================================================================
+   TRAVEL — local and foreign travel requests: the trip, who travels, the ticket
+   (bought through a PR or a petty cash request), and the Daily Subsistence Allowance
+   (meal, pocket money, accommodation) with its memo to Finance, generated as a PDF.
+===================================================================== */
+const TR_STATUSES = ['Open', 'Pending', 'Closed'];
+const TR_BUDGETS = ['Administrative Budget', 'Planning and Projects Budget', 'BD Budget', 'Funded by the host', 'Bureau Budget'];
+const TR_SCOPES = { local:{ label:'Local Travel', one:'local trip', tab:'travel-local' }, foreign:{ label:'Foreign Travel', one:'foreign trip', tab:'travel-foreign' } };
+const TR_ALLOW = [['meal', 'Meal'], ['pocket', 'Pocket Money'], ['accom', 'Accommodation']];
+// the set amounts: per scope, with the memo defaults; kept with the shared settings
+function trSettings(){
+  const t = vehSettings.travel || {};
+  const d = (o, cur, m, p, a) => Object.assign({ currency:cur, meal:m, pocket:p, accom:a }, o || {});
+  return { local:d(t.local, 'MVR', 300, 150, 800), foreign:d(t.foreign, 'USD', 0, 0, 0),
+    memoFrom:t.memoFrom != null ? t.memoFrom : 'Administration', memoTo:t.memoTo != null ? t.memoTo : 'Finance', memoCc:t.memoCc != null ? t.memoCc : 'CFO',
+    signName:t.signName || '', signDesig:t.signDesig != null ? t.signDesig : 'Director, Administration', memoPrefix:t.memoPrefix || '(MEMO)FDC/FDC/' };
+}
+const trDays = (from, to) => { if(!from || !to) return 0; const a = Date.parse(from + 'T00:00:00Z'), b = Date.parse(to + 'T00:00:00Z'); return isNaN(a) || isNaN(b) || b < a ? 0 : Math.round((b - a) / 86400000) + 1; };
+const trList = scope => state.travelRequests.filter(t => (t.scope || 'local') === scope);
+const trById = id => state.travelRequests.find(t => t.id === id) || null;
+const trParts = t => (t.participants || []).filter(p => p && String(p.name || '').trim());
+const trDsaOn = t => !!(t.dsa && t.dsa.enabled);
+const trCur = t => (t.dsa && t.dsa.currency) || trSettings()[t.scope || 'local'].currency;
+// one person's allowance lines and total (the same rates and days for everyone on the trip)
+function trDsaLines(t){
+  const d = t.dsa || {};
+  return TR_ALLOW.map(([k, label]) => { const rate = pcRound(vNum(d[k + 'Rate'])), days = Math.max(0, Math.round(vNum(d[k + 'Days']))); return { k, label, rate, days, total:pcRound(rate * days) }; }).filter(l => l.rate > 0 && l.days > 0);
+}
+const trDsaPerPerson = t => pcRound(trDsaLines(t).reduce((s, l) => s + l.total, 0));
+const trDsaTotal = t => trDsaOn(t) ? pcRound(trDsaPerPerson(t) * Math.max(1, trParts(t).length)) : 0;
+const trMoney = (cur, v) => (cur || 'MVR') + ' ' + pcMoneyPlain(v);
+function trNextMemoNo(){
+  const yy = vToday().slice(0, 4), pre = trSettings().memoPrefix; let max = 0;
+  state.travelRequests.forEach(t => { const m = /\/(\d{4})\/(\d+)\s*$/.exec((t.dsa && t.dsa.memoNo) || ''); if(m && m[1] === yy) max = Math.max(max, +m[2]); });
+  return pre + yy + '/' + (max ? max + 1 : '');
+}
+function trTicketInfo(t){
+  const k = t.ticket || {};
+  if(k.via === 'pr'){ const p = state.purchaseRequisitions.find(x => x.id === k.prId); return p ? { kind:'PR', label:p.prNumber || 'PR', amount:vNum(p.totalCost), sub:prFirstItem(p) || '', url:p.prUrl || '' } : { kind:'PR', label:'PR not found', amount:0, sub:'' }; }
+  if(k.via === 'petty'){ const r = state.pettyCash.find(x => x.id === k.pettyId); return r ? { kind:'Petty cash', label:r.number || 'Petty cash request', amount:pcTotal(r), sub:r.purpose || '' } : { kind:'Petty cash', label:'Request not found', amount:0, sub:'' }; }
+  if(k.via === 'none') return { kind:'none', label:'No ticket needed' };
+  return null;
+}
+const trStatusPill = st => vPill(st === 'Closed' ? 'good' : st === 'Pending' ? 'warn' : 'acc', esc(st || 'Open'));
+const trPendingCount = () => { try{ return state.travelRequests.filter(t => t.status === 'Pending').length; }catch(e){ return 0; } };
+function trSetFilter(k, v){ vehUi[k] = v; rerenderMain(); }
+
+function viewTravel(scope){
+  const S = TR_SCOPES[scope], all = trList(scope), yr = vToday().slice(0, 4), st = vehUi.trStatus || '', q = String(vehUi.trQ || '').toLowerCase().trim();
+  const set = trSettings()[scope], ratesMissing = !(set.meal || set.pocket || set.accom);
+  const list = all.filter(t => (!st || (t.status || 'Open') === st) && (!q || [t.formNumber, t.destination, t.purpose, (t.dsa || {}).memoNo, ...trParts(t).map(p => p.name)].join(' ').toLowerCase().includes(q)))
+    .sort((a, b) => String(b.fromDate || '').localeCompare(String(a.fromDate || '')) || (b.createdAt || 0) - (a.createdAt || 0));
+  const cnt = s => all.filter(t => (t.status || 'Open') === s).length;
+  const dsaYear = all.filter(t => String(t.fromDate || '').slice(0, 4) === yr), byCur = {};
+  dsaYear.forEach(t => { const v = trDsaTotal(t); if(v) byCur[trCur(t)] = pcRound((byCur[trCur(t)] || 0) + v); });
+  const curs = Object.keys(byCur);
+  const kpis = vKpis(statCard('Open', fmtNum(cnt('Open')), 'Requests being arranged', 'brand') + statCard('Pending', fmtNum(cnt('Pending')), 'Waiting on approval, ticket or DSA', cnt('Pending') ? 'amber' : 'slate') +
+    statCard('Closed', fmtNum(cnt('Closed')), 'Trips completed', 'emerald') + statCard('DSA in ' + yr, curs.length ? curs.map(c => trMoney(c, byCur[c])).join(' · ') : '—', dsaYear.length + ' trip' + (dsaYear.length === 1 ? '' : 's') + ' this year', 'slate'));
+  const rows = list.map(t => {
+    const tk = trTicketInfo(t), ps = trParts(t), dsa = trDsaOn(t), memo = t.dsa || {};
+    return `<tr class="${vTr} cursor-pointer" onclick="openTravelDetail('${t.id}')">
+      ${vTd(`<span class="font-semibold">${esc(t.formNumber || '—')}</span><div class="text-[11.5px] text-slate-400">${t.formDate ? vDate(t.formDate) : ''}</div>`, { first:1 })}
+      ${vTd(`<div class="font-semibold text-slate-800">${esc(t.destination || '—')}</div><div class="text-[11.5px] text-slate-400">${esc(t.purpose || '')}</div>`)}
+      ${vTd(`${t.fromDate ? vDate(t.fromDate) + (t.toDate && t.toDate !== t.fromDate ? ' – ' + vDate(t.toDate) : '') : '—'}<div class="text-[11.5px] text-slate-400">${trDays(t.fromDate, t.toDate) || '—'} day${trDays(t.fromDate, t.toDate) === 1 ? '' : 's'}</div>`, { cls:'whitespace-nowrap' })}
+      ${vTd(ps.length ? esc(ps[0].name) + (ps.length > 1 ? ` <span class="text-slate-400">+${ps.length - 1}</span>` : '') : '—')}
+      ${vTd(!tk ? '<span class="text-amber-600 text-xs font-semibold">Not linked</span>' : tk.kind === 'none' ? '<span class="text-slate-400 text-xs">Not needed</span>' : `<span class="text-xs font-semibold text-slate-700">${esc(tk.label)}</span><div class="text-[11px] text-slate-400">${esc(tk.kind)}</div>`)}
+      ${vTd(!dsa ? '<span class="text-slate-400 text-xs">No DSA</span>' : `<b>${trMoney(trCur(t), trDsaTotal(t))}</b><div class="mt-0.5">${memo.memoUrl ? vPill('good', 'Memo signed') : memo.memoNo ? vPill('warn', 'Memo not signed') : vPill('', 'No memo yet')}</div>`, { cls:'whitespace-nowrap' })}
+      ${vTd(trStatusPill(t.status), { last:1 })}
+    </tr>`; }).join('');
+  return `
+    ${vHead(S.label, scope === 'local' ? 'Trips within the country: the request, the ticket and the Daily Subsistence Allowance.' : 'Trips abroad: the request, the ticket and the Daily Subsistence Allowance.',
+      `<button onclick="openTravelSettings()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">DSA rates</button>${vBtnPrimary('+ Travel request', `openTravelForm('', '${scope}')`)}`)}
+    ${ratesMissing ? `<div class="mb-5 rounded-lg bg-amber-50 text-amber-800 text-[13px] px-4 py-3">The ${scope} DSA amounts are not set yet. Set them under <button onclick="openTravelSettings()" class="font-semibold underline">DSA rates</button> so new requests fill them in.</div>` : ''}
+    ${kpis}
+    <div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['', 'All (' + all.length + ')'], ...TR_STATUSES.map(s => [s, s + ' (' + cnt(s) + ')'])], st, 'trSetStatus')}
+      <input type="search" value="${esc(vehUi.trQ || '')}" oninput="vehUi.trQ = this.value; clearTimeout(window._trQt); window._trQt = setTimeout(rerenderMain, 250)" placeholder="Search form no., destination, traveller, memo…" class="${VEH_INPUT} flex-1 min-w-[14rem]" id="tr-search"></div>
+    ${list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Request' }, { t:'Destination' }, { t:'Travel dates' }, { t:'Travellers' }, { t:'Ticket' }, { t:'DSA' }, { t:'Status' }])}<tbody>${rows}</tbody></table>`)
+      : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(all.length ? 'No requests match.' : 'No ' + S.one + ' requests yet. Use "+ Travel request" to add the first one.')}</div>`}`;
+}
+function trSetStatus(v){ vehUi.trStatus = v; rerenderMain(); }
+
+/* ---------- the request form ---------- */
+function trPersonRow(p){
+  return `<div class="tr-person grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+    <input type="text" list="tr-people" value="${esc(p.name || '')}" placeholder="Name" class="tr-pname ${VEH_FIELD}" onchange="trFillDesig(this)">
+    <input type="text" value="${esc(p.designation || '')}" placeholder="Designation" class="tr-pdesig ${VEH_FIELD}">
+    <button type="button" onclick="this.closest('.tr-person').remove(); trDsaPreview()" class="text-slate-400 hover:text-rose-600 px-2 text-lg leading-none" title="Remove">×</button></div>`;
+}
+function trAddPerson(){ const box = document.getElementById('tr-people-box'); if(box){ box.insertAdjacentHTML('beforeend', trPersonRow({})); box.lastElementChild.querySelector('input').focus(); } trDsaPreview(); }
+function trProfileDesig(name){ const pr = hoFindProfile(name); return pr ? [pr.designation, pr.department].filter(Boolean).join(', ') : ''; }
+function trFillDesig(inp){ const d = inp.closest('.tr-person').querySelector('.tr-pdesig'); if(d && !d.value.trim()){ const v = trProfileDesig(inp.value); if(v) d.value = v; } trDsaPreview(); }
+function trFillOne(nameInp, desigName){ const f = document.getElementById('vform'); if(!f || !f[desigName] || f[desigName].value.trim()) return; const v = trProfileDesig(nameInp.value); if(v) f[desigName].value = v; }
+function trTicketVia(v){ ['pr', 'petty'].forEach(k => { const el = document.getElementById('tr-tk-' + k); if(el) el.style.display = v === k ? '' : 'none'; }); }
+function trDsaToggle(on){ const el = document.getElementById('tr-dsa'); if(el) el.style.display = on ? '' : 'none'; trDsaPreview(); }
+function trDatesChanged(){
+  const f = document.getElementById('vform'); if(!f) return; const n = trDays(f.fromDate.value, f.toDate.value), out = document.getElementById('tr-days');
+  if(out) out.textContent = n ? n + ' day' + (n === 1 ? '' : 's') : '';
+  if(n){ ['meal', 'accom'].forEach(k => { const el = f['dsa.' + k + 'Days']; if(el && el.dataset.auto !== '0') el.value = n; }); }
+  trDsaPreview();
+}
+function trDsaPreview(){
+  const f = document.getElementById('vform'), out = document.getElementById('tr-dsa-total'); if(!f || !out) return;
+  const per = TR_ALLOW.reduce((s, [k]) => s + vNum((f['dsa.' + k + 'Rate'] || {}).value) * Math.max(0, Math.round(vNum((f['dsa.' + k + 'Days'] || {}).value))), 0);
+  const n = Math.max(1, [...document.querySelectorAll('#tr-people-box .tr-pname')].filter(i => i.value.trim()).length), cur = (f['dsa.currency'] || {}).value || 'MVR';
+  out.innerHTML = `${trMoney(cur, per)} per person${n > 1 ? ` × ${n} = <b>${trMoney(cur, pcRound(per * n))}</b>` : ''}`;
+}
+function trScopeRates(scope){                       // switching local/foreign brings that scope's set amounts
+  const f = document.getElementById('vform'), r = trSettings()[scope]; if(!f || !r) return;
+  f['dsa.currency'].value = r.currency; TR_ALLOW.forEach(([k]) => { f['dsa.' + k + 'Rate'].value = r[k] || ''; }); trDsaPreview();
+}
+function openTravelForm(id, scope){
+  const t = id ? trById(id) : null; if(id && !t) return;
+  scope = (t && t.scope) || scope || 'local';
+  const S = trSettings(), r = S[scope], days = t ? trDays(t.fromDate, t.toDate) : 0;
+  const d = (t && t.dsa) || { enabled:true, currency:r.currency, mealRate:r.meal, pocketRate:r.pocket, accomRate:r.accom, mealDays:'', pocketDays:1, accomDays:'', memoFrom:S.memoFrom, memoTo:S.memoTo, memoCc:S.memoCc, signName:S.signName, signDesig:S.signDesig };
+  const tk = (t && t.ticket) || { via:'' }, me = authUser ? { name:authUser.name, designation:[authUser.designation, authUser.department].filter(Boolean).join(', ') } : {};
+  const people = state.profiles.map(pr => `<option value="${esc(pr.name || '')}"></option>`).join('');
+  const parts = t ? trParts(t) : [];
+  const prs = vehReqPRs(), pcs = state.pettyCash.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  openModal((t ? 'Edit ' : 'New ') + TR_SCOPES[scope].one + ' request', vFormOpen + `
+    <datalist id="tr-people">${people}</datalist>
+    ${vSec('Travel request')}
+    ${vGrid(3, vS('Travel', 'scope', [['local', 'Local'], ['foreign', 'Foreign']], scope, null, { attrs:' onchange="trScopeRates(this.value)"' }) + vF('Form number', 'formNumber', t ? t.formNumber : '', 'text', { attrs:' placeholder="(FRM)FDCMDB/FDC/2026/21"' }) + vF('Form date', 'formDate', t ? t.formDate : vToday(), 'date'))}
+    <div class="mt-3.5">${vGrid(2, vF('Destination', 'destination', t ? t.destination : '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="K.Dhiffushi, Adh.Dhangethi & Adh.Omadhoo"' }) +
+      vF('From', 'fromDate', t ? t.fromDate : '', 'date', { req:1, attrs:' onchange="trDatesChanged()"' }) + `<div><label class="${VEH_LBL}">To <span class="text-rose-500">*</span> <span id="tr-days" class="font-normal text-slate-400 ml-1">${days ? days + ' day' + (days === 1 ? '' : 's') : ''}</span></label><input type="date" name="toDate" value="${esc(t ? t.toDate || '' : '')}" onchange="trDatesChanged()" class="${VEH_FIELD}"></div>` +
+      vS('Budgeted from', 'budget', TR_BUDGETS, t ? t.budget : '', '—') + vF('Purpose of trip', 'purpose', t ? t.purpose : 'Official Trip') + vS('Status', 'status', TR_STATUSES, (t && t.status) || 'Open'))}</div>
+    ${vSec('Travellers (name and designation)')}
+    <div id="tr-people-box" class="space-y-2">${(parts.length ? parts : [{}]).map(trPersonRow).join('')}</div>
+    <button type="button" onclick="trAddPerson()" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ Add traveller</button>
+    <div class="mt-3.5">${vTa('Comments / additional requests', 'comments', t ? t.comments : '', { rows:2 })}</div>
+    ${vSec('Requested and authorized by')}
+    ${vGrid(2, vF('Requested by', 'requestedBy', t ? t.requestedBy : me.name, 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'requestedDesig\')"' }) + vF('Designation', 'requestedDesig', t ? t.requestedDesig : me.designation) +
+      vF('Authorized by', 'authorizedBy', t ? t.authorizedBy : '', 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'authorizedDesig\')"' }) + vF('Designation', 'authorizedDesig', t ? t.authorizedDesig : ''))}
+    <div class="mt-3.5">${vF('Link to the signed travel request form (optional)', 'formUrl', t ? t.formUrl : '', 'url')}</div>
+    ${vSec('Ticket')}
+    ${vGrid(2, vS('Ticket bought through', 'ticket.via', [['pr', 'Purchase Requisition (PR)'], ['petty', 'Petty Cash Request'], ['none', 'No ticket needed']], tk.via, 'Not decided yet', { attrs:' onchange="trTicketVia(this.value)"' }) +
+      `<div id="tr-tk-pr" ${tk.via === 'pr' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Purchase Requisition</label><select name="ticket.prId" class="${VEH_FIELD} bg-white"><option value="">Choose a PR…</option>${prs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.prId ? 'selected' : ''}>${esc(p.prNumber || '—')}${prFirstItem(p) ? ' — ' + esc(prFirstItem(p)) : ''} — ${esc(vMoney(p.totalCost))}</option>`).join('')}</select></div>` +
+      `<div id="tr-tk-petty" ${tk.via === 'petty' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Petty Cash Request</label><select name="ticket.pettyId" class="${VEH_FIELD} bg-white"><option value="">Choose a request…</option>${pcs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.pettyId ? 'selected' : ''}>${esc(p.number || '—')}${p.purpose ? ' — ' + esc(String(p.purpose).slice(0, 50)) : ''} — ${esc(fmtMVR(pcTotal(p)))}</option>`).join('')}</select></div>`)}
+    ${vSec('Daily Subsistence Allowance (DSA)')}
+    <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="dsa.enabled" value="1" ${d.enabled ? 'checked' : ''} onchange="trDsaToggle(this.checked)"> DSA is paid for this trip</label>
+    <div id="tr-dsa" ${d.enabled ? '' : 'style="display:none"'} class="mt-3">
+      <div class="grid grid-cols-[1fr_7rem_5rem] gap-2 items-end text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1"><div>Allowance</div><div>Rate</div><div>Days</div></div>
+      ${TR_ALLOW.map(([k, label]) => `<div class="grid grid-cols-[1fr_7rem_5rem] gap-2 items-center mb-2"><div class="text-sm text-slate-700">${label}</div><input type="number" step="0.01" min="0" name="dsa.${k}Rate" value="${esc(d[k + 'Rate'] != null ? d[k + 'Rate'] : '')}" oninput="trDsaPreview()" class="${VEH_FIELD}"><input type="number" step="1" min="0" name="dsa.${k}Days" value="${esc(d[k + 'Days'] != null && d[k + 'Days'] !== '' ? d[k + 'Days'] : (k === 'pocket' ? 1 : days || ''))}" ${k !== 'pocket' && t ? 'data-auto="0"' : ''} oninput="this.dataset.auto='0'; trDsaPreview()" class="${VEH_FIELD}"></div>`).join('')}
+      <div class="grid grid-cols-[1fr_7rem_5rem] gap-2 items-center mb-3"><div class="text-sm text-slate-700">Currency</div><input type="text" name="dsa.currency" value="${esc(d.currency || r.currency)}" oninput="trDsaPreview()" class="${VEH_FIELD}"><div></div></div>
+      <div class="rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600 mb-4">DSA: <span id="tr-dsa-total"></span></div>
+      ${vGrid(2, vF('Memo number', 'dsa.memoNo', d.memoNo || trNextMemoNo(), 'text') + vF('Memo date', 'dsa.memoDate', d.memoDate || vToday(), 'date') +
+        vF('From', 'dsa.memoFrom', d.memoFrom != null ? d.memoFrom : S.memoFrom) + vF('To', 'dsa.memoTo', d.memoTo != null ? d.memoTo : S.memoTo) + vF('CC', 'dsa.memoCc', d.memoCc != null ? d.memoCc : S.memoCc) + '<div></div>' +
+        vF('Signed by (name)', 'dsa.signName', d.signName != null ? d.signName : S.signName, 'text', { attrs:' list="tr-people"' }) + vF('Signatory designation', 'dsa.signDesig', d.signDesig != null ? d.signDesig : S.signDesig))}
+      <div class="mt-3.5">${vF('Link to the signed memo (optional)', 'dsa.memoUrl', d.memoUrl || '', 'url')}</div>
+    </div>
+    ${vFoot(t ? 'Save changes' : 'Save request', `saveTravel('${t ? t.id : ''}')`, t && canManageInventory() ? `deleteTravel('${t.id}')` : '')}`, true);
+  trDsaPreview();
+}
+async function saveTravel(id){
+  const f = document.getElementById('vform'), o = vehFormObj(f);
+  const parts = [...document.querySelectorAll('#tr-people-box .tr-person')].map(row => ({ name:row.querySelector('.tr-pname').value.trim(), designation:row.querySelector('.tr-pdesig').value.trim() })).filter(p => p.name);
+  if(!String(o.destination || '').trim()) return vFail('Enter the destination.');
+  if(!o.fromDate || !o.toDate) return vFail('Enter the travel dates.');
+  if(o.toDate < o.fromDate) return vFail('The return date is before the departure date.');
+  if(!parts.length) return vFail('Add at least one traveller.');
+  const tk = o.ticket || {}, dd = o.dsa || {}, on = !!(f['dsa.enabled'] && f['dsa.enabled'].checked);
+  if(tk.via === 'pr' && !tk.prId) return vFail('Choose the PR for the ticket, or change how the ticket is bought.');
+  if(tk.via === 'petty' && !tk.pettyId) return vFail('Choose the petty cash request for the ticket, or change how the ticket is bought.');
+  const urls = {}; for(const [k, v] of [['formUrl', o.formUrl], ['memoUrl', dd.memoUrl]]){ if(v){ const u = vSafeUrl(v); if(!u) return vFail('Enter a full web link starting with https://'); urls[k] = u; } else urls[k] = ''; }
+  const memoNo = String(dd.memoNo || '').trim();
+  if(on && memoNo && /\/$/.test(memoNo)) return vFail('Complete the memo number (it ends with the running number).');
+  if(on && memoNo){ const dup = state.travelRequests.find(x => x.id !== id && x.dsa && String(x.dsa.memoNo || '').trim().toLowerCase() === memoNo.toLowerCase()); if(dup) return vFail('Memo ' + memoNo + ' is already used for the trip to ' + (dup.destination || '—') + '.'); }
+  const rec = { id:id || undefined, scope:o.scope === 'foreign' ? 'foreign' : 'local', formNumber:String(o.formNumber || '').trim(), formDate:o.formDate || '', destination:o.destination.trim(), fromDate:o.fromDate, toDate:o.toDate,
+    budget:o.budget || '', purpose:String(o.purpose || '').trim(), status:TR_STATUSES.includes(o.status) ? o.status : 'Open', participants:parts, comments:String(o.comments || '').trim(),
+    requestedBy:String(o.requestedBy || '').trim(), requestedDesig:String(o.requestedDesig || '').trim(), authorizedBy:String(o.authorizedBy || '').trim(), authorizedDesig:String(o.authorizedDesig || '').trim(), formUrl:urls.formUrl,
+    ticket:{ via:tk.via || '', prId:tk.via === 'pr' ? tk.prId : '', pettyId:tk.via === 'petty' ? tk.pettyId : '' },
+    dsa:{ enabled:on, currency:String(dd.currency || 'MVR').trim() || 'MVR', mealRate:pcRound(vNum(dd.mealRate)), mealDays:Math.round(vNum(dd.mealDays)), pocketRate:pcRound(vNum(dd.pocketRate)), pocketDays:Math.round(vNum(dd.pocketDays)), accomRate:pcRound(vNum(dd.accomRate)), accomDays:Math.round(vNum(dd.accomDays)),
+      memoNo, memoDate:dd.memoDate || '', memoFrom:String(dd.memoFrom || '').trim(), memoTo:String(dd.memoTo || '').trim(), memoCc:String(dd.memoCc || '').trim(), signName:String(dd.signName || '').trim(), signDesig:String(dd.signDesig || '').trim(), memoUrl:urls.memoUrl } };
+  if(on && !trDsaLines(rec).length) return vFail('Enter the DSA amounts and days, or untick "DSA is paid for this trip".');
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  const newId = await vehSave('travelRequests', rec);
+  if(on && rec.dsa.signName){ const s = vehSettings.travel || {}; if(!s.signName){ vehSettings = Object.assign({}, vehSettings, { travel:Object.assign({}, s, { signName:rec.dsa.signName, signDesig:rec.dsa.signDesig }) }); persistVehSettings(); } }   // remembered for the next memo
+  closeModal(); if(ui.tab !== TR_SCOPES[rec.scope].tab) goTo(TR_SCOPES[rec.scope].tab); else rerenderMain();
+  toast(id ? 'Travel request updated.' : 'Travel request saved.'); openTravelDetail(id || newId);
+}
+function deleteTravel(id){
+  if(!vehRequireAdmin('delete travel requests')) return;
+  const t = trById(id); if(!t) return; closeModal();
+  confirmAction('Delete the travel request to ' + (t.destination || '—') + '?', async () => { await vehDelete('travelRequests', id); rerenderMain(); toast('Travel request deleted.'); });
+}
+async function trSetTravelStatus(id, st){ const t = trById(id); if(!t) return; await vehSave('travelRequests', { id, status:st }); rerenderMain(); openTravelDetail(id); toast('Status set to ' + st + '.'); }
+
+/* ---------- one request in full ---------- */
+function openTravelDetail(id){
+  const t = trById(id); if(!t) return;
+  const ps = trParts(t), tk = trTicketInfo(t), dsa = trDsaOn(t), d = t.dsa || {}, cur = trCur(t), lines = trDsaLines(t), n = trDays(t.fromDate, t.toDate);
+  const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v}</div></div>`;
+  const head = l => `<div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">${l}</div>`;
+  const act = (label, fn, cls) => `<button onclick="${fn}" class="text-xs font-semibold ${cls || 'text-brand-600'} hover:underline">${label}</button>`;
+  openModal((t.scope === 'foreign' ? 'Foreign' : 'Local') + ' travel · ' + (t.destination || ''), `
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2">${trStatusPill(t.status)}<span class="text-xs text-slate-400">${esc(t.formNumber || 'No form number')}${t.formDate ? ' · ' + vDate(t.formDate) : ''}</span></div>
+      <div class="inline-flex rounded-lg bg-slate-100 p-1 gap-1">${TR_STATUSES.map(s => `<button onclick="trSetTravelStatus('${t.id}', '${s}')" class="px-3 py-1 rounded-md text-xs font-semibold ${(t.status || 'Open') === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${s}</button>`).join('')}</div></div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Travel dates', t.fromDate ? vDate(t.fromDate) + (t.toDate !== t.fromDate ? ' – ' + vDate(t.toDate) : '') : '—')}${item('Duration', n ? n + ' day' + (n === 1 ? '' : 's') : '—')}${item('Purpose', esc(t.purpose || '—'))}${item('Budgeted from', esc(t.budget || '—'))}</div>
+    ${head('Travellers')}
+    <div class="rounded-lg border border-slate-100 divide-y divide-slate-100 mb-5">${ps.map(p => `<div class="px-3.5 py-2 flex justify-between gap-3 text-sm"><span class="font-semibold text-slate-800">${esc(p.name)}</span><span class="text-slate-500 text-right">${esc(p.designation || '')}</span></div>`).join('') || '<div class="px-3.5 py-2 text-sm text-slate-400">None</div>'}</div>
+    <div class="grid sm:grid-cols-2 gap-4 mb-5">
+      <div class="rounded-xl border border-slate-200 p-4">${head('Ticket')}${!tk ? '<div class="text-sm text-amber-700">Not linked yet. Edit the request to link the PR or petty cash request.</div>' : tk.kind === 'none' ? '<div class="text-sm text-slate-500">No ticket needed.</div>' : `<div class="text-sm font-semibold text-slate-800">${esc(tk.label)} <span class="text-xs font-normal text-slate-400">· ${esc(tk.kind)}</span></div>${tk.sub ? `<div class="text-xs text-slate-500 mt-0.5">${esc(tk.sub)}</div>` : ''}${tk.amount ? `<div class="text-xs text-slate-500 mt-0.5">${fmtMVR(tk.amount)}</div>` : ''}${tk.url ? `<div class="mt-1 text-xs">${vLink(tk.url, 'Open PR document')}</div>` : ''}`}</div>
+      <div class="rounded-xl border border-slate-200 p-4">${head('Request form')}<div class="text-sm text-slate-700">Requested by <b>${esc(t.requestedBy || '—')}</b>${t.requestedDesig ? `<div class="text-xs text-slate-400">${esc(t.requestedDesig)}</div>` : ''}</div><div class="text-sm text-slate-700 mt-1.5">Authorized by <b>${esc(t.authorizedBy || '—')}</b>${t.authorizedDesig ? `<div class="text-xs text-slate-400">${esc(t.authorizedDesig)}</div>` : ''}</div><div class="text-xs mt-2">${t.formUrl ? vLink(t.formUrl, 'Signed travel request form') : '<span class="text-slate-400">No link to the signed form</span>'}</div></div>
+    </div>
+    <div class="rounded-xl border border-slate-200 p-4 mb-5">
+      <div class="flex items-start justify-between gap-3 flex-wrap">${head('Daily Subsistence Allowance')}${dsa ? `<div class="flex items-center gap-4">${act('Download memo (PDF)', `trMemoPdf('${t.id}', this)`)}</div>` : ''}</div>
+      ${!dsa ? '<div class="text-sm text-slate-500">No DSA for this trip.</div>' : `
+      <table class="w-full text-sm mb-3"><thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 text-left"><th class="py-1.5">Allowance</th><th class="py-1.5 text-right">Rate (${esc(cur)})</th><th class="py-1.5 text-right">Days</th><th class="py-1.5 text-right">Total</th></tr></thead><tbody>${lines.map(l => `<tr class="border-t border-slate-100"><td class="py-1.5">${l.label}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.rate)}</td><td class="py-1.5 text-right num">${l.days}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.total)}</td></tr>`).join('')}
+        <tr class="border-t border-slate-200 font-semibold"><td class="py-1.5" colspan="3">Per person${ps.length > 1 ? ' × ' + ps.length : ''}</td><td class="py-1.5 text-right num">${trMoney(cur, trDsaTotal(t))}</td></tr></tbody></table>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${item('Memo', esc(d.memoNo || '—'))}${item('Memo date', d.memoDate ? vDate(d.memoDate) : '—')}${item('Signed memo', d.memoUrl ? vLink(d.memoUrl, 'Open') : '<span class="text-amber-600">Not linked</span>')}</div>`}
+    </div>
+    ${t.comments ? `<div class="text-sm text-slate-600 mb-5"><span class="text-slate-400">Comments:</span> ${esc(t.comments)}</div>` : ''}
+    <div class="flex items-center justify-end gap-4 pt-3 border-t border-slate-100">${canManageInventory() ? act('Delete', `deleteTravel('${t.id}')`, 'text-slate-400 hover:text-rose-600') : ''}${act('Edit request', `openTravelForm('${t.id}')`)}</div>`, true);
+}
+
+/* ---------- the DSA amounts and memo defaults ---------- */
+function openTravelSettings(){
+  const S = trSettings(), row = (scope, label) => `<div class="rounded-xl border border-slate-200 p-4"><div class="text-sm font-bold text-slate-800 mb-3">${label}</div>${vGrid(2, vF('Currency', scope + '.currency', S[scope].currency) + '<div></div>' + vF('Meal (per day)', scope + '.meal', S[scope].meal, 'number') + vF('Pocket money', scope + '.pocket', S[scope].pocket, 'number') + vF('Accommodation (per night)', scope + '.accom', S[scope].accom, 'number'))}</div>`;
+  openModal('DSA rates and memo', vFormOpen + `
+    <p class="text-sm text-slate-500 mb-4">The set amounts fill in each new travel request. A request keeps the amounts it was saved with.</p>
+    <div class="grid sm:grid-cols-2 gap-4">${row('local', 'Local travel')}${row('foreign', 'Foreign travel')}</div>
+    ${vSec('Memo')}
+    ${vGrid(2, vF('Memo number starts with', 'memoPrefix', S.memoPrefix) + '<div></div>' + vF('From', 'memoFrom', S.memoFrom) + vF('To', 'memoTo', S.memoTo) + vF('CC', 'memoCc', S.memoCc) + '<div></div>' + vF('Signed by (name)', 'signName', S.signName) + vF('Signatory designation', 'signDesig', S.signDesig))}
+    ${vFoot('Save', 'saveTravelSettings()')}`, true);
+}
+async function saveTravelSettings(){
+  const o = vehFormObj(document.getElementById('vform')), sc = x => ({ currency:String((x || {}).currency || 'MVR').trim() || 'MVR', meal:pcRound(vNum((x || {}).meal)), pocket:pcRound(vNum((x || {}).pocket)), accom:pcRound(vNum((x || {}).accom)) });
+  vehSettings = Object.assign({}, vehSettings, { travel:{ local:sc(o.local), foreign:sc(o.foreign), memoPrefix:String(o.memoPrefix || '').trim() || '(MEMO)FDC/FDC/', memoFrom:o.memoFrom || '', memoTo:o.memoTo || '', memoCc:o.memoCc || '', signName:o.signName || '', signDesig:o.signDesig || '' } });
+  await persistVehSettings(); closeModal(); rerenderMain(); toast('DSA rates saved.');
+}
+
+/* ---------- the DSA memo as a PDF, in the layout of the Administration memo to Finance ---------- */
+async function buildTravelMemoPdf(t){
+  const d = t.dsa || {}, cur = trCur(t), ps = trParts(t), lines = trDsaLines(t), K = [0, 0, 0], HEAD = [0.93, 0.94, 0.96];
+  const pg = new PdfPage(PCA4_H), L = 75, R = 520, FS = 9.5;
+  const txt = (x, b, s, o) => pg.text(x, b, s, Object.assign({ size:FS }, o || {}));
+  const center = (x0, x1, b, s, o) => { o = Object.assign({ size:8.5 }, o || {}); pg.text(x0 + (x1 - x0 - pdfTextWidth(s, !!o.bold, o.size)) / 2, b, s, o); };
+  let y = 112;
+  const no = d.memoNo || ''; txt(R - pdfTextWidth(no, true, 10), y, no, { bold:true, size:10 }); y += 6; pg.line(L, y, R, y, K, 0.8); y += 15;
+  [['From:', d.memoFrom], ['To:', d.memoTo], ['CC:', d.memoCc]].forEach(([l, v]) => { if(!v) return; txt(L, y, l, { bold:true }); txt(L + pdfTextWidth(l + ' ', true, FS), y, v); y += 15; });
+  const dp = pcReplDateParts(d.memoDate || vToday()), mon = PC_MONTH_NAMES[+String(d.memoDate || vToday()).slice(5, 7) - 1] || '', yr = String(d.memoDate || vToday()).slice(0, 4);
+  txt(L, y, 'Date:', { bold:true }); pdfRuns(pg, L + pdfTextWidth('Date: ', true, FS), y, [{ t:dp.d.padStart(2, '0'), size:FS }, { t:dp.suf, size:5.8, rise:3.6 }, { t:' ' + mon + ' ' + yr, size:FS }]); y += 7; pg.line(L, y, R, y, K, 0.8); y += 22;
+  // subject (bold, underlined) and the request
+  const subj = 'Subject: Request for Daily Subsistence Allowance for ' + (t.destination || '');
+  pdfWrap(subj, true, 10, R - L).forEach(ln => { txt(L, y, ln, { bold:true, size:10 }); pg.line(L, y + 2, L + pdfTextWidth(ln, true, 10), y + 2, K, 0.6); y += 18; });
+  const who = ps.length === 1 ? 'the staff member listed below will be' : 'the staff members listed below will be';
+  const purp = String(t.purpose || '').trim(), lead = !purp || /^official trip$/i.test(purp) ? 'As part of the official trip' : 'As part of the official trip for ' + purp;
+  const body = [lead + ', ' + who + ' travelling to ' + (t.destination || '') + ' from ' + pcOrdinalDate(t.fromDate) + ' to ' + pcOrdinalDate(t.toDate) + '.',
+    'Kindly arrange the Daily Subsistence Allowance for the above-mentioned trip, as detailed below, in accordance with the Travel Policy.'];
+  body.forEach(p => { pdfWrap(p, false, FS, R - L).forEach(ln => { txt(L, y, ln); y += 18; }); });
+  y += 8;
+  // the table: Staff Details (Name, Designation) | Allowance | Rates (Cost, Days, Total Rate) | Total
+  const X = [L, 158, 245, 330, 380, 418, 462, R], GRID = [0.25, 0.25, 0.25];
+  const top = y, h1 = 15, h2 = 24;
+  pg.fill(X[0], y, X[7] - X[0], h1 + h2, HEAD);
+  center(X[0], X[2], y + 10.5, 'Staff Details', { bold:true }); center(X[3], X[6], y + 10.5, 'Rates', { bold:true });
+  center(X[2], X[3], y + (h1 + h2) / 2 + 3, 'Allowance', { bold:true }); center(X[6], X[7], y + (h1 + h2) / 2 - 2, 'Total', { bold:true }); center(X[6], X[7], y + (h1 + h2) / 2 + 8, '(' + cur + ')', { bold:true });
+  y += h1; pg.line(X[0], y, X[2], y, GRID, 0.5); pg.line(X[3], y, X[6], y, GRID, 0.5);
+  center(X[0], X[1], y + h2 / 2 + 3, 'Name', { bold:true }); center(X[1], X[2], y + h2 / 2 + 3, 'Designation', { bold:true });
+  center(X[3], X[4], y + 10, 'Cost', { bold:true }); center(X[3], X[4], y + 20, '(' + cur + ')', { bold:true }); center(X[4], X[5], y + h2 / 2 + 3, 'Days', { bold:true }); center(X[5], X[6], y + 10, 'Total', { bold:true }); center(X[5], X[6], y + 20, 'Rate', { bold:true });
+  y += h2; pg.line(X[0], top, X[7], top, GRID, 0.5); pg.line(X[0], y, X[7], y, GRID, 0.5);
+  [X[0], X[2], X[3], X[6], X[7]].forEach(x => pg.line(x, top, x, y, GRID, 0.5)); [X[1]].forEach(x => pg.line(x, top + h1, x, y, GRID, 0.5)); [X[4], X[5]].forEach(x => pg.line(x, top + h1, x, y, GRID, 0.5));
+  const per = trDsaPerPerson(t), LH = 11;
+  (ps.length ? ps : [{ name:'', designation:'' }]).forEach(p => {
+    const nameW = pdfWrap(p.name, false, 8.5, X[1] - X[0] - 8), desW = pdfWrap(p.designation || '', false, 8.5, X[2] - X[1] - 8);
+    const subH = lines.map(l => Math.max(15, pdfWrap(l.label, false, 8.5, X[3] - X[2] - 8).length * LH + 4));
+    let blockH = subH.reduce((a, b) => a + b, 0); const need = Math.max(nameW.length, desW.length) * LH + 6; if(need > blockH){ const extra = (need - blockH) / subH.length; subH.forEach((v, i) => { subH[i] = v + extra; }); blockH = need; }
+    const b0 = y;
+    const mid = (arr, x0, x1, al) => { const st = b0 + (blockH - arr.length * LH) / 2 + 8; arr.forEach((ln, i) => { if(al === 'c') center(x0, x1, st + i * LH, ln); else txt(x0 + 4, st + i * LH, ln, { size:8.5 }); }); };
+    mid(nameW, X[0], X[1], 'c'); mid(desW, X[1], X[2], 'l'); mid([pcMoneyPlain(per)], X[6], X[7], 'c');
+    let yy = b0; lines.forEach((l, i) => { const hh = subH[i], b = yy + hh / 2 + 3; txt(X[2] + 4, b, l.label, { size:8.5 }); center(X[3], X[4], b, pcMoneyPlain(l.rate)); center(X[4], X[5], b, String(l.days).padStart(2, '0')); center(X[5], X[6], b, pcMoneyPlain(l.total)); yy += hh; if(i < lines.length - 1) pg.line(X[2], yy, X[6], yy, GRID, 0.5); });
+    y = b0 + blockH; pg.line(X[0], y, X[7], y, GRID, 0.5); X.forEach(x => pg.line(x, b0, x, y, GRID, 0.5));
+  });
+  if(ps.length > 1){ const h = 17; pg.fill(X[0], y, X[7] - X[0], h, HEAD); txt(X[0] + 4, y + 11.5, 'Total DSA (' + ps.length + ' staff)', { bold:true, size:8.5 }); center(X[6], X[7], y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(X[0], y + h, X[7], y + h, GRID, 0.5); pg.line(X[0], y, X[0], y + h, GRID, 0.5); pg.line(X[6], y, X[6], y + h, GRID, 0.5); pg.line(X[7], y, X[7], y + h, GRID, 0.5); y += h; }
+  y += 30; txt(L, y, 'Best Regards,'); y += 62;
+  if(d.signName){ txt(L, y, d.signName); y += 18; } if(d.signDesig){ txt(L, y, d.signDesig); y += 18; }
+  y += 16; txt(L, y, 'Attachment: Travel Request Form', { size:8.5, color:[0.3, 0.3, 0.3] });
+  return pcPdfFinish([{ ops:pg.ops }], { title:'', number:'', docTitle:'DSA Memo ' + no, pageNumbers:true });
+}
+async function trMemoPdf(id, btn){
+  const t = trById(id); if(!t || !trDsaOn(t)) return;
+  if(!t.dsa.memoNo){ toast('Enter the memo number first (Edit request).', true); return; }
+  const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ downloadBlob(await buildTravelMemoPdf(t), 'DSA_Memo_' + String(t.dsa.memoNo).replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '') + '.pdf'); toast('Memo downloaded. Link the signed copy with Edit request.'); }
+  catch(e){ console.error(e); toast('Could not create the memo: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
 
 /* =====================================================================
    REPORTS — one page that compiles a summary of every part of the app for a chosen period,
@@ -5747,6 +6222,8 @@ function render(){
     else if(ui.tab==='utilities') el.innerHTML = viewUtilities('Electricity');
     else if(/^utility-/.test(ui.tab) && utTypeBySlug(ui.tab.slice(8))) el.innerHTML = viewUtilities(utTypeBySlug(ui.tab.slice(8)));
     else if(ui.tab==='utility-report') el.innerHTML = viewUtilityReport();
+    else if(ui.tab==='travel-local') el.innerHTML = viewTravel('local');
+    else if(ui.tab==='travel-foreign') el.innerHTML = viewTravel('foreign');
     else if(ui.tab==='reports') el.innerHTML = viewReportsHub();
     else if(ui.tab==='vehicle-detail') el.innerHTML = viewVehicleDetail();
     else if(ui.tab==='fueling') el.innerHTML = viewFueling();

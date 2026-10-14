@@ -1626,6 +1626,7 @@ const ICONS = {
   vehicle:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11l1.5-4.5A2 2 0 0 1 6.4 5h7.2a2 2 0 0 1 1.9 1.5L17 11"/><rect x="2.5" y="11" width="15" height="4.5" rx="1.5"/><circle cx="6" cy="13.3" r=".7"/><circle cx="14" cy="13.3" r=".7"/></svg>',
   fuel:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 17V4.5A1.5 1.5 0 0 1 5.5 3h5A1.5 1.5 0 0 1 12 4.5V17"/><path d="M3 17h10"/><path d="M6 6.5h4"/><path d="M12 8h1.5A1.5 1.5 0 0 1 15 9.5V13a1 1 0 0 0 2 0V7l-2-2"/></svg>',
   service:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12.5 3a4 4 0 0 0-3.7 5.4L3.5 13.7a1.6 1.6 0 0 0 2.3 2.3l5.3-5.3A4 4 0 0 0 16.5 7.5l-2.3 2.3-2-.5-.5-2 2.3-2.3A4 4 0 0 0 12.5 3z"/></svg>',
+  broom:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M14.5 2.5 10 8.5"/><path d="M6.5 8.5h6l1.5 3.5H5z"/><path d="M5 12l-1.2 5.5M8 12l-.5 5.5M11 12l.5 5.5M14 12l1.2 5.5"/></svg>',
   vlog:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="3.5" width="12" height="14" rx="1.5"/><path d="M7.5 3.5V2.5h5v1M7 8h6M7 11h6M7 14h3.5"/></svg>',
   plane:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8.5 11.5 3 9.5l1.2-1.2 5.8.6 3.6-3.6c.8-.8 2-.9 2.4-.5s.3 1.6-.5 2.4L11.9 10.8l.6 5.8-1.2 1.2-2-5.5-2.6 2.4.2 1.8-1 1-1-2.6-2.6-1 1-1 1.8.2z"/></svg>',
   globe:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.2 2.3 3.2 4.8 3.2 7.5s-1 5.2-3.2 7.5c-2.2-2.3-3.2-4.8-3.2-7.5s1-5.2 3.2-7.5z"/></svg>',
@@ -1673,6 +1674,8 @@ function currentNav(){
     { section:'Facilities' },
     ...UT_TYPE_LIST.map(t => ({ id:'utility-' + UT_TYPES[t].slug, label:t, icon:UT_TYPES[t].icon, badge:utAl.filter(a=>a.type===t).length, tone:utAl.some(a=>a.type===t && a.st.k==='crit') ? 'crit' : 'warn' })),
     { id:'utility-report', label:'Report', icon:'chart' },
+    { section:'Maintenance' },
+    { id:'cleaning', label:'Cleaning Checklist', icon:'broom', badge:cntOf(clPendingCount), tone:'warn', hint:"Locations whose last week's checklist is not completed or linked" },
     { section:'Travel' },
     { id:'travel-local', label:'Local Travel', icon:'plane', badge:(()=>{ try{ return state.travelRequests.filter(t => (t.scope || 'local') === 'local' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
     { id:'travel-foreign', label:'Foreign Travel', icon:'globe', badge:(()=>{ try{ return state.travelRequests.filter(t => t.scope === 'foreign' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
@@ -1839,6 +1842,8 @@ const VEH_COLS = {
   utilityBills:     { collection:'fdc_inventory_utility_bills',         label:'utility bills', one:'utility bill' },
   travelRequests:   { collection:'fdc_inventory_travel_requests',       label:'travel requests', one:'travel request' },
   vehicleLogs:      { collection:'fdc_inventory_vehicle_logs',          label:'vehicle log entries', one:'vehicle log entry' },
+  cleaningTemplates:{ collection:'fdc_inventory_cleaning_templates',    label:'cleaning checklists', one:'cleaning checklist' },
+  cleaningSheets:   { collection:'fdc_inventory_cleaning_sheets',       label:'weekly cleaning checklists', one:'weekly cleaning checklist' },
 };
 const vehRefs = {}, vehUnsubs = {};
 let vehSettingsUnsub = null;
@@ -5141,6 +5146,239 @@ function viewPettyCashStatement(){
 
 
 /* =====================================================================
+   MAINTENANCE — CLEANING CHECKLIST: for each location, its rooms and the tasks in each,
+   the cleaners and the supervisor. Every week gets a checklist that is ticked here (or printed,
+   filled by hand and the signed copy linked), and can be downloaded as a PDF in the finance layout.
+===================================================================== */
+const CL_DAYS_ALL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const CL_DEFAULT_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+const CL_SEED = { address:"Apollo Tower, 1st Floor, Hulhumale'", cleaners:['MD Saidul', 'MD Rajaul Mia', 'MD Soharb Hussain', 'MD Maurooh Mia'], rooms:[
+  { name:'Projects Meeting Room', tasks:['Clear dustbins', 'Replace dustbin bag', 'Wipe the door handles', 'Wipe the tables and chairs', 'Wipe the monitors', 'Wipe printers and scanners', 'Wipe the windows', 'Wipe the glass partitions', 'Sweep/Vacuum', 'Mop'] },
+  { name:'Main Office', tasks:['Clear dustbins', 'Replace dustbin bag', 'Wipe the door handles', 'Wipe the tables and chairs', 'Wipe the monitors', 'Wipe printers and scanners', 'Wipe the windows', 'Wipe the glass partitions', 'Sweep/Vacuum', 'Mop'] },
+  { name:'Pantry', tasks:['Clear dustbins', 'Replace dustbin bag', 'Wipe the door handles', 'Wipe the tables and chairs', 'Wipe the monitors', 'Wipe the Cabinets', 'Sweep/Vacuum', 'Mop'] },
+  { name:'Property Storage Room', tasks:['Clear dustbins', 'Replace dustbin bag', 'Wipe the door handles', 'Wipe the tables and chairs', 'Wipe the Windows', 'Wipe the Cabinets', 'Sweep / Vacuum'] },
+  { name:'Reception', tasks:['Clear dustbins', 'Replace dustbin bag', 'Wipe the door handles', 'Wipe the tables and chairs', 'Wipe the monitors', 'Wipe the Cabinets', 'Sweep/Vacuum', 'Mop'] },
+  { name:"Men's Toilet", tasks:['Wipe the Door Handles', 'Clear Dustbins', 'Replace dustbin Bags', 'Clean and Wipe the Sink', 'Wipe the Flush Tank Surface', 'Wash the Toilets', 'Wash and Clean the Floor'] },
+  { name:"Women's Toilet", tasks:['Wipe the Door Handles', 'Clear Dustbins', 'Replace dustbin Bags', 'Clean and Wipe the Sink', 'Wipe the Flush Tank Surface', 'Wash the Toilets', 'Wash and Clean the Floor'] } ] };
+const clIsoAdd = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const clWeekStart = iso => { const d = new Date((iso || vToday()) + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.toISOString().slice(0, 10); };   // weeks start on Sunday
+const clDayDate = (week, day) => clIsoAdd(week, CL_DAYS_ALL.indexOf(day));
+const clWeekLabel = w => vDate(w) + ' – ' + vDate(clIsoAdd(w, 6));
+const clTpl = locId => state.cleaningTemplates.find(t => t.locationId === locId) || null;
+const clSheet = (locId, week) => state.cleaningSheets.find(s => s.locationId === locId && s.weekStart === week) || null;
+const clK = (...p) => p.map(x => encodeURIComponent(String(x))).join('|');            // a tick: task (room, task, day), attendance, cleaner or supervisor sign-off
+// what the week's checklist holds: the week's own copy once it is started, otherwise the location's current set-up
+function clStruct(locId, week){
+  const s = clSheet(locId, week), t = clTpl(locId), src = s || t || {};
+  return { days:(src.days && src.days.length ? src.days : CL_DEFAULT_DAYS).slice(), rooms:(src.rooms || []).map(r => ({ name:r.name, tasks:(r.tasks || []).slice() })), cleaners:(src.cleaners || []).slice(), supervisor:src.supervisor || '', address:src.address || ((getLocation(locId) || {}).name || '') };
+}
+function clStats(locId, week){
+  const S = clStruct(locId, week), sh = clSheet(locId, week), ch = (sh && sh.checks) || {};
+  const total = S.rooms.reduce((t, r) => t + r.tasks.length, 0) * S.days.length;
+  let done = 0; S.rooms.forEach(r => r.tasks.forEach(task => S.days.forEach(d => { if(ch[clK('t', r.name, task, d)]) done++; })));
+  const pct = total ? Math.round(done / total * 100) : 0, signed = !!(sh && sh.docUrl), complete = !!(sh && sh.complete);
+  return { total, done, pct, signed, complete, started:!!(sh && (done || sh.docUrl || Object.keys(ch).length)), status: signed ? 'Signed copy linked' : complete ? 'Completed' : done ? 'In progress' : 'Not started' };
+}
+const clStatusPill = st => vPill(st.signed ? 'good' : st.complete ? 'good' : st.done ? 'warn' : '', st.status);
+function clLocs(){ return utCustomOrder().filter(l => clTpl(l.id)); }
+// a location counts for a week only once its checklist existed before that week ended
+const clSetBefore = (locId, week) => { const t = clTpl(locId); return !!t && (!t.createdAt || t.createdAt < Date.parse(clIsoAdd(week, 7) + 'T00:00:00')); };
+function clLastWeekMissing(){ const w = clIsoAdd(clWeekStart(vToday()), -7); return clLocs().filter(l => clSetBefore(l.id, w) && (st => !st.signed && !st.complete)(clStats(l.id, w))); }
+function clPendingCount(){ try{ return clLastWeekMissing().length; }catch(e){ return 0; } }
+
+function viewCleaning(){
+  const week = vehUi.clWeek || (vehUi.clWeek = clWeekStart(vToday())), locs = clLocs(), admin = canManageInventory();
+  if(!vehUi.clLoc || !clTpl(vehUi.clLoc)) vehUi.clLoc = (locs[0] || {}).id || '';
+  const loc = getLocation(vehUi.clLoc), stats = locs.map(l => ({ l, st:clStats(l.id, week) }));
+  const avg = stats.length ? Math.round(stats.reduce((t, x) => t + x.st.pct, 0) / stats.length) : 0, last = clIsoAdd(week, -7);
+  const lastLocs = locs.filter(l => clSetBefore(l.id, last)), lastSigned = lastLocs.filter(l => { const s = clStats(l.id, last); return s.signed || s.complete; }).length;
+  const kpis = vKpis(statCard('Locations', fmtNum(locs.length), 'With a cleaning checklist', 'brand') + statCard('This week', avg + '%', 'Tasks ticked, all locations', avg >= 90 ? 'emerald' : avg ? 'amber' : 'slate') +
+    statCard('Signed copies', fmtNum(stats.filter(x => x.st.signed).length) + ' / ' + locs.length, 'Linked for this week', 'slate') + statCard('Last week', lastLocs.length ? lastSigned + ' / ' + lastLocs.length : '—', 'Completed or signed copy linked', lastSigned < lastLocs.length ? 'amber' : 'emerald'));
+  const nav = `<div class="flex items-center gap-2 flex-wrap mb-5"><button onclick="vehUi.clWeek = clIsoAdd(vehUi.clWeek, -7); rerenderMain()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">‹</button>
+      <div class="text-sm font-bold text-slate-900 px-2">Week of ${clWeekLabel(week)}</div><button onclick="vehUi.clWeek = clIsoAdd(vehUi.clWeek, 7); rerenderMain()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">›</button>
+      ${week !== clWeekStart(vToday()) ? `<button onclick="vehUi.clWeek = clWeekStart(vToday()); rerenderMain()" class="text-xs font-semibold text-brand-600 hover:underline ml-1">This week</button>` : ''}
+      <input type="date" value="${esc(week)}" onchange="if(this.value){ vehUi.clWeek = clWeekStart(this.value); rerenderMain(); }" class="${VEH_INPUT} ml-auto" title="Go to the week of a date"></div>`;
+  const cards = stats.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">${stats.map(({ l, st }) => `<button type="button" onclick="vehUi.clLoc='${esc(l.id)}'; rerenderMain()" class="text-left bg-white rounded-xl border p-4 transition-colors ${l.id === vehUi.clLoc ? 'border-brand-500 ring-2 ring-brand-500' : 'border-slate-200 hover:border-brand-300'}" style="border-top:3px solid ${esc(l.color)}">
+      <div class="flex items-center justify-between gap-2"><span class="font-bold text-slate-900 truncate">${esc(l.name)}</span><span class="text-sm font-extrabold num ${st.pct >= 90 ? 'text-emerald-600' : 'text-slate-700'}">${st.pct}%</span></div>
+      <div class="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden"><div class="h-full rounded-full" style="width:${st.pct}%;background:${st.pct >= 90 ? '#10b981' : st.pct >= 50 ? '#f59e0b' : '#94a3b8'}"></div></div>
+      <div class="flex items-center justify-between gap-2 mt-2"><span class="text-[11px] text-slate-400">${st.done} of ${st.total} tasks</span>${clStatusPill(st)}</div></button>`).join('')}</div>` : '';
+  const head = vHead('Cleaning Checklist', 'Weekly cleaning checklists by location: tick the tasks here, or print the checklist and link the signed copy.',
+    (admin ? vBtnPlain('+ Location checklist', `openClSetup('')`) : ''));
+  if(!locs.length) return head + `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No cleaning checklists yet. Set up a location with its rooms and the tasks in each.' + (admin ? `<div class="mt-4 flex flex-wrap justify-center gap-2.5">${vBtnPrimary('+ Set up a location', `openClSetup('')`)}${vBtnPlain('Use the Apollo Tower checklist', 'clSeed()')}</div>` : ''))}</div>`;
+  return head + kpis + nav + cards + (loc ? clWeekPanel(loc, week) : '');
+}
+// one location's week: the grid to tick, attendance, sign-off, downloads and the signed copy
+function clWeekPanel(loc, week){
+  const S = clStruct(loc.id, week), sh = clSheet(loc.id, week), ch = (sh && sh.checks) || {}, att = (sh && sh.attendance) || {}, st = clStats(loc.id, week), can = !!authUser || true;
+  const today = vToday(), dayCls = d => clDayDate(week, d) === today ? 'bg-brand-50' : '';
+  const box = (k, on) => `<button type="button" onclick="clTick('${esc(loc.id)}', '${week}', '${esc(k)}')" class="w-6 h-6 rounded border ${on ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 hover:border-brand-400'} text-xs font-bold leading-none">${on ? '✓' : ''}</button>`;
+  const dh = S.days.map(d => `<th class="px-1.5 py-2 text-center ${dayCls(d)}"><div class="text-[11px] font-bold text-slate-700">${d.slice(0, 3)}</div><div class="text-[10px] font-normal text-slate-400">${vDate(clDayDate(week, d)).replace(/,? \d{4}$/, '')}</div><button type="button" onclick="clTickDay('${esc(loc.id)}', '${week}', '${d}')" class="text-[10px] font-semibold text-brand-600 hover:underline mt-0.5">all</button></th>`).join('');
+  const attRow = (label, f) => `<tr class="border-t border-slate-100"><td colspan="2" class="py-1.5 pl-4 pr-2 text-xs font-semibold text-slate-600">${label}</td>${S.days.map(d => `<td class="px-1 py-1 text-center ${dayCls(d)}"><input type="time" value="${esc((att[d] || {})[f] || '')}" onchange="clSetTime('${esc(loc.id)}', '${week}', '${d}', '${f}', this.value)" class="${VEH_FIELD} !px-1 !py-1 text-xs w-[5.6rem]"></td>`).join('')}</tr>`;
+  const rows = S.rooms.map(r => r.tasks.map((t, i) => `<tr class="border-t border-slate-100 hover:bg-slate-50">${i === 0 ? `<td rowspan="${r.tasks.length}" class="py-1.5 pl-4 pr-2 align-top text-xs font-bold text-slate-800 border-r border-slate-100 w-36">${esc(r.name)}<div class="text-[10px] font-normal text-slate-400 mt-0.5">${(() => { let n = 0; r.tasks.forEach(tt => S.days.forEach(d => { if(ch[clK('t', r.name, tt, d)]) n++; })); return n + ' / ' + r.tasks.length * S.days.length; })()}</div></td>` : ''}<td class="py-1.5 px-2 text-[13px] text-slate-700">${esc(t)}</td>${S.days.map(d => `<td class="px-1 py-1 text-center ${dayCls(d)}">${box(clK('t', r.name, t, d), !!ch[clK('t', r.name, t, d)])}</td>`).join('')}</tr>`).join('')).join('');
+  const signRows = S.cleaners.map(c => `<tr class="border-t border-slate-100"><td colspan="2" class="py-1.5 pl-4 pr-2 text-[13px] text-slate-700">${esc(c)} <span class="text-[11px] text-slate-400">· cleaned</span></td>${S.days.map(d => `<td class="px-1 py-1 text-center ${dayCls(d)}">${box(clK('c', c, d), !!ch[clK('c', c, d)])}</td>`).join('')}</tr>`).join('') +
+    `<tr class="border-t border-slate-100"><td colspan="2" class="py-1.5 pl-4 pr-2 text-[13px] text-slate-700">${esc(S.supervisor || 'Supervisor')} <span class="text-[11px] text-slate-400">· supervised</span></td>${S.days.map(d => `<td class="px-1 py-1 text-center ${dayCls(d)}">${box(clK('s', d), !!ch[clK('s', d)])}</td>`).join('')}</tr>`;
+  return vPanel(esc(loc.name) + ' · week of ' + clWeekLabel(week), `${clStatusPill(st)} <span class="ml-1">${st.done} / ${st.total} tasks (${st.pct}%)</span>`, `
+    <div class="px-5 sm:px-6 py-3.5 flex items-center justify-between gap-3 flex-wrap border-b border-slate-100">
+      <div class="text-xs text-slate-500">${esc(S.address)}${S.cleaners.length ? ' · cleaners: ' + esc(S.cleaners.join(', ')) : ''}${S.supervisor ? ' · supervisor: ' + esc(S.supervisor) : ''}${sh && sh.docUrl ? ' · ' + vLink(sh.docUrl, 'Signed copy') : ''}</div>
+      <div class="flex items-center gap-x-4 gap-y-2 flex-wrap text-xs font-semibold">
+        <button onclick="clPdf('${esc(loc.id)}', '${week}', false, this)" class="text-brand-600 hover:underline">Download blank (PDF)</button>
+        <button onclick="clPdf('${esc(loc.id)}', '${week}', true, this)" class="text-brand-600 hover:underline">Download filled (PDF)</button>
+        <button onclick="openClLink('${esc(loc.id)}', '${week}')" class="text-brand-600 hover:underline">${sh && sh.docUrl ? 'Change signed copy link' : 'Link signed copy'}</button>
+        <button onclick="clSetComplete('${esc(loc.id)}', '${week}', ${sh && sh.complete ? 'false' : 'true'})" class="${sh && sh.complete ? 'text-slate-500' : 'text-emerald-600'} hover:underline">${sh && sh.complete ? 'Reopen week' : 'Mark week complete'}</button>
+        ${canManageInventory() ? `<button onclick="openClSetup('${esc(loc.id)}')" class="text-slate-500 hover:text-brand-600 hover:underline">Rooms & tasks</button>` : ''}</div></div>
+    ${S.rooms.length ? `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[46rem]"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="py-2 pl-4 pr-2">Room</th><th class="py-2 px-2">Task</th>${dh}</tr></thead><tbody>
+      <tr class="bg-slate-50"><td colspan="${2 + S.days.length}" class="py-1.5 pl-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">Attendance</td></tr>${attRow('Time in', 'in')}${attRow('Time out', 'out')}
+      <tr class="bg-slate-50"><td colspan="${2 + S.days.length}" class="py-1.5 pl-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">Tasks</td></tr>${rows}
+      <tr class="bg-slate-50"><td colspan="${2 + S.days.length}" class="py-1.5 pl-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">Cleaned by / supervised by</td></tr>${signRows}
+    </tbody></table></div>` : vEmpty('No rooms set up for this location yet.')}
+    ${sh && sh.notes ? `<div class="px-5 sm:px-6 py-3 text-xs text-slate-500 border-t border-slate-100">Note: ${esc(sh.notes)}</div>` : ''}`);
+}
+// the week's own copy, made from the set-up the first time anything is recorded for it
+async function clEnsureSheet(locId, week){
+  let sh = clSheet(locId, week); if(sh) return sh;
+  const S = clStruct(locId, week);
+  const id = await vehSave('cleaningSheets', { locationId:locId, weekStart:week, days:S.days, rooms:S.rooms, cleaners:S.cleaners, supervisor:S.supervisor, address:S.address, checks:{}, attendance:{} });
+  return state.cleaningSheets.find(s => s.id === id);
+}
+async function clTick(locId, week, k){ const sh = await clEnsureSheet(locId, week), ch = Object.assign({}, sh.checks || {}); if(ch[k]) delete ch[k]; else ch[k] = true; await vehSave('cleaningSheets', { id:sh.id, checks:ch }); rerenderMain(); }
+async function clTickDay(locId, week, day){
+  const sh = await clEnsureSheet(locId, week), ch = Object.assign({}, sh.checks || {}), S = clStruct(locId, week), keys = [];
+  S.rooms.forEach(r => r.tasks.forEach(t => keys.push(clK('t', r.name, t, day))));
+  const all = keys.every(k => ch[k]); keys.forEach(k => { if(all) delete ch[k]; else ch[k] = true; });
+  await vehSave('cleaningSheets', { id:sh.id, checks:ch }); rerenderMain();
+}
+async function clSetTime(locId, week, day, f, v){ const sh = await clEnsureSheet(locId, week), at = JSON.parse(JSON.stringify(sh.attendance || {})); at[day] = Object.assign({}, at[day] || {}, { [f]:v }); await vehSave('cleaningSheets', { id:sh.id, attendance:at }); }
+async function clSetComplete(locId, week, on){ const sh = await clEnsureSheet(locId, week); await vehSave('cleaningSheets', { id:sh.id, complete:!!on, completedBy:on ? (authUser ? authUser.name : '') : '', completedAt:on ? Date.now() : 0 }); rerenderMain(); toast(on ? 'Week marked complete.' : 'Week reopened.'); }
+function openClLink(locId, week){
+  const sh = clSheet(locId, week);
+  openModal('Signed checklist — ' + ((getLocation(locId) || {}).name || ''), vFormOpen + `<p class="text-sm text-slate-500 mb-4">Week of ${clWeekLabel(week)}. Link the scanned, signed checklist (e.g. on SharePoint).</p>` +
+    vF('Link to the signed checklist', 'docUrl', sh ? sh.docUrl : '', 'url') + `<div class="mt-3.5">${vTa('Note', 'notes', sh ? sh.notes : '', { rows:2 })}</div>` + vFoot('Save', `saveClLink('${esc(locId)}', '${week}')`));
+}
+async function saveClLink(locId, week){
+  const o = vehFormObj(document.getElementById('vform')), url = o.docUrl ? vSafeUrl(o.docUrl) : ''; if(o.docUrl && !url) return vFail('Enter a full web link starting with https://');
+  const sh = await clEnsureSheet(locId, week); await vehSave('cleaningSheets', { id:sh.id, docUrl:url, notes:o.notes || '', linkedBy:authUser ? authUser.name : '', linkedAt:Date.now() });
+  closeModal(); rerenderMain(); toast(url ? 'Signed checklist linked.' : 'Saved.');
+}
+
+/* ---------- set-up: the rooms and tasks of a location ---------- */
+function clRoomBlock(r){
+  return `<div class="cl-room rounded-lg border border-slate-200 p-3"><div class="flex items-center gap-2 mb-2"><input type="text" value="${esc(r.name || '')}" placeholder="Room, e.g. Main Office" class="cl-room-name ${VEH_FIELD} !py-1.5 font-semibold">
+    <button type="button" onclick="const b = this.closest('.cl-room'); if(b.previousElementSibling) b.previousElementSibling.before(b)" class="px-1.5 text-slate-400 hover:text-brand-600" title="Move up">▲</button><button type="button" onclick="const b = this.closest('.cl-room'); if(b.nextElementSibling) b.nextElementSibling.after(b)" class="px-1.5 text-slate-400 hover:text-brand-600" title="Move down">▼</button>
+    <button type="button" onclick="this.closest('.cl-room').remove()" class="px-1.5 text-slate-400 hover:text-rose-600 text-lg leading-none" title="Remove room">×</button></div>
+    <textarea rows="${Math.max(3, (r.tasks || []).length)}" placeholder="Tasks, one per line — e.g. Clear dustbins" class="cl-room-tasks ${VEH_FIELD} text-sm">${esc((r.tasks || []).join('\n'))}</textarea></div>`;
+}
+function clAddRoom(r){ const b = document.getElementById('cl-rooms'); b.insertAdjacentHTML('beforeend', clRoomBlock(r || {})); b.lastElementChild.querySelector('input').focus(); }
+function clCopyRooms(sel){ const t = clTpl(sel.value); sel.value = ''; if(!t) return; (t.rooms || []).forEach(r => clAddRoom(r)); toast('Rooms copied — adjust them as needed.'); }
+function openClSetup(locId){
+  if(!canManageInventory()){ toast('Only admins can set up checklists.', true); return; }
+  const t = locId ? clTpl(locId) : null, d = t || { days:CL_DEFAULT_DAYS, rooms:[{ name:'', tasks:[] }], cleaners:[], supervisor:'', address:'' };
+  const free = LOCATIONS.filter(l => !clTpl(l.id) || l.id === locId), others = state.cleaningTemplates.filter(x => x.locationId !== locId);
+  openModal((t ? 'Rooms & tasks — ' + ((getLocation(locId) || {}).name || '') : 'Set up a cleaning checklist'), vFormOpen +
+    vGrid(2, vS('Location', 'locationId', free.map(l => [l.id, l.name]), locId || '', t ? null : 'Choose a location…', { req:1, attrs:(t ? ' disabled' : '') + ' onchange="const f=this.form; if(!f.address.value.trim()) f.address.value = (LOCATIONS.find(l=>l.id===this.value)||{}).name || \'\'"' }) +
+      vF('Heading on the checklist', 'address', d.address, 'text', { attrs:' placeholder="e.g. Apollo Tower, 1st Floor, Hulhumale\'"' })) +
+    vSec('Working days') + `<div class="flex flex-wrap gap-2">${CL_DAYS_ALL.map(x => `<label class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm cursor-pointer"><input type="checkbox" class="cl-day" value="${x}" ${(d.days || []).includes(x) ? 'checked' : ''}> ${x.slice(0, 3)}</label>`).join('')}</div>` +
+    vSec('Rooms and tasks') + `<div id="cl-rooms" class="space-y-3">${(d.rooms || []).map(clRoomBlock).join('')}</div>
+      <div class="flex items-center gap-4 mt-2.5 flex-wrap"><button type="button" onclick="clAddRoom()" class="text-xs font-semibold text-brand-600 hover:underline">+ Add room</button>${others.length ? `<select onchange="clCopyRooms(this)" class="${VEH_INPUT} !py-1 text-xs"><option value="">Copy rooms from…</option>${others.map(x => `<option value="${esc(x.locationId)}">${esc((getLocation(x.locationId) || {}).name || '')}</option>`).join('')}</select>` : ''}</div>` +
+    vSec('Cleaned by / supervised by') + vGrid(2, vTa('Cleaners (one per line)', 'cleaners', (d.cleaners || []).join('\n'), { rows:4 }) + vF('Supervisor', 'supervisor', d.supervisor, 'text')) +
+    `<p class="text-[11.5px] text-slate-400 mt-3">Changes apply from the week shown and later weeks not yet completed; ticks already made stay with their tasks.</p>` +
+    vFoot(t ? 'Save' : 'Create checklist', `saveClSetup('${esc(locId || '')}')`, t ? `deleteClSetup('${esc(locId)}')` : ''), true);
+}
+async function saveClSetup(locId){
+  const f = document.getElementById('vform'), o = vehFormObj(f), lid = locId || o.locationId;
+  if(!lid || !getLocation(lid)) return vFail('Choose the location.');
+  const days = [...f.querySelectorAll('.cl-day:checked')].map(x => x.value); if(!days.length) return vFail('Choose at least one working day.');
+  const rooms = [...f.querySelectorAll('.cl-room')].map(b => ({ name:b.querySelector('.cl-room-name').value.trim(), tasks:b.querySelector('.cl-room-tasks').value.split('\n').map(x => x.trim()).filter(Boolean) })).filter(r => r.name || r.tasks.length);
+  if(!rooms.length) return vFail('Add at least one room with its tasks.');
+  if(rooms.some(r => !r.name)) return vFail('Give every room a name.');
+  if(rooms.some(r => !r.tasks.length)) return vFail('Add at least one task to ' + rooms.find(r => !r.tasks.length).name + '.');
+  const names = rooms.map(r => r.name.toLowerCase()); if(new Set(names).size !== names.length) return vFail('Two rooms have the same name.');
+  const rec = { locationId:lid, address:String(o.address || '').trim() || getLocation(lid).name, days:CL_DAYS_ALL.filter(x => days.includes(x)), rooms, cleaners:String(o.cleaners || '').split('\n').map(x => x.trim()).filter(Boolean), supervisor:String(o.supervisor || '').trim() };
+  const t = clTpl(lid); if(t) rec.id = t.id;
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  await vehSave('cleaningTemplates', rec);
+  // weeks from the one shown, not yet completed or signed, follow the new set-up (their ticks are kept by task name)
+  const from = vehUi.clWeek || clWeekStart(vToday());
+  for(const sh of state.cleaningSheets.filter(s => s.locationId === lid && s.weekStart >= from && !s.complete && !s.docUrl)) await vehSave('cleaningSheets', { id:sh.id, days:rec.days, rooms:rec.rooms, cleaners:rec.cleaners, supervisor:rec.supervisor, address:rec.address });
+  vehUi.clLoc = lid; closeModal(); if(ui.tab !== 'cleaning') goTo('cleaning'); else rerenderMain(); toast('Cleaning checklist saved.');
+}
+function deleteClSetup(locId){
+  if(!vehRequireAdmin('delete checklists')) return; const t = clTpl(locId); if(!t) return; closeModal();
+  confirmAction('Remove the cleaning checklist of ' + ((getLocation(locId) || {}).name || '') + '? Weeks already recorded are kept.', async () => { await vehDelete('cleaningTemplates', t.id); vehUi.clLoc = ''; rerenderMain(); toast('Checklist removed.'); });
+}
+async function clSeed(){
+  if(!canManageInventory()) return;
+  const l = LOCATIONS.find(x => /apollo/i.test(x.name)) || LOCATIONS[0]; if(!l){ toast('Add a location first.', true); return; }
+  await vehSave('cleaningTemplates', { locationId:l.id, address:CL_SEED.address, days:CL_DEFAULT_DAYS, rooms:CL_SEED.rooms, cleaners:CL_SEED.cleaners, supervisor:'' });
+  vehUi.clLoc = l.id; rerenderMain(); toast('Apollo Tower checklist added to ' + l.name + '.');
+}
+
+/* ---------- the checklist as a PDF: blank to print, or filled from what was ticked ---------- */
+async function buildCleaningPdf(locId, week, filled){
+  const S = clStruct(locId, week), sh = clSheet(locId, week), ch = filled && sh ? sh.checks || {} : {}, att = filled && sh ? sh.attendance || {} : {};
+  const K = [0, 0, 0], LIME = [0.79, 0.86, 0.2], GRAY = [0.82, 0.82, 0.82], FS = 8;
+  const L = 34, R = 561, C1 = 64, C2 = 205, nD = S.days.length, DW = (R - C2) / nD, DX = i => C2 + i * DW;
+  const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = PC_TOP + 8;
+  const center = (x0, x1, b, t, o) => { o = Object.assign({ size:FS }, o || {}); pg.text(x0 + (x1 - x0 - pdfTextWidth(t, !!o.bold, o.size)) / 2, b, t, o); };
+  const box = (x0, y0, x1, y1) => { pg.line(x0, y0, x1, y0, K, 0.6); pg.line(x0, y1, x1, y1, K, 0.6); pg.line(x0, y0, x0, y1, K, 0.6); pg.line(x1, y0, x1, y1, K, 0.6); };
+  const vrot = (x, yb, t, o) => { o = o || {}; pg.ops.push(`BT /${o.bold ? 'F2' : 'F1'} ${pdfN(o.size || 8)} Tf 0 0 0 rg 0 1 -1 0 ${pdfN(x)} ${pdfN(PCA4_H - yb)} Tm ${pdfHex(pdfClean(t))} Tj ET`); };
+  const yr = week.slice(0, 4), dd = d => { const x = clDayDate(week, d); return x.slice(8, 10) + '/' + x.slice(5, 7); };
+  const header = first => {                                                                         // the lime heading: year, address, days — and the Date row
+    if(first){ pg.text(L, y + 4, 'Cleaning Checklist', { bold:true, size:14 }); y += 18; }
+    const h = 28; pg.fill(L, y, R - L, h, LIME); center(L, C1, y + 17, yr, { bold:true, size:7.5 });
+    pdfWrap(S.address, true, 7, C2 - C1 - 8).slice(0, 2).forEach((ln, i, a) => pg.text(C1 + 4, y + h / 2 - (a.length - 1) * 4.5 + 2.5 + i * 9, ln, { bold:true, size:7 }));
+    S.days.forEach((d, i) => center(DX(i), DX(i + 1), y + 17, d, { bold:true, size:7.5 }));
+    [L, C1, ...S.days.map((d, i) => DX(i)), R].forEach(x => pg.line(x, y, x, y + h, K, 0.6)); pg.line(L, y, R, y, K, 0.6); y += h;
+    if(first){                                                                                       // attendance: Date, Time in, Time out
+      const rh = 19, top = y; pg.fill(C1 + 30, y, C2 - C1 - 30, rh * 3, GRAY);
+      [['Date', d => filled || true ? dd(d) : ''], ['Time In', d => (att[d] || {}).in || ''], ['Time Out', d => (att[d] || {}).out || '']].forEach(([lab, val]) => {
+        pg.line(C1 + 30, y, R, y, K, 0.6); pg.text(C1 + 34, y + 12.5, lab, { bold:true, size:7.5 }); S.days.forEach((d, i) => { const v = val(d); if(v) center(DX(i), DX(i + 1), y + 12.5, v, { size:7.5 }); }); y += rh; });
+      center(L, C1 + 30, top + rh * 1.5 + 3, 'Attendance', { bold:true, size:7.5 }); box(L, top, R, y); pg.line(C1 + 30, top, C1 + 30, y, K, 0.6); S.days.forEach((d, i) => pg.line(DX(i), top, DX(i), y, K, 0.6));
+    } else { const rh = 19; pg.fill(C1, y, C2 - C1, rh, GRAY); pg.text(C1 + 4, y + 12.5, 'Date', { bold:true, size:7.5 }); S.days.forEach((d, i) => center(DX(i), DX(i + 1), y + 12.5, dd(d), { size:7.5 })); box(L, y, R, y + rh); [C1, C2, ...S.days.map((d, i) => DX(i))].forEach(x => pg.line(x, y, x, y + rh, K, 0.6)); y += rh; }
+    y += 4;
+  };
+  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = PC_TOP + 8; header(false); };
+  header(true);
+  const RH = 15.2;
+  S.rooms.forEach(r => {
+    let i = 0;
+    while(i < r.tasks.length){
+      if(y + RH * Math.min(3, r.tasks.length - i) > PC_BOTTOM - 4) newPage();
+      const n = Math.max(1, Math.min(r.tasks.length - i, Math.floor((PC_BOTTOM - 4 - y) / RH))), top = y;   // the room's tasks that fit on this page
+      for(let k = 0; k < n; k++, i++){
+        const t = r.tasks[i]; pg.text(C1 + 4, y + 10.8, pdfWrap(t, false, FS, C2 - C1 - 8)[0], { size:FS });
+        S.days.forEach((d, j) => { if(ch[clK('t', r.name, t, d)]) pcTick(pg, (DX(j) + DX(j + 1)) / 2, y + RH / 2); });
+        y += RH; pg.line(C1, y, R, y, K, 0.5);
+      }
+      box(L, top, R, y); [C1, C2, ...S.days.map((d, j) => DX(j))].forEach(x => pg.line(x, top, x, y, K, 0.5));
+      const nm = pdfWrap(r.name, true, 7.5, y - top - 6), lines = nm.slice(0, 2); lines.forEach((ln, k) => vrot((L + C1) / 2 + 3 - (lines.length - 1) * 4.5 + k * 9, top + (y - top + pdfTextWidth(ln, true, 7.5)) / 2, ln, { bold:true, size:7.5 }));
+      y += 4;
+    }
+  });
+  // cleaned by / supervised by
+  const people = (S.cleaners.length ? S.cleaners : ['', '']).map(n => ['c', n]).concat([['s', S.supervisor]]);
+  const block = 19 + 24;
+  if(y + 18 + block * Math.min(2, people.length) > PC_BOTTOM) newPage();
+  y += 8; let top = y;
+  const lime = t => { pg.fill(L, y, R - L, 18, LIME); pg.text(L + 4, y + 12, t, { bold:true, size:8 }); box(L, y, R, y + 18); y += 18; };
+  lime('Cleaned By');
+  people.forEach(([kind, n], idx) => {
+    if(kind === 's'){ if(y + 18 + block > PC_BOTTOM) newPage(); lime('Supervised By'); }
+    else if(y + block > PC_BOTTOM) newPage();
+    pg.fill(L, y, C2 - L, 19, GRAY); pg.text(L + 4, y + 12.5, 'Name', { bold:true, size:7.5 }); if(n) center(C2, R, y + 12.5, n, { size:7.5 }); box(L, y, R, y + 19); pg.line(C2, y, C2, y + 19, K, 0.6); y += 19;
+    pg.fill(L, y, C2 - L, 24, GRAY); pg.text(L + 4, y + 15, 'Signature', { bold:true, size:7.5 }); S.days.forEach((d, j) => { if(ch[kind === 's' ? clK('s', d) : clK('c', n, d)]) pcTick(pg, (DX(j) + DX(j + 1)) / 2, y + 12); }); box(L, y, R, y + 24); [C2, ...S.days.map((d, j) => DX(j))].forEach(x => pg.line(x, y, x, y + 24, K, 0.6)); y += 24;
+  });
+  if(filled && sh && sh.complete){ y += 10; if(y < PC_BOTTOM) pg.text(L, y + 6, 'Week marked complete' + (sh.completedBy ? ' by ' + sh.completedBy : '') + (sh.completedAt ? ' on ' + localDateStr(new Date(sh.completedAt)) : '') + '.', { size:7.5, color:[0.35, 0.35, 0.35] }); }
+  const loc = getLocation(locId);
+  return pcPdfFinish(pages.map(p => ({ ops:p.ops })), { title:'', number:'', docTitle:'Cleaning Checklist ' + (loc ? loc.name : '') + ' ' + week, pageNumbers:true });
+}
+async function clPdf(locId, week, filled, btn){
+  const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ const loc = getLocation(locId); downloadBlob(await buildCleaningPdf(locId, week, filled), 'Cleaning_Checklist_' + String(loc ? loc.code || loc.name : 'location').replace(/[^A-Za-z0-9-]+/g, '_') + '_' + week + (filled ? '' : '_blank') + '.pdf'); }
+  catch(e){ console.error(e); toast('Could not create the PDF: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+
+/* =====================================================================
    VEHICLE LOG — every time a vehicle goes out: who took it, where and why, when it left and came back.
    The "Vehicle Request Log" sheet (one per vehicle) is generated from it as a PDF.
 ===================================================================== */
@@ -5757,6 +5995,25 @@ function rhSections(){
         ...UT_TYPE_LIST.map(t => { const tb = bills.filter(b => (utAcc(b.accountId) || {}).type === t), u = tb.reduce((a, b) => a + utUnits(b), 0); return [t, fmtMVR(tb.reduce((a, b) => a + vNum(b.amount), 0)), u ? fmtNum(Math.round(u)) + ' ' + UT_TYPES[t].unit : cnt(tb.length, 'invoice')]; }),
         ['Unpaid invoices now', fmtNum(unpaid.length), fmtMVR(unpaid.reduce((t, b) => t + vNum(b.amount), 0))], ['Overdue now', fmtNum(od.length), fmtMVR(od.reduce((t, b) => t + vNum(b.amount), 0))]],
       lists:[{ title:'Cost by location', items: top(byLoc, 6).map(([k, v]) => [k, fmtMVR(v)]) }] };
+  });
+  safe(() => {
+    const logs = state.vehicleLogs.filter(l => R.inR(l.outDate)), byVeh = {}, byDept = {}, byDest = {};
+    logs.forEach(l => { const v = vLabel(vehById(l.vehicleId)); byVeh[v] = (byVeh[v] || 0) + 1; const d = l.department || 'Not given'; byDept[d] = (byDept[d] || 0) + 1; vlDestList(l).filter(Boolean).forEach(x => { byDest[x] = (byDest[x] || 0) + 1; }); });
+    const mins = logs.reduce((t, l) => t + vlMinutes(l), 0), out = state.vehicleLogs.filter(l => !l.inDate).length;
+    return { key:'vehiclelog', title:'Vehicle Log', icon:'vlog', link:'vehicle-log', linkLabel:'Vehicle Log',
+      rows:[['Trips', cnt(logs.length, 'trip'), fmtNum(Object.keys(byVeh).length) + ' vehicles used'], ['Time out', vlDur(mins), 'returned trips'], ['Average trip', logs.filter(l => l.inDate).length ? vlDur(Math.round(mins / logs.filter(l => l.inDate).length)) : '—'], ['Out now', fmtNum(out), 'not returned yet']],
+      lists:[{ title:'Trips by vehicle', items: top(byVeh, 6).map(([k, v]) => [k, cnt(v, 'trip')]) }, { title:'Trips by department', items: top(byDept, 6).map(([k, v]) => [k, cnt(v, 'trip')]) }, { title:'Top destinations', items: top(byDest, 6).map(([k, v]) => [k, cnt(v, 'trip')]) }] };
+  });
+  safe(() => {
+    const locs = clLocs(); if(!locs.length) return null;
+    const weeks = []; for(let w = clWeekStart(R.from); w <= R.to; w = clIsoAdd(w, 7)) weeks.push(w);
+    let tot = 0, done = 0, signed = 0, completed = 0, n = 0; const byLoc = {}, missed = {};
+    locs.forEach(l => { let lt = 0, ld = 0; weeks.forEach(w => { const st = clStats(l.id, w); n++; tot += st.total; done += st.done; lt += st.total; ld += st.done; if(st.signed) signed++; if(st.complete || st.signed) completed++;
+      const S = clStruct(l.id, w), ch = (clSheet(l.id, w) || {}).checks || {}; if(clSheet(l.id, w)) S.rooms.forEach(r => r.tasks.forEach(t => S.days.forEach(d => { if(clDayDate(w, d) <= vToday() && !ch[clK('t', r.name, t, d)]){ const k = r.name + ' · ' + t; missed[k] = (missed[k] || 0) + 1; } }))); });
+      byLoc[l.name] = lt ? Math.round(ld / lt * 100) : 0; });
+    return { key:'maintenance', title:'Maintenance · Cleaning', icon:'broom', link:'cleaning', linkLabel:'Cleaning Checklist',
+      rows:[['Locations', fmtNum(locs.length), cnt(weeks.length, 'week') + ' in the period'], ['Tasks done', (tot ? Math.round(done / tot * 100) : 0) + '%', fmtNum(done) + ' of ' + fmtNum(tot)], ['Weeks completed', fmtNum(completed) + ' / ' + fmtNum(n)], ['Signed copies linked', fmtNum(signed) + ' / ' + fmtNum(n)]],
+      lists:[{ title:'Done by location', items: Object.entries(byLoc).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, v + '%']) }, { title:'Tasks most often missed', items: top(missed, 6).map(([k, v]) => [k, cnt(v, 'day')]) }] };
   });
   safe(() => {
     const inTrip = t => t.fromDate && t.fromDate <= R.to && (t.toDate || t.fromDate) >= R.from;      // trips that fall in the period, even partly
@@ -6674,6 +6931,7 @@ function render(){
     else if(ui.tab==='fueling') el.innerHTML = viewFueling();
     else if(ui.tab==='servicing') el.innerHTML = viewServicing();
     else if(ui.tab==='vehicle-log') el.innerHTML = viewVehicleLog();
+    else if(ui.tab==='cleaning') el.innerHTML = viewCleaning();
     else if(ui.tab==='vehicle-reports') el.innerHTML = viewVehicleReports();
     else if(ui.tab==='locations') el.innerHTML = viewLocations();
     else if(ui.tab==='admin') el.innerHTML = viewAdmin();
@@ -7110,6 +7368,20 @@ function dashboardModuleSummary(){
       return card('utility-report', 'bolt', 'Utilities',
         [metric(vMoney0(cost('')), 'All utilities this month'), metric(vMoney0(cost('Electricity')), 'Electricity this month'), metric(fmtNum(unpaid.length), 'Unpaid invoices')],
         [od ? note(plural(od, 'invoice') + ' overdue', 'crit') : '', al.length - od ? note(plural(al.length - od, 'invoice') + ' due within a week', 'warn') : '', !state.utilityAccounts.length ? note('No accounts set up yet') : '']);
+    }),
+    safe(() => {
+      const month = localDateStr(new Date()).slice(0, 7), logs = state.vehicleLogs, mo = logs.filter(l => String(l.outDate || '').slice(0, 7) === month), out = logs.filter(l => !l.inDate);
+      const mins = mo.reduce((t, l) => t + vlMinutes(l), 0), long = out.filter(l => Date.now() - Date.parse(l.outDate + 'T' + (l.outTime || '00:00')) > 12 * 3600000).length;
+      return card('vehicle-log', 'vlog', 'Vehicle Log',
+        [metric(fmtNum(mo.length), 'Trips this month'), metric(fmtNum(out.length), 'Out now'), metric(fmtNum(Math.round(mins / 60)) + ' h', 'Time out this month')],
+        [out.length ? note(plural(out.length, 'vehicle') + ' not returned yet', 'warn') : note('All vehicles are back'), long ? note(plural(long, 'vehicle') + ' out over 12 hours', 'crit') : '']);
+    }),
+    safe(() => {
+      const locs = clLocs(), w = clWeekStart(vToday()), last = clIsoAdd(w, -7), st = locs.map(l => clStats(l.id, w)), ls = locs.map(l => clStats(l.id, last));
+      const avg = st.length ? Math.round(st.reduce((t, x) => t + x.pct, 0) / st.length) : 0, miss = clLastWeekMissing().length;
+      return card('cleaning', 'broom', 'Cleaning Checklist',
+        [metric(fmtNum(locs.length), 'Locations'), metric(avg + '%', 'Done this week'), metric(fmtNum(st.filter(x => x.signed).length), 'Signed copies this week')],
+        [!locs.length ? note('No checklists set up yet') : '', miss ? note(plural(miss, 'location') + ": last week not completed", 'warn') : locs.some(l => clSetBefore(l.id, last)) ? note('Last week complete everywhere') : '']);
     }),
     safe(() => {
       const month = localDateStr(new Date()).slice(0, 7), today = vToday(), wk = localDateStr(new Date(Date.now() + 7 * 86400000)), all = state.travelRequests;

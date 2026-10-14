@@ -5184,7 +5184,7 @@ function viewVehicleLog(){
 function openVlForm(id, vehicleId){
   const l = id ? state.vehicleLogs.find(x => x.id === id) : null; if(id && !l) return;
   const people = state.profiles.map(p => `<option value="${esc(p.name || '')}"></option>`).join('');
-  const dests = [...new Set(state.vehicleLogs.map(x => x.destination).filter(Boolean))].slice(-60).map(d => `<option value="${esc(d)}"></option>`).join('');
+  const dests = [...new Set(state.vehicleLogs.flatMap(x => vlDestList(x)).filter(Boolean))].slice(-60).map(d => `<option value="${esc(d)}"></option>`).join('');
   const purps = [...new Set(state.vehicleLogs.map(x => x.purpose).filter(Boolean))].slice(-60).map(d => `<option value="${esc(d)}"></option>`).join('');
   const vid = l ? l.vehicleId : (vehicleId || vehUi.vlVeh || '');
   openModal(l ? 'Edit trip' : 'Vehicle out', vFormOpen + `
@@ -5194,7 +5194,7 @@ function openVlForm(id, vehicleId){
       vF('Driver', 'driver', l ? l.driver || '' : (vehById(vid) || {}).assignedTo || '', 'text', { attrs:' list="vl-people" autocomplete="off" placeholder="The vehicle\'s assigned driver"' }) + '<div></div>' +
       vF('Requested by (staff)', 'staffName', l ? l.staffName : '', 'text', { req:1, attrs:' list="vl-people" autocomplete="off" oninput="vlStaffChanged(this)"' }) +
       `<div class="relative"><label class="${VEH_LBL}">Department</label><input type="text" id="vl-department" name="department" autocomplete="off" value="${esc(l ? l.department || '' : '')}" placeholder="Search by name or code…" oninput="this.dataset.touched='1'; filterDepartmentDropdown('vl')" onfocus="filterDepartmentDropdown('vl')" onblur="hideDepartmentDropdown('vl')" class="${VEH_FIELD}"><div id="vl-department-dropdown" class="hidden absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg"></div></div>` +
-      vF('Destination', 'destination', l ? l.destination : '', 'text', { req:1, span:'sm:col-span-2', attrs:' list="vl-dests" autocomplete="off"' }) +
+      `<div class="sm:col-span-2"><label class="${VEH_LBL}">Destination${vReqStar}</label><div id="vl-dest-box" class="space-y-2">${vlDestList(l).map((d, i) => vlDestRow(d, i)).join('')}</div><button type="button" onclick="vlAddDest()" class="mt-1.5 text-xs font-semibold text-brand-600 hover:underline">+ Add destination</button></div>` +
       vF('Purpose', 'purpose', l ? l.purpose : '', 'text', { span:'sm:col-span-2', attrs:' list="vl-purps" autocomplete="off"' }) +
       vF('Date', 'outDate', l ? l.outDate : vToday(), 'date', { req:1 }) + vF('Time', 'outTime', l ? l.outTime : vlNowTime(), 'time', { req:1 }))}
     ${vSec('Returning')}
@@ -5203,16 +5203,23 @@ function openVlForm(id, vehicleId){
     ${vTa('Note', 'note', l ? l.note : '', { rows:2 })}
     ${vFoot(l ? 'Save' : 'Log vehicle out', `saveVl('${l ? l.id : ''}')`, l && canManageInventory() ? `deleteVl('${l.id}')` : '')}`, true);
 }
+// a trip can go to several places: one field each, kept in order
+const vlDestList = l => { const a = l && Array.isArray(l.destinations) && l.destinations.length ? l.destinations : (l && l.destination ? [l.destination] : []); return a.length ? a : ['']; };
+function vlDestRow(d, i){ return `<div class="vl-dest flex gap-2 items-center"><span class="text-[11px] text-slate-400 w-4 text-right shrink-0 vl-dest-n">${i + 1}</span><input type="text" value="${esc(d || '')}" list="vl-dests" autocomplete="off" placeholder="${i ? 'Next stop' : 'Where the vehicle is going'}" class="vl-dest-in ${VEH_FIELD}"><button type="button" onclick="vlRemoveDest(this)" class="text-slate-400 hover:text-rose-600 px-1.5 text-lg leading-none ${i ? '' : 'invisible'}" title="Remove">×</button></div>`; }
+function vlAddDest(){ const b = document.getElementById('vl-dest-box'); if(!b) return; b.insertAdjacentHTML('beforeend', vlDestRow('', b.children.length)); b.lastElementChild.querySelector('input').focus(); }
+function vlRemoveDest(btn){ const b = document.getElementById('vl-dest-box'); btn.closest('.vl-dest').remove(); [...b.children].forEach((r, i) => { r.querySelector('.vl-dest-n').textContent = i + 1; }); }
 function vlVehChanged(sel){ const f = sel.form, v = vehById(sel.value); if(f && f.driver && v && v.assignedTo && (!f.driver.value.trim() || f.driver.dataset.auto !== '0')) f.driver.value = v.assignedTo; }
 function vlStaffChanged(el){ const p = hoFindProfile(el.value), d = document.getElementById('vl-department'); if(p && p.department && d && !d.dataset.touched) d.value = p.department; }
 async function saveVl(id){
   const o = vehFormObj(document.getElementById('vform'));
   if(!o.vehicleId) return vFail('Choose the vehicle.');
   if(!o.staffName) return vFail('Enter who is requesting the vehicle.');
-  if(!o.destination) return vFail('Enter the destination.');
+  const dests = [...document.querySelectorAll('#vl-dest-box .vl-dest-in')].map(i => i.value.trim()).filter(Boolean);
+  if(!dests.length) return vFail('Enter the destination.');
+  o.destination = dests.join(' → ');
   if(!o.outDate || !o.outTime) return vFail('Enter the date and time it went out.');
   if((o.inDate && !o.inTime) || (!o.inDate && o.inTime)) return vFail('Enter both the return date and time, or leave both empty.');
-  const rec = { id:id || undefined, vehicleId:o.vehicleId, driver:o.driver || '', staffName:o.staffName, department:o.department || '', destination:o.destination, purpose:o.purpose || '', outDate:o.outDate, outTime:o.outTime, inDate:o.inDate || '', inTime:o.inTime || '', note:o.note || '' };
+  const rec = { id:id || undefined, vehicleId:o.vehicleId, driver:o.driver || '', staffName:o.staffName, department:o.department || '', destination:o.destination, destinations:dests, purpose:o.purpose || '', outDate:o.outDate, outTime:o.outTime, inDate:o.inDate || '', inTime:o.inTime || '', note:o.note || '' };
   if(rec.inDate && vlOutAt(rec) > rec.inDate + 'T' + rec.inTime) return vFail('The return is before it went out.');
   if(!rec.inDate){ const busy = state.vehicleLogs.find(x => x.id !== id && x.vehicleId === rec.vehicleId && vlOpen(x)); if(busy) return vFail(vLabel(vehById(rec.vehicleId)) + ' is already out with ' + (busy.staffName || '—') + ' since ' + vDate(busy.outDate) + ' ' + (busy.outTime || '') + '. Record that return first.'); }
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
@@ -5281,7 +5288,7 @@ async function buildVehicleLogPdf(v, logs){
         const cell = (i, t) => { const lines = pdfWrap(t || '', false, 8.5, X[i + 1] - X[i] - 8).slice(0, 2), b0 = y + (RH - lines.length * 10.5) / 2 + 8; lines.forEach((ln, k) => center(X[i], X[i + 1], b0 + k * 10.5, ln, { size:8.5 })); };
         { const nm = pdfWrap(l.staffName || '', false, 8.5, X[1] - X[0] - 8).slice(0, 1), dp = l.department ? pdfWrap(l.department, false, 6.8, X[1] - X[0] - 8).slice(0, 1) : [];
           const b0 = y + (RH - (nm.length * 10.5 + dp.length * 8.5)) / 2 + 8; nm.forEach(ln => center(X[0], X[1], b0, ln, { size:8.5 })); dp.forEach(ln => center(X[0], X[1], b0 + 9.5, ln, { size:6.8, color:[0.35, 0.35, 0.35] })); }
-        cell(1, l.destination); cell(2, l.purpose); cell(3, vlDm(l.outDate)); cell(4, l.outTime); cell(6, vlDm(l.inDate)); cell(7, l.inTime);
+        cell(1, vlDestList(l).filter(Boolean).join(', ')); cell(2, l.purpose); cell(3, vlDm(l.outDate)); cell(4, l.outTime); cell(6, vlDm(l.inDate)); cell(7, l.inTime);
       }
       y += RH; pg.line(X[0], y, X[9], y, K, 0.5);
     }
@@ -5891,29 +5898,30 @@ function utBillsHtml(type){
       <tr class="bg-slate-50"><td colspan="3" class="py-2.5 pl-5 sm:pl-6 text-right text-xs font-bold text-slate-600 pr-3">Total (${list.length} invoice${list.length === 1 ? '' : 's'})</td><td class="py-2.5 pr-3 text-right num font-bold">${fmtNum(Math.round(totU))} ${unit}</td><td class="py-2.5 pr-3 text-right num font-extrabold">${fmtMVR(tot)}</td><td colspan="3"></td></tr></tbody></table>`)
     : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(state.utilityBills.some(b => (utAcc(b.accountId) || {}).type === type) ? 'No invoices match these filters.' : 'No invoices recorded yet. Use "+ Invoice" to add the first one.')}</div>`);
 }
-// every location is listed, with its account(s) of this type or a button to link one
+// every location as a card, like the Dashboard: its account(s) of this type with the latest figures, or a button to link one
 function utAccountsHtml(type){
-  const unit = UT_TYPES[type].unit;
-  const rows = LOCATIONS.slice().sort((x, y) => x.name.localeCompare(y.name)).map(l => {
-    const accs = state.utilityAccounts.filter(a => a.type === type && a.locationId === l.id);
-    const locCell = `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${esc(l.color)}"></span><span class="font-semibold text-slate-800">${esc(l.name)}</span>${l.code ? `<span class="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">${esc(l.code)}</span>` : ''}</div>`;
-    if(!accs.length) return `<tr class="${vTr}">${vTd(locCell, { first:1 })}<td colspan="6" class="py-3 pr-3 text-xs text-slate-400">No ${type.toLowerCase()} account linked</td>${vTd(`<button onclick="openUtAccount(null, '${esc(l.id)}', '${type}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Link account</button>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`;
-    return accs.map((a, i) => {
-      const bills = utBillsOf(a.id), last = bills[0], six = bills.slice(0, 6), avg = six.length ? six.reduce((t, b) => t + vNum(b.amount), 0) / six.length : 0, avgU = six.length ? six.reduce((t, b) => t + utUnits(b), 0) / six.length : 0;
-      const unpaid = bills.filter(b => !b.paidDate);
-      return `<tr class="${vTr} align-top ${a.active === false ? 'opacity-60' : ''}">
-        ${vTd(i === 0 ? locCell : '', { first:1 })}
-        ${vTd(`<div class="font-semibold num">${esc(a.accountNo || '—')}</div>${a.label ? `<div class="text-[11px] text-slate-400">${esc(a.label)}</div>` : ''}${a.active === false ? vPill('', 'Closed') : ''}`)}
-        ${vTd(`<span class="num">${esc(a.meterNo || '—')}</span><div class="text-[11px] text-slate-400">${esc([a.provider, a.plan].filter(Boolean).join(' · '))}</div>`)}
-        ${vTd(last ? `${utMonthLabel(last.period)}<div class="text-[11px] text-slate-400">${fmtMVR(last.amount)}</div>` : '—')}
-        ${vTd(last && last.currReading !== '' && last.currReading != null ? fmtNum(vNum(last.currReading)) : '—', { n:1 })}
-        ${vTd(six.length ? vMoney0(avg) + `<div class="text-[11px] text-slate-400">${fmtNum(Math.round(avgU))} ${unit}</div>` : '—', { n:1 })}
-        ${vTd(unpaid.length ? vPill(unpaid.some(b => utStatus(b).k === 'crit') ? 'crit' : 'warn', unpaid.length + ' unpaid') : (bills.length ? '<span class="text-[11px] text-emerald-600 font-semibold">All paid</span>' : '<span class="text-[11px] text-slate-400">No invoices</span>'))}
-        ${vTd(`<button onclick="openUtBill(null, '${a.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">+ Invoice</button><button onclick="openUtAccount('${a.id}')" class="text-xs font-semibold text-slate-500 hover:text-brand-600 hover:underline">Edit</button>${i === accs.length - 1 ? `<button onclick="openUtAccount(null, '${esc(l.id)}', '${type}')" class="block ml-auto text-[11px] text-slate-400 hover:text-brand-600 hover:underline mt-1">+ another meter</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}
-      </tr>`;
-    }).join('');
-  }).join('');
-  return vPanel(type + ' accounts by location', 'Each location with its account number and ' + UT_TYPES[type].meterLabel.toLowerCase(), `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Location' }, { t:'Account no.' }, { t:UT_TYPES[type].meterLabel.replace(' number', ' no.') }, { t:'Last invoice' }, { t:'Last reading', n:1 }, { t:'Avg / month (6)', n:1 }, { t:'Status' }, { t:'' }])}<tbody>${rows}</tbody></table></div>`);
+  const T = UT_TYPES[type], unit = T.unit, month = localDateStr(new Date()).slice(0, 7);
+  const metric = (v, l) => `<div class="min-w-0"><div class="text-[17px] font-extrabold text-slate-900 num leading-tight truncate">${v}</div><div class="text-[11px] text-slate-400 mt-0.5">${l}</div></div>`;
+  const locs = LOCATIONS.slice().sort((x, y) => x.name.localeCompare(y.name)).map(l => ({ l, accs:state.utilityAccounts.filter(a => a.type === type && a.locationId === l.id) }));
+  const card = ({ l, accs }) => {
+    const head = `<div class="flex items-center justify-between gap-2 mb-3.5"><div class="flex items-center gap-2.5 min-w-0"><span class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:${esc(l.color)}22;color:${esc(l.color)}">${ICONS[T.icon] || ''}</span><div class="min-w-0"><div class="font-bold text-slate-900 truncate">${esc(l.name)}</div>${l.code ? `<div class="text-[11px] text-slate-400">${esc(l.code)}</div>` : ''}</div></div>`;
+    if(!accs.length) return `<div class="bg-white rounded-xl border border-dashed border-slate-300 p-5">${head}</div><div class="text-xs text-slate-400 mb-3">No ${type.toLowerCase()} account linked</div><button onclick="openUtAccount(null, '${esc(l.id)}', '${type}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Link account</button></div>`;
+    const bills = accs.flatMap(a => utBillsOf(a.id)), mb = bills.filter(b => b.period === month), unpaid = bills.filter(b => !b.paidDate), od = unpaid.filter(b => utStatus(b).k === 'crit');
+    const months = [...new Set(bills.map(b => b.period))].sort().reverse().slice(0, 6), six = bills.filter(b => months.includes(b.period));
+    const avg = months.length ? six.reduce((t, b) => t + vNum(b.amount), 0) / months.length : 0, avgU = months.length ? six.reduce((t, b) => t + utUnits(b), 0) / months.length : 0;
+    const status = od.length ? vPill('crit', od.length + ' overdue') : unpaid.length ? vPill('warn', unpaid.length + ' unpaid') : bills.length ? '<span class="text-[11px] text-emerald-600 font-semibold">All paid</span>' : '<span class="text-[11px] text-slate-400">No invoices yet</span>';
+    return `<div class="bg-white rounded-xl border border-slate-200 p-5 flex flex-col" style="border-top:3px solid ${esc(l.color)}">${head}${status}</div>
+      <div class="grid grid-cols-3 gap-3 mb-4">${metric(mb.length ? vMoney0(mb.reduce((t, b) => t + vNum(b.amount), 0)) : '—', 'This month')}${metric(months.length ? vMoney0(avg) : '—', 'Avg / month')}${metric(months.length ? fmtNum(Math.round(avgU)) : '—', unit + ' / month')}</div>
+      <div class="space-y-2 mt-auto">${accs.map(a => { const last = utBillsOf(a.id)[0]; return `<div class="rounded-lg bg-slate-50 px-3 py-2 ${a.active === false ? 'opacity-60' : ''}">
+        <div class="flex items-center justify-between gap-2"><div class="text-xs min-w-0"><span class="text-slate-400">A/C</span> <b class="num text-slate-700">${esc(a.accountNo || '—')}</b>${a.meterNo ? ` <span class="text-slate-400 ml-1.5">${esc(T.meterLabel.replace(' number', ''))}</span> <b class="num text-slate-700">${esc(a.meterNo)}</b>` : ''}${a.active === false ? ' ' + vPill('', 'Closed') : ''}</div>
+          <div class="flex gap-2.5 shrink-0"><button onclick="openUtBill(null, '${a.id}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Invoice</button><button onclick="openUtAccount('${a.id}')" class="text-xs font-semibold text-slate-500 hover:text-brand-600 hover:underline">Edit</button></div></div>
+        <div class="text-[11px] text-slate-400 mt-0.5 truncate">${esc([a.label, a.provider, a.plan].filter(Boolean).join(' · '))}${last ? (a.label || a.provider || a.plan ? ' · ' : '') + 'last ' + utMonthLabel(last.period) + ' ' + fmtMVR(last.amount) + (last.currReading !== '' && last.currReading != null ? ' · reading ' + fmtNum(vNum(last.currReading)) : '') : ''}</div></div>`; }).join('')}</div>
+      <button onclick="openUtAccount(null, '${esc(l.id)}', '${type}')" class="self-start text-[11px] text-slate-400 hover:text-brand-600 hover:underline mt-2.5">+ another meter</button></div>`;
+  };
+  const linked = locs.filter(x => x.accs.length), free = locs.filter(x => !x.accs.length);
+  return `<div class="flex items-baseline justify-between gap-3 flex-wrap mb-3"><h2 class="text-sm font-bold text-slate-900">${type} accounts by location</h2><span class="text-xs text-slate-400">${linked.length} of ${locs.length} locations linked · ${T.meterLabel.toLowerCase()} and account number on each card</span></div>
+    ${linked.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">${linked.map(card).join('')}</div>` : ''}
+    ${free.length ? `<div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Not linked yet</div><div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">${free.map(card).join('')}</div>` : ''}`;
 }
 function utAccTypeChanged(sel){
   const T = UT_TYPES[sel.value], f = sel.form, p = f.provider;

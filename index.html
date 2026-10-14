@@ -5160,6 +5160,15 @@ const CL_SEED = { address:"Apollo Tower, 1st Floor, Hulhumale'", cleaners:['MD S
   { name:'Reception', tasks:['Clear dustbins', 'Replace dustbin bag', 'Wipe the door handles', 'Wipe the tables and chairs', 'Wipe the monitors', 'Wipe the Cabinets', 'Sweep/Vacuum', 'Mop'] },
   { name:"Men's Toilet", tasks:['Wipe the Door Handles', 'Clear Dustbins', 'Replace dustbin Bags', 'Clean and Wipe the Sink', 'Wipe the Flush Tank Surface', 'Wash the Toilets', 'Wash and Clean the Floor'] },
   { name:"Women's Toilet", tasks:['Wipe the Door Handles', 'Clear Dustbins', 'Replace dustbin Bags', 'Clean and Wipe the Sink', 'Wipe the Flush Tank Surface', 'Wash the Toilets', 'Wash and Clean the Floor'] } ] };
+// the tasks of each kind of room, as in the checklist; a room's tasks fill in from its name
+const CL_ROOM_TYPES = [
+  { key:'toilet', label:'Toilet', match:/toilet|washroom|restroom|\bwc\b|bathroom/i, tasks:CL_SEED.rooms[5].tasks },
+  { key:'pantry', label:'Pantry', match:/pantry|kitchen|canteen|cafeteria/i, tasks:CL_SEED.rooms[2].tasks },
+  { key:'storage', label:'Storage room', match:/stor(e|age)|archive|warehouse/i, tasks:CL_SEED.rooms[3].tasks },
+  { key:'reception', label:'Reception', match:/reception|lobby|front desk|waiting/i, tasks:CL_SEED.rooms[4].tasks },
+  { key:'meeting', label:'Meeting room', match:/meeting|conference|board ?room/i, tasks:CL_SEED.rooms[0].tasks },
+  { key:'office', label:'Office', match:/office|room|cabin|work ?space|hall/i, tasks:CL_SEED.rooms[1].tasks } ];
+const clTasksFor = name => { const t = CL_ROOM_TYPES.find(x => x.match.test(String(name || ''))); return t ? t.tasks.slice() : null; };
 const clIsoAdd = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const clWeekStart = iso => { const d = new Date((iso || vToday()) + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.toISOString().slice(0, 10); };   // weeks start on Sunday
 const clDayDate = (week, day) => clIsoAdd(week, CL_DAYS_ALL.indexOf(day));
@@ -5262,11 +5271,20 @@ async function saveClLink(locId, week){
 
 /* ---------- set-up: the rooms and tasks of a location ---------- */
 function clRoomBlock(r){
-  return `<div class="cl-room rounded-lg border border-slate-200 p-3"><div class="flex items-center gap-2 mb-2"><input type="text" value="${esc(r.name || '')}" placeholder="Room, e.g. Main Office" class="cl-room-name ${VEH_FIELD} !py-1.5 font-semibold">
+  return `<div class="cl-room rounded-lg border border-slate-200 p-3"><div class="flex items-center gap-2 mb-2"><input type="text" value="${esc(r.name || '')}" placeholder="Room, e.g. Main Office — its tasks fill in" list="cl-room-names" oninput="clRoomNamed(this)" class="cl-room-name ${VEH_FIELD} !py-1.5 font-semibold">
+    <button type="button" onclick="clFillTasks(this, true)" class="text-[11px] font-semibold text-brand-600 hover:underline whitespace-nowrap" title="Replace the tasks with the standard ones for this kind of room">Standard tasks</button>
     <button type="button" onclick="const b = this.closest('.cl-room'); if(b.previousElementSibling) b.previousElementSibling.before(b)" class="px-1.5 text-slate-400 hover:text-brand-600" title="Move up">▲</button><button type="button" onclick="const b = this.closest('.cl-room'); if(b.nextElementSibling) b.nextElementSibling.after(b)" class="px-1.5 text-slate-400 hover:text-brand-600" title="Move down">▼</button>
     <button type="button" onclick="this.closest('.cl-room').remove()" class="px-1.5 text-slate-400 hover:text-rose-600 text-lg leading-none" title="Remove room">×</button></div>
-    <textarea rows="${Math.max(3, (r.tasks || []).length)}" placeholder="Tasks, one per line — e.g. Clear dustbins" class="cl-room-tasks ${VEH_FIELD} text-sm">${esc((r.tasks || []).join('\n'))}</textarea></div>`;
+    <textarea rows="${Math.max(3, (r.tasks || []).length)}" placeholder="Tasks, one per line — e.g. Clear dustbins" oninput="this.dataset.typed='1'" class="cl-room-tasks ${VEH_FIELD} text-sm">${esc((r.tasks || []).join('\n'))}</textarea></div>`;
 }
+function clRoomNamed(inp){ const ta = inp.closest('.cl-room').querySelector('.cl-room-tasks'); if(ta.dataset.typed === '1' && ta.value.trim()) return; const t = clTasksFor(inp.value); ta.value = t ? t.join('\n') : ''; ta.rows = Math.max(3, t ? t.length : 3); ta.dataset.auto = '1'; }
+function clFillTasks(btn){ const b = btn.closest('.cl-room'), name = b.querySelector('.cl-room-name').value, ta = b.querySelector('.cl-room-tasks'), t = clTasksFor(name);
+  if(!t){ toast('Name the room first (e.g. Office, Pantry, Toilet) — or pick a room below.', true); return; } ta.value = t.join('\n'); ta.rows = Math.max(3, t.length); ta.dataset.typed = ''; }
+function clQuickRoom(key){ const t = CL_ROOM_TYPES.find(x => x.key === key) || CL_ROOM_TYPES.find(x => x.label === key); const names = { toilet:"Men's Toilet", pantry:'Pantry', storage:'Storage Room', reception:'Reception', meeting:'Meeting Room', office:'Main Office' };
+  const box = document.getElementById('cl-rooms'), empty = [...box.querySelectorAll('.cl-room')].find(b => !b.querySelector('.cl-room-name').value.trim() && !b.querySelector('.cl-room-tasks').value.trim()); if(empty) empty.remove();
+  if(key === 'toilets'){ clAddRoom({ name:"Men's Toilet", tasks:CL_SEED.rooms[5].tasks }); clAddRoom({ name:"Women's Toilet", tasks:CL_SEED.rooms[6].tasks }); return; }
+  clAddRoom({ name:names[t.key], tasks:t.tasks }); const inp = box.lastElementChild.querySelector('.cl-room-name'); inp.select(); }
+function clFillAll(){ const box = document.getElementById('cl-rooms'); if([...box.querySelectorAll('.cl-room-name')].some(i => i.value.trim()) && !confirm('Replace the rooms with the full checklist (7 rooms)?')) return; box.innerHTML = ''; CL_SEED.rooms.forEach(r => clAddRoom(r)); }
 function clAddRoom(r){ const b = document.getElementById('cl-rooms'); b.insertAdjacentHTML('beforeend', clRoomBlock(r || {})); b.lastElementChild.querySelector('input').focus(); }
 function clCopyRooms(sel){ const t = clTpl(sel.value); sel.value = ''; if(!t) return; (t.rooms || []).forEach(r => clAddRoom(r)); toast('Rooms copied — adjust them as needed.'); }
 function openClSetup(locId){
@@ -5278,6 +5296,8 @@ function openClSetup(locId){
       vF('Heading on the checklist', 'address', d.address, 'text', { attrs:' placeholder="e.g. Apollo Tower, 1st Floor, Hulhumale\'"' })) +
     vSec('Working days') + `<div class="flex flex-wrap gap-2">${CL_DAYS_ALL.map(x => `<label class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm cursor-pointer"><input type="checkbox" class="cl-day" value="${x}" ${(d.days || []).includes(x) ? 'checked' : ''}> ${x.slice(0, 3)}</label>`).join('')}</div>` +
     vSec('Rooms and tasks') + `<div id="cl-rooms" class="space-y-3">${(d.rooms || []).map(clRoomBlock).join('')}</div>
+      <datalist id="cl-room-names">${["Main Office", "Projects Meeting Room", "Meeting Room", "Pantry", "Reception", "Property Storage Room", "Storage Room", "Men's Toilet", "Women's Toilet"].map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
+      <div class="flex items-center gap-1.5 mt-2.5 flex-wrap"><span class="text-[11px] text-slate-400 mr-1">Add a room with its tasks:</span>${[['office', 'Office'], ['meeting', 'Meeting room'], ['pantry', 'Pantry'], ['reception', 'Reception'], ['storage', 'Storage room'], ['toilets', "Men's & Women's toilets"]].map(([k, l]) => `<button type="button" onclick="clQuickRoom('${k}')" class="px-2.5 py-1 rounded-full border border-slate-300 text-xs font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-600">+ ${l}</button>`).join('')}<button type="button" onclick="clFillAll()" class="px-2.5 py-1 rounded-full bg-brand-50 border border-brand-300 text-xs font-semibold text-brand-700">Fill the full checklist</button></div>
       <div class="flex items-center gap-4 mt-2.5 flex-wrap"><button type="button" onclick="clAddRoom()" class="text-xs font-semibold text-brand-600 hover:underline">+ Add room</button>${others.length ? `<select onchange="clCopyRooms(this)" class="${VEH_INPUT} !py-1 text-xs"><option value="">Copy rooms from…</option>${others.map(x => `<option value="${esc(x.locationId)}">${esc((getLocation(x.locationId) || {}).name || '')}</option>`).join('')}</select>` : ''}</div>` +
     vSec('Cleaned by / supervised by') + vGrid(2, vTa('Cleaners (one per line)', 'cleaners', (d.cleaners || []).join('\n'), { rows:4 }) + vF('Supervisor', 'supervisor', d.supervisor, 'text')) +
     `<p class="text-[11.5px] text-slate-400 mt-3">Changes apply from the week shown and later weeks not yet completed; ticks already made stay with their tasks.</p>` +

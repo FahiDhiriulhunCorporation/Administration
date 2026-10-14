@@ -3339,25 +3339,37 @@ async function pcImageToCanvas(file){
   const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
   cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height); return cv;
 }
-async function pcOcr(canvas, onStatus){
+// black-and-white copy of a scan: shaded boxes (e.g. the coloured value boxes of a bill) would otherwise hide their numbers
+function pcBinarize(canvas, cut){
+  const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height; const x = c.getContext('2d'); x.drawImage(canvas, 0, 0);
+  const img = x.getImageData(0, 0, c.width, c.height), d = img.data, t = (cut || 0.62) * 255;
+  for(let i = 0; i < d.length; i += 4){ const v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] > t ? 255 : 0; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+  x.putImageData(img, 0, 0); return c;
+}
+async function pcOcr(canvas, onStatus, opts){
+  opts = opts || {};
   if(onStatus) onStatus('Reading the picture (the first time this downloads the reader, which can take a minute)…');
   await loadScriptOnce(TESSERACT_URL);
   const worker = await Tesseract.createWorker('eng');
-  try{ const res = await worker.recognize(canvas); return res.data.text || ''; } finally { try{ await worker.terminate(); }catch(e){} }
+  try{
+    if(opts.psm) await worker.setParameters({ tessedit_pageseg_mode:String(opts.psm) });
+    const res = await worker.recognize(opts.binarize ? pcBinarize(canvas, opts.cut) : canvas); return res.data.text || '';
+  } finally { try{ await worker.terminate(); }catch(e){} }
 }
-async function pcReadInvoiceFile(file, onStatus){
+async function pcReadInvoiceFile(file, onStatus, opts){
   if(/pdf/i.test(file.type) || /\.pdf$/i.test(file.name)){
     await loadScriptOnce(PDFJS_URL); pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
     const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
     let text = '';
     for(let p = 1; p <= Math.min(doc.numPages, 3); p++){ const page = await doc.getPage(p); text += pcPdfItemsToText((await page.getTextContent()).items) + '\n'; }
     if(text.replace(/\s/g, '').length < 20){                                       // a scanned PDF has no text: read the picture of page 1
-      const page = await doc.getPage(1), vp = page.getViewport({ scale:2 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
-      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise; text = await pcOcr(cv, onStatus);
+      const page = await doc.getPage(1), v1 = page.getViewport({ scale:1 }), vp = page.getViewport({ scale:opts && opts.width ? opts.width / v1.width : 2 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+      const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+      await page.render({ canvasContext: cx, viewport: vp }).promise; text = await pcOcr(cv, onStatus, opts);
     }
     return text;
   }
-  if(/^image\//.test(file.type)) return pcOcr(await pcImageToCanvas(file), onStatus);
+  if(/^image\//.test(file.type)) return pcOcr(await pcImageToCanvas(file), onStatus, opts);
   throw new Error('choose a PDF, or a photo (JPG / PNG) of the invoice.');
 }
 
@@ -7083,25 +7095,31 @@ function utParseBillText(text){
   const find = (res, pick) => { for(const re of res){ const m = re.exec(one); if(m) return pick ? pick(m) : m[1]; } return ''; };
   const o = {};
   o.accountNo = find([/Account\s*(?:No|Number|#)\.?\s*:?[^\d\n]{0,40}\n?[^\d]{0,30}?(\d[\d-]{2,})/i, /A\/C\s*(?:No\.?)?\s*:?\s*(\d[\d-]{2,})/i, /Customer\s*(?:No|ID|Number)\.?\s*:?\s*([A-Z0-9-]{3,})/i]);
-  o.meterNo = find([/Meter\s*(?:No|Number|#)\.?\s*:?[^\d\n]{0,40}\n?[^\d]{0,30}?(\d{5,})/i]);
+  o.meterNo = find([/Meter\s*(?:No|Number|#)\.?\s*:?[^\d\n]{0,40}\n?[^\d]{0,30}?(\d[\dA-Z]{4,})/i]);
   o.billNo = find([/(?:Bill|Invoice)\s*(?:No|Number|#)\.?\s*:?\s*([A-Z0-9][A-Z0-9\/-]{2,})/i]);
-  o.billDate = date(find([new RegExp('(?:Bill|Invoice)\\s*Date\\s*:?\\s*' + DT, 'i'), new RegExp('\\bDate\\s*:?\\s*' + DT, 'i')]));
-  o.dueDate = date(find([new RegExp('(?:Due\\s*Date|Pay(?:ment)?\\s*(?:by|before|due))\\s*:?\\s*' + DT, 'i')]));
+  o.billDate = date(find([new RegExp('Current\\s*Bill\\s*Date[^\\d]{0,60}?' + DT, 'i'), new RegExp('(?<!Previous\\s{0,3}|Last\\s{0,3})(?:Bill|Invoice)\\s*Date\\s*:?\\s*' + DT, 'i'), new RegExp('\\bDate\\s*:?\\s*' + DT, 'i')]));
+  o.dueDate = date(find([new RegExp('(?:Due\\s*Date|Pay(?:ment)?\\s*(?:by|before|due)|due\\s*on)\\s*:?\\s*' + DT, 'i')]));
   // meter readings: "Previous Bill: 6934 17-12-2025 …" and "This Bill: 7560 17-01-2026 626 kWh"
   const rd = label => { const m = new RegExp(label + '[^\\d\\n]{0,40}\\n?[^\\d]{0,30}?(\\d[\\d,]*(?:\\.\\d+)?)\\s+' + DT, 'i').exec(one); return m ? { r:num(m[1]), d:date(m[2]) } : null; };
   const prev = rd('Previous\\s*(?:Bill|Reading)'), cur = rd('(?:This\\s*Bill|Current\\s*(?:Bill|Reading)|Present\\s*Reading)');
   if(prev){ o.prevReading = prev.r; o.useFrom = prev.d; } if(cur){ o.currReading = cur.r; o.useTo = cur.d; }
+  // bills that put the dates and the readings on separate lines (e.g. MWSC: Previous / Current Bill Date, Previous / Current Reading)
+  if(!o.useFrom){ const m = new RegExp('Previous\\s*(?:Bill|Reading)\\s*Date[^\\d]{0,60}?' + DT, 'i').exec(one); if(m) o.useFrom = date(m[1]); }
+  if(!o.useTo){ const m = new RegExp('(?:Current|Present)\\s*(?:Bill|Reading)\\s*Date[^\\d]{0,60}?' + DT, 'i').exec(one); if(m) o.useTo = date(m[1]); }
+  if(!o.prevReading){ const m = /Previous\s*Reading(?!\s*Date)[^\d]{0,80}?(\d[\d,]*(?:\.\d+)?)(?![\d.\/-]*\d{4})/i.exec(one); if(m) o.prevReading = num(m[1]); }
+  if(!o.currReading){ const m = /(?:Current|Present)\s*Reading(?!\s*Date)[^\d]{0,160}?(\d[\d,]*(?:\.\d+)?)(?![\d.\/-]*\d{4})/i.exec(one); if(m) o.currReading = num(m[1]); }
   const used = /(?:This\s*Bill|Current)[\s\S]{0,120}?(\d[\d,]*(?:\.\d+)?)\s*(kWh|m3|m³|units|GB)\b/i.exec(one) || /\b(\d[\d,]*(?:\.\d+)?)\s*(kWh|m3|m³)\b/i.exec(one);
   if(used) o.units = num(used[1]); else if(o.prevReading && o.currReading) o.units = String(Math.max(0, vNum(o.currReading) - vNum(o.prevReading)));
   // the month billed: "Bill Ref: 2026/1-1", else a "Billing period / month", else the month of the current reading
   const ref = /Bill\s*Ref\.?\s*:?\s*(\d{4})\s*\/\s*(\d{1,2})\b/i.exec(one), bp = /(?:Billing|Bill)\s*(?:Period|Month)\s*:?\s*([A-Za-z]{3,9})[\s\-,]+(\d{4})/i.exec(one);
   if(ref) o.period = ref[1] + '-' + String(+ref[2]).padStart(2, '0');
   else if(bp && PC_MONTHS[bp[1].toLowerCase()]) o.period = bp[2] + '-' + String(PC_MONTHS[bp[1].toLowerCase()]).padStart(2, '0');
+  else if(o.useFrom && o.useTo && o.useTo > o.useFrom){ const cnt = {}; for(let d = o.useFrom; d < o.useTo; d = clIsoAdd(d, 1)) cnt[d.slice(0, 7)] = (cnt[d.slice(0, 7)] || 0) + 1; o.period = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a] || b.localeCompare(a))[0]; }   // the month most of the usage falls in
   else if(o.useTo) o.period = o.useTo.slice(0, 7);
   else if(o.billDate) o.period = o.billDate.slice(0, 7);
   // the amount for this bill (not arrears carried forward); the total due is kept in the notes
   const money = '(-?[\\d,]+\\.\\d{2})';
-  const charge = find([new RegExp('Charges\\s*for\\s*(?:this|the)\\s*(?:period|month)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('Current\\s*(?:Month\\s*)?Charges?\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('(?:Invoice|Bill)\\s*(?:Total|Amount)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i')]);
+  const charge = find([new RegExp('Charges\\s*for\\s*(?:this|the)\\s*(?:current\\s*)?(?:period|month)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp(money + '\\.?\\s*Charges\\s*for\\s*(?:this|the)\\s*(?:current\\s*)?(?:period|month)', 'i'), new RegExp('Current\\s*(?:Month\\s*)?Charges?\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('(?:Invoice|Bill)\\s*(?:Total|Amount)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i')]);
   const due = find([new RegExp('Total\\s*(?:Amount\\s*)?(?:Due|Payable)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('Amount\\s*(?:Due|Payable)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('\\bTotal\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i')]);
   const outst = find([new RegExp('(?:Outstanding|Arrears|Previous\\s*Balance|Balance\\s*(?:brought|b\\/f))[^\\n]*?' + money + '\\s*$', 'im')]);
   o.amount = charge ? num(charge) : due ? num(due) : '';
@@ -7113,7 +7131,7 @@ async function utReadInvoice(input){
   const st = document.getElementById('ut-read-status'), f = document.getElementById('vform'), say = (t, bad) => { if(st){ st.innerHTML = t; st.className = 'text-xs mt-0.5 ' + (bad ? 'text-rose-600' : 'text-slate-500'); } };
   say('Reading ' + esc(file.name) + '…');
   let text = '';
-  try{ text = await pcReadInvoiceFile(file, t => say(esc(t))); }
+  try{ text = await pcReadInvoiceFile(file, t => say(esc(t)), { binarize:true, psm:4, width:2400 }); }      // bills are read in black and white, column by column
   catch(e){ console.error(e); say('Could not read the file: ' + esc(e && e.message ? e.message : e), true); return; }
   if(!f || !f.isConnected) return;
   const o = utParseBillText(text), filled = [], warn = [];

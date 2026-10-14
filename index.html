@@ -6052,6 +6052,8 @@ function openUtBill(id, accId, type){
   if(last && d.prevReading == null && last.currReading != null) d.prevReading = last.currReading;
   const a = utAcc(d.accountId);
   openModal((b ? 'Edit ' : 'Add ') + (tp ? tp.toLowerCase() + ' ' : '') + 'invoice', vFormOpen +
+    `<div class="rounded-lg border border-dashed border-brand-300 bg-brand-50 px-4 py-3 mb-4 flex items-center justify-between gap-3 flex-wrap"><div class="text-sm text-slate-700"><b>Read from the invoice</b><div id="ut-read-status" class="text-xs text-slate-500 mt-0.5">Choose the PDF or a photo of the bill — the account, dates, readings and amount are filled in for you to check.</div></div>
+      <label class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700 cursor-pointer shrink-0">Choose file<input type="file" accept="application/pdf,image/*" class="hidden" onchange="utReadInvoice(this)"></label></div>` +
     vGrid(2, vS('Account', 'accountId', accs.map(x => [x.id, utAccLabel(x)]), d.accountId, null, { req:1, span:'sm:col-span-2', attrs:' onchange="utBillAccChanged(this)"' }) +
       vF('Billing month', 'period', d.period, 'month', { req:1 }) + vF('Invoice number', 'billNo', d.billNo) + vF('Invoice date', 'billDate', d.billDate, 'date', { req:1 }) + vF('Due date', 'dueDate', d.dueDate, 'date') + vF('Usage from', 'useFrom', d.useFrom, 'date') + vF('Usage to', 'useTo', d.useTo, 'date')) +
     (!tp || UT_TYPES[tp].readings ? vSec('Usage — meter readings <span id="ut-unit" class="normal-case font-semibold">' + (utUnit(a) ? '(' + utUnit(a) + ')' : '') + '</span>') +
@@ -6063,6 +6065,67 @@ function openUtBill(id, accId, type){
       vF('Paid on', 'paidDate', d.paidDate, 'date') + vS('Paid via', 'paidVia', UT_PAY_VIA, d.paidVia, '—') + vF('Payment reference', 'paidRef', d.paidRef, 'text', { attrs:' placeholder="Transfer ref, PR no., voucher no."' }) + vTa('Notes', 'notes', d.notes, { rows:2 })) +
     vFoot(b ? 'Save changes' : 'Save invoice', `saveUtBill('${id || ''}')`, b ? `deleteUtBill('${id}')` : ''), true);
   setTimeout(() => { const f = document.getElementById('vform'); if(f && f.prevReading) utBillCalc(f); }, 0);
+}
+/* ---------- reading a utility bill (STELCO, MWSC, Dhiraagu, WAMCO … ): the text of the PDF, or of a photo ---------- */
+function utParseBillText(text){
+  const T = String(text || '').replace(/\r/g, ''), one = T.replace(/[ \t]+/g, ' ');
+  const DT = '(\\d{1,2}[-\\/.]\\d{1,2}[-\\/.]\\d{2,4}|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}\\s+[A-Za-z]{3,9}\\.?,?\\s+\\d{4})';
+  const date = s => { const d = pcFindDates(s || ''); return d[0] || ''; };
+  const num = s => s == null ? '' : String(vNum(String(s).replace(/,/g, '')));
+  const find = (res, pick) => { for(const re of res){ const m = re.exec(one); if(m) return pick ? pick(m) : m[1]; } return ''; };
+  const o = {};
+  o.accountNo = find([/Account\s*(?:No|Number|#)\.?\s*:?[^\d\n]{0,40}\n?[^\d]{0,30}?(\d[\d-]{2,})/i, /A\/C\s*(?:No\.?)?\s*:?\s*(\d[\d-]{2,})/i, /Customer\s*(?:No|ID|Number)\.?\s*:?\s*([A-Z0-9-]{3,})/i]);
+  o.meterNo = find([/Meter\s*(?:No|Number|#)\.?\s*:?[^\d\n]{0,40}\n?[^\d]{0,30}?(\d{5,})/i]);
+  o.billNo = find([/(?:Bill|Invoice)\s*(?:No|Number|#)\.?\s*:?\s*([A-Z0-9][A-Z0-9\/-]{2,})/i]);
+  o.billDate = date(find([new RegExp('(?:Bill|Invoice)\\s*Date\\s*:?\\s*' + DT, 'i'), new RegExp('\\bDate\\s*:?\\s*' + DT, 'i')]));
+  o.dueDate = date(find([new RegExp('(?:Due\\s*Date|Pay(?:ment)?\\s*(?:by|before|due))\\s*:?\\s*' + DT, 'i')]));
+  // meter readings: "Previous Bill: 6934 17-12-2025 …" and "This Bill: 7560 17-01-2026 626 kWh"
+  const rd = label => { const m = new RegExp(label + '[^\\d\\n]{0,40}\\n?[^\\d]{0,30}?(\\d[\\d,]*(?:\\.\\d+)?)\\s+' + DT, 'i').exec(one); return m ? { r:num(m[1]), d:date(m[2]) } : null; };
+  const prev = rd('Previous\\s*(?:Bill|Reading)'), cur = rd('(?:This\\s*Bill|Current\\s*(?:Bill|Reading)|Present\\s*Reading)');
+  if(prev){ o.prevReading = prev.r; o.useFrom = prev.d; } if(cur){ o.currReading = cur.r; o.useTo = cur.d; }
+  const used = /(?:This\s*Bill|Current)[\s\S]{0,120}?(\d[\d,]*(?:\.\d+)?)\s*(kWh|m3|m³|units|GB)\b/i.exec(one) || /\b(\d[\d,]*(?:\.\d+)?)\s*(kWh|m3|m³)\b/i.exec(one);
+  if(used) o.units = num(used[1]); else if(o.prevReading && o.currReading) o.units = String(Math.max(0, vNum(o.currReading) - vNum(o.prevReading)));
+  // the month billed: "Bill Ref: 2026/1-1", else a "Billing period / month", else the month of the current reading
+  const ref = /Bill\s*Ref\.?\s*:?\s*(\d{4})\s*\/\s*(\d{1,2})\b/i.exec(one), bp = /(?:Billing|Bill)\s*(?:Period|Month)\s*:?\s*([A-Za-z]{3,9})[\s\-,]+(\d{4})/i.exec(one);
+  if(ref) o.period = ref[1] + '-' + String(+ref[2]).padStart(2, '0');
+  else if(bp && PC_MONTHS[bp[1].toLowerCase()]) o.period = bp[2] + '-' + String(PC_MONTHS[bp[1].toLowerCase()]).padStart(2, '0');
+  else if(o.useTo) o.period = o.useTo.slice(0, 7);
+  else if(o.billDate) o.period = o.billDate.slice(0, 7);
+  // the amount for this bill (not arrears carried forward); the total due is kept in the notes
+  const money = '(-?[\\d,]+\\.\\d{2})';
+  const charge = find([new RegExp('Charges\\s*for\\s*(?:this|the)\\s*(?:period|month)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('Current\\s*(?:Month\\s*)?Charges?\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('(?:Invoice|Bill)\\s*(?:Total|Amount)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i')]);
+  const due = find([new RegExp('Total\\s*(?:Amount\\s*)?(?:Due|Payable)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('Amount\\s*(?:Due|Payable)\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i'), new RegExp('\\bTotal\\s*:?\\s*(?:MVR|Rf\\.?)?\\s*' + money, 'i')]);
+  const outst = find([new RegExp('(?:Outstanding|Arrears|Previous\\s*Balance|Balance\\s*(?:brought|b\\/f))[^\\n]*?' + money + '\\s*$', 'im')]);
+  o.amount = charge ? num(charge) : due ? num(due) : '';
+  if(due && charge && vNum(due) !== vNum(charge)) o.note = 'Total amount due on the bill: MVR ' + pcMoneyPlain(vNum(due.replace(/,/g, ''))) + (outst && vNum(outst.replace(/,/g, '')) ? ' (includes MVR ' + pcMoneyPlain(vNum(outst.replace(/,/g, ''))) + ' outstanding from earlier bills)' : '');
+  return o;
+}
+async function utReadInvoice(input){
+  const file = input.files && input.files[0]; input.value = ''; if(!file) return;
+  const st = document.getElementById('ut-read-status'), f = document.getElementById('vform'), say = (t, bad) => { if(st){ st.innerHTML = t; st.className = 'text-xs mt-0.5 ' + (bad ? 'text-rose-600' : 'text-slate-500'); } };
+  say('Reading ' + esc(file.name) + '…');
+  let text = '';
+  try{ text = await pcReadInvoiceFile(file, t => say(esc(t))); }
+  catch(e){ console.error(e); say('Could not read the file: ' + esc(e && e.message ? e.message : e), true); return; }
+  if(!f || !f.isConnected) return;
+  const o = utParseBillText(text), filled = [], warn = [];
+  // the account: matched by account number, then meter number
+  const digits = x => String(x || '').replace(/\D/g, '');
+  if(o.accountNo || o.meterNo){
+    const acc = state.utilityAccounts.find(a => o.accountNo && digits(a.accountNo) && digits(a.accountNo) === digits(o.accountNo)) || state.utilityAccounts.find(a => o.meterNo && digits(a.meterNo) && digits(a.meterNo) === digits(o.meterNo));
+    if(acc && [...f.accountId.options].some(op => op.value === acc.id)){ if(f.accountId.value !== acc.id){ f.accountId.value = acc.id; utBillAccChanged(f.accountId); } filled.push('account ' + esc(acc.accountNo || '')); }
+    else if(acc) warn.push('the bill is for account ' + esc(o.accountNo || o.meterNo) + ' (' + esc(utAccLabel(acc)) + '), which is not in this list');
+    else { const sel = utAcc(f.accountId.value); warn.push('account ' + esc(o.accountNo || '') + (o.meterNo ? ' / meter ' + esc(o.meterNo) : '') + ' is not linked to a location yet' + (sel ? ' — check the account chosen' : '')); }
+  }
+  const set = (name, v, label) => { if(v === '' || v == null || !f[name]) return; f[name].value = v; f[name].classList.add('ring-2', 'ring-emerald-400'); filled.push(label); };
+  set('period', o.period, 'month'); set('billNo', o.billNo, 'invoice no.'); set('billDate', o.billDate, 'invoice date'); set('dueDate', o.dueDate, 'due date');
+  set('useFrom', o.useFrom, 'usage from'); set('useTo', o.useTo, 'usage to');
+  if(f.prevReading && f.prevReading.type !== 'hidden'){ set('prevReading', o.prevReading, 'previous reading'); set('currReading', o.currReading, 'current reading'); }
+  set('units', o.units, 'usage'); set('amount', o.amount, 'amount');
+  if(o.note && f.notes && !f.notes.value.includes(o.note)){ f.notes.value = (f.notes.value ? f.notes.value + '\n' : '') + o.note; filled.push('note of the total due'); }
+  if(f.prevReading) utBillCalc(f);
+  if(!filled.length){ say('Nothing could be read from this file. Enter the details by hand.' + (warn.length ? ' Note: ' + warn.join('; ') + '.' : ''), true); return; }
+  say('Filled in: ' + filled.join(', ') + '. Check them before saving.' + (warn.length ? '<br><span class="text-amber-700">Note: ' + warn.join('; ') + '.</span>' : ''));
 }
 async function saveUtBill(id){
   const o = vehFormObj(document.getElementById('vform'));

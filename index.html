@@ -190,7 +190,7 @@ function refreshAppearanceModal(){
   .num{ font-variant-numeric: tabular-nums; }
   .bar-fill{ transition: width .5s ease; }
   @media (min-width: 1024px){
-    #sidebar{ position: sticky; top: 0; bottom: auto; align-self: flex-start; height: 100vh; width: 16rem; flex-shrink: 0; }
+    #sidebar{ position: sticky; top: 0; bottom: auto; align-self: flex-start; height: 100vh; width: 18rem; flex-shrink: 0; }
   }
   .sticky-toolbar{ position: sticky; top: 3.5rem; z-index: 20; background: rgb(var(--l-bg)); padding-top: 0.5rem; margin-top: -0.5rem; }
   @media (min-width: 1024px){ .sticky-toolbar{ top: 0; } }
@@ -409,7 +409,7 @@ function refreshAppearanceModal(){
   <div id="sidebar-backdrop" onclick="toggleSidebar(false)" class="fixed inset-0 bg-slate-900/50 z-30 hidden lg:hidden"></div>
 
   <!-- Sidebar -->
-  <aside id="sidebar" class="fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 left-0 w-64 app-chrome text-slate-200 flex flex-col z-40 -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-out">
+  <aside id="sidebar" style="width:18rem" class="fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 left-0 w-72 shrink-0 app-chrome text-slate-200 flex flex-col z-40 -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-out">
     <div class="px-4 py-5 border-b border-white/10 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2.5 min-w-0"><img data-logo alt="" class="w-9 h-9 rounded-lg shrink-0"><div class="text-[16px] font-extrabold tracking-tight text-white whitespace-nowrap">Admin Database</div></div>
       <button onclick="openAppearanceModal()" id="theme-toggle-btn" title="Appearance: light/dark mode and colour scheme" aria-label="Appearance" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white">
@@ -9389,7 +9389,10 @@ function lineChartSvg(series, labels, width, height){
 function dashboardModuleSummary(){
   const month = localDateStr(new Date()).slice(0,7);
   const inMonth = d => !!d && String(d).slice(0,7) === month;
-  const metric = (value, label) => `<div class="min-w-0"><div class="text-lg font-extrabold text-slate-900 num leading-tight truncate">${value}</div><div class="text-[11px] text-slate-500 mt-0.5 leading-snug">${label}</div></div>`;
+  // a value is never cut off: the currency goes small in front and long figures get a smaller size
+  const metric = (value, label) => { const v = String(value), m = /^(MVR|USD|Rf)\s+(.*)$/.exec(v), body = m ? m[2] : v, len = body.replace(/<[^>]*>/g, '').length;
+    const size = len > 11 ? 'text-[13px]' : len > 8 ? 'text-[15px]' : 'text-lg';
+    return `<div class="min-w-0"><div class="${size} font-extrabold text-slate-900 num leading-tight break-words">${m ? `<span class="text-[10.5px] font-bold text-slate-500 mr-0.5 align-middle">${m[1]}</span>` : ''}${body}</div><div class="text-[11px] text-slate-500 mt-0.5 leading-snug">${label}</div></div>`; };
   const note = (text, tone) => {
     const cls = tone === 'crit' ? 'bg-rose-100 text-rose-700' : tone === 'warn' ? 'bg-amber-100 text-amber-700' : 'text-slate-400';
     return `<span class="inline-block text-[11px] font-semibold ${tone ? 'px-2 py-0.5 rounded-full ' : ''}${cls}">${text}</span>`;

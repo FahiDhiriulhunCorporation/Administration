@@ -6807,8 +6807,12 @@ const PF_LEAD = [['Decision making', 'Makes sound, timely decisions within autho
 const PF_LEVEL_LEAD = /general manager|assistant manager|director|head|manager|chief|senior/i;
 const PF_RATINGS = [[4.5, 'Outstanding'], [3.5, 'Exceeds expectations'], [2.5, 'Meets expectations'], [1.5, 'Needs improvement'], [0, 'Unsatisfactory']];
 const pfRating = s => s ? (PF_RATINGS.find(r => s >= r[0]) || PF_RATINGS[4])[1] : '';
-const pfSpecs = () => vehSettings.perfSpec || {};
-const pfKey = n => String(n || '').trim().toLowerCase();
+// one designation however it is written: "Senior Officer, Administration" and "Senior Officer – Administration" are "Senior Officer"
+const pfBase = n => { let x = String(n || '').trim().replace(/\s+/g, ' '); const deps = DEPARTMENTS.map(d => d.name).concat(['Admin', 'Administration Department']);
+  for(const dn of deps){ const m = new RegExp('\\s*[,\\-\u2013(]\\s*' + dn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(department)?\\)?\\s*$', 'i'); if(m.test(x)){ x = x.replace(m, ''); break; } } return x; };
+const pfKey = n => pfBase(n).toLowerCase();
+// saved sets under older names are folded into one per designation (the fuller set is kept)
+const pfSpecs = () => { const raw = vehSettings.perfSpec || {}, out = {}; Object.keys(raw).forEach(k => { const v = raw[k], nk = pfKey(v.name || k), cur = out[nk]; if(!cur || ((v.kpis || []).length > (cur.kpis || []).length)) out[nk] = Object.assign({}, v, { name:pfBase(v.name || k) }); }); return out; };
 const pfSpecOf = name => pfSpecs()[pfKey(name)] || null;
 // every TOR line we know for a designation: its TOR in Admin Staff and staff TORs with the same post
 function pfTorLines(name){
@@ -6835,7 +6839,7 @@ function pfGenerate(name, level){
   return { competencies:comps.slice(0, 11), kpis:top, sources:L.src, generatedAt:Date.now(), lines:all.length };
 }
 function pfDesignations(){
-  const names = new Map(); const add = (n, level) => { const k = pfKey(n); if(k && !names.has(k)) names.set(k, { name:String(n).trim(), level:level || '' }); };
+  const names = new Map(); const add = (n, level) => { const k = pfKey(n); if(!k) return; const cur = names.get(k); if(!cur) names.set(k, { name:pfBase(n), level:level || '' }); else if(!cur.level && level) cur.level = level; };
   sdDesigs().forEach(d => add(d.name, d.level)); sdAll().forEach(p => add(p.designation, p.level));
   state.documents.filter(x => x.type === 'tor' && (x.extra || {}).torKind !== 'service').forEach(x => add(x.title, sdLevelFor(x.title)));
   Object.keys(pfSpecs()).forEach(k => add(pfSpecs()[k].name || k));

@@ -1674,7 +1674,7 @@ function currentNav(){
     { id:'weekly-report', label:'Department Weekly Report', icon:'vlog' },
     { id:'leave-plan', label:'Staff Leave Plan', icon:'calendar' },
     { id:'staff-list', label:'Admin Staff', icon:'users' },
-    { id:'performance', label:'Performance Evaluation', icon:'perf' },
+    { id:'performance', label:'Performance Evaluation' + (pfUnlocked() ? '' : ' 🔒'), icon:'perf' },
     { id:'complaints', label:'Admin Complaints', icon:'chat', badge:cntOf(() => state.complaints.filter(c => (c.status || 'Open') === 'Open').length), tone:'warn', hint:'Complaints not yet looked at' },
     { section:'Documentation' },
     ...DOC_TYPES.map(t => ({ id:'docs-' + t.k, label:t.label, icon:'doc_' + t.k, badge:cntOf(() => state.documents.filter(d => d.type === t.k && (d.status === 'Pending approval' || docAlert(d))).length), tone:'warn', hint:'Pending approval, expiring or overdue' })),
@@ -6863,10 +6863,23 @@ function pfScore(e){
   return { kpi:Math.round(ksc * 100) / 100, comp:Math.round(csc * 100) / 100, total:Math.round(total * 100) / 100 };
 }
 function pfLateCount(key, period){ const r = pfPeriodRange(period); if(!r) return null; let late = 0, early = 0; for(let d = r[0]; d <= r[1]; d = clIsoAdd(d, 1)){ const a = lvAttOf(key, d); if(a.late) late++; if(a.early) early++; } return { late, early }; }
+// password access: the page opens only after the password is entered (kept for this browser tab until locked again)
+const PF_PASS_HASH = 'f47593a823a548f704e9c850dd3bfe9b6efea586bcbc8cbe35d6e1811d46013a';      // SHA-256 of 'fdc-perf:' + password
+const pfUnlocked = () => { try{ return sessionStorage.getItem('fdc_perf_unlock') === PF_PASS_HASH; }catch(e){ return !!window.__pfUnlock; } };
+async function pfUnlock(){
+  const inp = document.getElementById('pf-pass'), msg = document.getElementById('pf-pass-msg'); if(!inp) return;
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fdc-perf:' + inp.value)), hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  if(hex !== PF_PASS_HASH){ if(msg) msg.textContent = 'Incorrect password.'; inp.value = ''; inp.focus(); return; }
+  try{ sessionStorage.setItem('fdc_perf_unlock', hex); }catch(e){ window.__pfUnlock = true; }
+  renderNav(); rerenderMain();
+}
+function pfLock(){ try{ sessionStorage.removeItem('fdc_perf_unlock'); }catch(e){} window.__pfUnlock = false; closeModal(); renderNav(); rerenderMain(); toast('Performance Evaluation locked.'); }
 function viewPerformance(){
+  if(!pfUnlocked()) return `<div class="max-w-sm mx-auto mt-16 bg-white rounded-xl border border-slate-200 p-6 text-center"><div class="text-3xl mb-2">🔒</div><h1 class="text-lg font-bold text-slate-900">Performance Evaluation</h1><p class="text-sm text-slate-500 mt-1 mb-4">Enter the password to open this section.</p>
+    <form onsubmit="pfUnlock(); return false"><input id="pf-pass" type="password" autocomplete="off" class="${VEH_FIELD} text-center" placeholder="Password" autofocus><div id="pf-pass-msg" class="text-xs text-rose-600 h-4 mt-1.5"></div><button class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700 w-full mt-2">Open</button></form></div>`;
   const tab = vehUi.pfTab || 'eval', admin = canManageInventory();
   const tabs = vTabs([['eval', 'Evaluations'], ['spec', 'Competencies & KPIs']], tab, 'pfSetTab');
-  return vHead('Performance Evaluation', 'Core competencies and KPIs for each designation, taken from its TOR, and each staff member’s evaluation against them.', '') + `<div class="mb-5">${tabs}</div>` + (tab === 'spec' ? pfSpecView(admin) : pfEvalView(admin));
+  return vHead('Performance Evaluation', 'Core competencies and KPIs for each designation, taken from its TOR, and each staff member’s evaluation against them.', `<button onclick="pfLock()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">🔒 Lock</button>`) + `<div class="mb-5">${tabs}</div>` + (tab === 'spec' ? pfSpecView(admin) : pfEvalView(admin));
 }
 function pfSetTab(t){ vehUi.pfTab = t; rerenderMain(); }
 function pfSpecView(admin){

@@ -6620,14 +6620,20 @@ function torRenumber(){ document.querySelectorAll('#tor-secs .tor-sec').forEach(
 function torAddSec(){ document.getElementById('tor-secs').insertAdjacentHTML('beforeend', torSecRow({})); torRenumber(); }
 function torEditor(d, kind){
   const D = torData(d, kind), x = (d && d.extra) || {};
-  const kindBar = `<div class="flex items-center gap-2 mb-1"><span class="text-xs text-slate-500">Type:</span>${TOR_KINDS.map(([k, l]) => `<span class="px-2.5 py-1 rounded-md text-xs font-semibold ${k === D.kind ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500'}">${l}</span>`).join('')}<input type="hidden" name="extra.torKind" value="${D.kind}"></div>`;
+  const kindBar = `<div class="flex items-center gap-2 mb-1"><span class="text-xs text-slate-500">Type:</span>${TOR_KINDS.map(([k, l]) => `<button type="button" onclick="torSwitchKind('${d ? d.id : ''}', '${k}')" class="px-2.5 py-1 rounded-md text-xs font-semibold ${k === D.kind ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-800'}">${l}</button>`).join('')}<input type="hidden" name="extra.torKind" value="${D.kind}"></div>`;
   const common = vGrid(2, vF('Version', 'extra.version', x.version || '') + vF('Next review', 'extra.reviewDate', x.reviewDate || '', 'date'));
-  if(D.kind === 'staff') return kindBar + vSec('Post') + vGrid(2, vF('Reporting relationship', 'extra.reportingTo', D.reportingTo) + vF('Gross salary', 'extra.grossSalary', D.grossSalary)) +
+  if(D.kind === 'staff') return kindBar + vSec('Reporting and salary') + vGrid(2, vF('Reporting relationship', 'extra.reportingTo', D.reportingTo) + vF('Gross salary', 'extra.grossSalary', D.grossSalary)) +
     vSec('Responsibilities and deliverables') + vTa('One per line (numbered)', 'extra.resp', D.resp, { rows:8 }) + vSec('Employee specifications (qualification and experience)') + vTa('One per line (numbered)', 'extra.spec', D.spec, { rows:3 }) +
     vSec('Skills and competencies') + vTa('One per line (bullets)', 'extra.skills', D.skills, { rows:5 }) + `<p class="text-[11.5px] text-slate-400 mt-1">The post links to the designation of the same name in Admin Staff (TOR).</p>`;
   return kindBar + `<p class="text-[11.5px] text-slate-400 mt-2">The title above is the subject line under "Terms of Reference (TOR)". In each section: a plain line is a paragraph; "- " numbers an item (4.1); "## " a sub-heading (3.1) with "- " items under it as a., b. and "-- " as i., ii.; "[table]" places the table. Use **double asterisks** for bold.</p>` +
     vSec('Sections') + `<div id="tor-secs" class="space-y-2.5">${D.sections.map(torSecRow).join('')}</div><button type="button" onclick="torAddSec()" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ Section</button>` +
     vSec('Table') + `<p class="text-[11.5px] text-slate-400 -mt-1 mb-2">Several lines in one cell: separate them with ";" (e.g. Oil change; Cleaning; Tyre Air Pressure Inspection).</p>` + vGrid(2, exTableEditor(x.table || (d ? null : null), Object.assign({}, TOR_SVC_TABLE, { off:false }))) + vSec('Review') + common;
+}
+// switching between a staff and a service TOR in the form: the title typed so far is kept
+function torSwitchKind(id, kind){
+  const f = document.getElementById('vform'), cur = f && f['extra.torKind'] ? f['extra.torKind'].value : ''; if(cur === kind) return;
+  const title = f && f.title ? f.title.value : '';
+  openDocEdit(id, 'tor', kind); const g = document.getElementById('vform'); if(g && g.title) g.title.value = title;
 }
 function torRead(kind){
   if(kind !== 'service') return {};
@@ -6684,7 +6690,7 @@ function docField(f, x){
 function openDocEdit(id, k, torK){
   const d = id ? docById(id) : null; if(id && !d) return; k = (d && d.type) || k || '';
   if(k === 'tor' && !d && !torK){ openModal('New TOR — choose the kind', `<div class="grid sm:grid-cols-2 gap-3">${[['staff', 'Staff TOR', 'A post: reporting relationship, gross salary, responsibilities and deliverables, qualification and experience, skills and competencies.'], ['service', 'Service TOR', 'A service or works: objective, items covered (table), scope of work, obligations and pricing, in numbered sections.']].map(([kk, l, h]) => `<button type="button" onclick="openDocEdit('', 'tor', '${kk}')" class="rounded-xl border border-slate-200 px-4 py-4 text-left hover:border-brand-400"><div class="text-sm font-bold text-slate-800">${l}</div><div class="text-xs text-slate-500 mt-1">${h}</div></button>`).join('')}</div>`, true); return; }
-  if(k === 'tor') torK = d ? torKind(d) : torK;
+  if(k === 'tor') torK = torK || (d ? torKind(d) : 'staff');
   const t = docType(k), me = authUser || {}, TS = trSettings();
   const x = (d && d.extra) || (k === 'memo' ? { from:TS.memoFrom, to:TS.memoTo, cc:TS.memoCc, closing:'Thank you', signOff:'Warm Regards', signName:TS.signName, signDesig:TS.signDesig } : {});
   const pick = !t ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${DOC_TYPES.map(y => `<button type="button" onclick="openDocEdit('', '${y.k}')" class="rounded-lg border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-700 hover:border-brand-400 hover:text-brand-700 text-left">${esc(y.label)}</button>`).join('')}</div>` : '';

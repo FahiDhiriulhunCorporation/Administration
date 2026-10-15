@@ -6017,11 +6017,14 @@ function docAlert(d){
   const t0 = vToday(), x = d.extra || {}, done = ['Filed', 'Superseded'].includes(d.status);
   if(d.status === 'Superseded') return null;
   if(d.type === 'agreement' && x.endDate){ const days = Math.round((Date.parse(x.endDate) - Date.parse(t0)) / 86400000); if(days < 0) return { k:'crit', t:'Expired ' + vDate(x.endDate) }; if(days <= 60) return { k:'warn', t:'Expires in ' + days + ' day' + (days === 1 ? '' : 's') }; }
+  if(docIsSample(d)) return null;
   if((d.type === 'tor' || d.type === 'sop') && x.reviewDate && x.reviewDate <= t0) return { k:'warn', t:'Review due ' + vDate(x.reviewDate) };
   if(d.type === 'letter' && x.direction === 'Incoming' && x.dueDate && x.dueDate < t0 && !done && d.status !== 'Sent') return { k:'crit', t:'Reply overdue' };
   if(d.type === 'exco' && x.dueDate && x.dueDate < t0 && !done) return { k:'warn', t:'Action overdue' };
   return null;
 }
+// a staff TOR is a sample for recruitment: no approval, status, review or file needed
+const docIsSample = d => !!d && d.type === 'tor' && ((d.extra || {}).torKind || 'staff') !== 'service';
 const docAlertCount = () => state.documents.filter(docAlert).length;
 const docStatusPill = s => vPill(['Approved', 'Signed', 'Sent', 'Filed'].includes(s) ? 'good' : s === 'Pending approval' ? 'warn' : s === 'Superseded' ? '' : s === 'Received' ? 'acc' : '', esc(s || 'Draft'));
 function docSub(d){
@@ -6056,7 +6059,7 @@ function viewDocs(k){
     return `<tr class="${vTr} cursor-pointer align-top" onclick="openDocView('${d.id}')">
       ${vTd(`<span class="font-semibold text-slate-800 num whitespace-nowrap">${esc(d.refNo || '—')}</span>${k ? '' : `<div class="text-[11px] text-slate-400">${esc(ty.label)}</div>`}`, { first:1 })}
       ${vTd(`<div class="font-semibold text-slate-800">${esc(d.title || '—')}</div><div class="text-[11.5px] text-slate-400">${esc(docSub(d))}</div>${a ? `<div class="text-[11.5px] font-semibold mt-0.5 ${a.k === 'crit' ? 'text-rose-600' : 'text-amber-600'}">${esc(a.t)}</div>` : ''}`)}
-      ${vTd(d.date ? vDate(d.date) : '—', { cls:'whitespace-nowrap' })}${vTd(esc(d.department || '—'))}${vTd(docStatusPill(d.status))}
+      ${vTd(d.date ? vDate(d.date) : '—', { cls:'whitespace-nowrap' })}${vTd(esc(d.department || '—'))}${vTd(docIsSample(d) ? vPill('', 'Sample') : docStatusPill(d.status))}
       ${vTd(d.link ? `<a href="${esc(d.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : '<span class="text-xs text-slate-400">—</span>', { last:1 })}</tr>`; }).join('');
   return vHead(k ? t.plural : 'Documentation', k ? 'The ' + t.label.toLowerCase() + ' register: reference number, date, status, details and the link to the file.' : 'EXCO papers, memos, TORs, SOPs, agreements, staff request forms, letters and meeting minutes in one register.',
       (k === 'exco' ? vBtnPlain('Blank paper (Word)', "excoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "excoDownload('', 'pdf', this)") : '') + (k === 'memo' ? vBtnPlain('Blank memo (Word)', "memoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "memoDownload('', 'pdf', this)") : '') + (k === 'srf' ? vBtnPlain('Blank form (Word)', "srfDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "srfDownload('', 'pdf', this)") : '') + (k === 'tor' ? vBtnPlain('Blank TOR', 'openTorBlank()') : '') + (canManageInventory() ? vBtnPlain('Numbering', 'openDocPrefixes()') : '') + vBtnPlain('Export CSV', `docExportCsv('${k || ''}')`) + vBtnPrimary('+ ' + (k ? t.label : 'Document'), `openDocEdit('', '${k || ''}')`)) + kpis +
@@ -6516,7 +6519,7 @@ function torOutline(body, no, table){
     const l = raw.replace(/\s+$/, ''); if(!l.trim()){ return; }
     if(/^\[table\]$/i.test(l.trim())){ if(table) out.push({ t:'table', tb:table }); return; }
     let m;
-    if((m = /^##\s*(.*)$/.exec(l))){ sub++; l2 = 0; l3 = 0; out.push({ t:'p', text:m[1], num:no + '.' + sub + '.', nx:18, tx:54, gapBefore:sub > 1 ? 10 : 2 }); return; }
+    if((m = /^##\s*(.*)$/.exec(l))){ sub++; l2 = 0; l3 = 0; out.push({ t:'p', text:m[1], num:no + '.' + sub + '.', nx:18, tx:54, gapBefore:sub > 1 ? 10 : 2, keep:true }); return; }
     if((m = /^--\s*(.*)$/.exec(l))){ out.push({ t:'p', text:m[1], num:TOR_ROMAN[l3++] + '.', nx:sub ? 72 : 54, tx:sub ? 90 : 72 }); return; }
     if((m = /^-\s*(.*)$/.exec(l))){ l3 = 0; if(sub) out.push({ t:'p', text:m[1], num:String.fromCharCode(97 + l2++) + '.', nx:54, tx:72 }); else out.push({ t:'p', text:m[1], num:no + '.' + (++l1) + '.', nx:18, tx:54 }); return; }
     const prev = out[out.length - 1];
@@ -6536,7 +6539,7 @@ function torBlocks(D){
   if(D.kind === 'staff'){
     B.push({ t:'title', text:'TERMS OF REFERENCE', black:true, size:14, after:30 });
     [['Post:', D.title], ['Reporting Relationship:', D.reportingTo], ['Gross Salary:', D.grossSalary]].forEach(([l, v]) => B.push({ t:'p', text:'**' + l + '** ' + v.replace(/\*\*/g, ''), tx:0 }));
-    const sec = (h, items, bullet) => { B.push({ t:'p', text:'**' + h + '**', tx:0, gapBefore:22 }); items.forEach((it, i) => B.push({ t:'p', text:it, num:bullet ? '•' : (i + 1) + '.', nx:18, tx:36, justify:!bullet })); };
+    const sec = (h, items, bullet) => { B.push({ t:'p', text:'**' + h + '**', tx:0, gapBefore:22, keep:true }); items.forEach((it, i) => B.push({ t:'p', text:it, num:bullet ? '•' : (i + 1) + '.', nx:18, tx:36, justify:!bullet })); };
     sec('RESPONSIBILITIES AND DELIVERABLES', lines(D.resp, 5)); sec('EMPLOYEE SPECIFICATIONS (QUALIFICATION AND EXPERIENCE)', lines(D.spec, 3)); sec('SKILLS AND COMPETENCIES', lines(D.skills, 4), true);
   } else {
     B.push({ t:'title', text:'Terms of Reference (TOR)', black:true, size:12, after:8 }); B.push({ t:'title', text:D.title || '', black:true, size:12, after:26 });
@@ -6545,6 +6548,9 @@ function torBlocks(D){
       if(!items.length) B.push({ t:'p', text:'', tx:18 }), B.push({ t:'p', text:'', tx:18 });
       items.forEach(it => { if(it.t === 'p' && it.tx === 0) it.tx = 18; B.push(it); }); });
   }
+  // a heading (or sub-heading) and what follows it, up to the next heading, stay together: moved whole to the next page when they do not fit
+  let g = -1; B.forEach((b, i) => { if(b.keep && !(B[i - 1] && B[i - 1].keep)) g = i; if(g >= 0) b.group = g; });
+  B.forEach((b, i) => { b.groupEnd = !(B[i + 1] && B[i + 1].group === b.group) || (B[i + 1].keep && !b.keep); });
   return B;
 }
 /* PDF */
@@ -6552,7 +6558,13 @@ async function buildTorPdf(d, kind){
   const D = torData(d, kind), B = torBlocks(D), staff = D.kind === 'staff', L = staff ? 72 : 54, R = PCA4_W - L, FS = 10, LH = 19, TOP = 122, BOT = 772, K = [0, 0, 0], pages = []; let pg, y;
   const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP; }; newPage();
   const runs = s => exRuns(s);
+  const tableH = tb => { const all = [tb.cols.map(c => c.h || '')].concat(tb.rows.map(r => tb.cols.map((c, i) => String(r[i] || '')))), x0 = L + 18, W = R - x0;
+    const raw = tb.cols.map((c, i) => Math.max(50, ...all.map((r, k) => Math.max(...r[i].split(/;|\n/).map(z => pdfTextWidth(z.trim(), k === 0, 9.5))) + 14))), tot = raw.reduce((a, c) => a + c, 0), ws = raw.map(w => w * W / tot);
+    return 12 + all.reduce((a, r, k) => a + Math.max(1, ...r.map((c, i) => c.split(/;|\n/).map(z => z.trim()).filter((z, j, aa) => z || aa.length === 1).flatMap(z => pdfWrap(z, k === 0, 9.5, ws[i] - 10)).length)) * 16 + 10, 0); };
+  const blockH = b => b.t === 'table' ? tableH(b.tb) : b.t === 'title' ? b.size + 4 + (b.after || 0) : (b.gapBefore || 0) + Math.max(1, b.text ? pdfWrapRuns(runs(b.text), FS, R - L - (b.tx || 0)).length : 1) * LH;
   B.forEach((b, bi) => {
+    if(b.keep && !(B[bi - 1] && B[bi - 1].keep) && y > TOP){ let h = 0; for(let j = bi; j < B.length && B[j].group === b.group; j++){ h += blockH(B[j]); if(j > bi && B[j].keep && !B[j - 1].keep) break; }
+      if(h <= BOT - TOP && y + h > BOT) newPage(); }
     if(b.t === 'title'){ const key = b.black ? 'apt_black' : 'cal_regular', tw = pdfTextWidthK(b.text, key, b.size); pg.text((PCA4_W - tw) / 2, y, b.text, { size:b.size, font:b.black ? 'F11' : 'F9' }); y += (b.size + 4) + (b.after || 0); return; }   // SF UI Display shows as Calibri in the template
     if(b.t === 'table'){ const tb = b.tb, all = [tb.cols.map(c => c.h || '')].concat(tb.rows.map(r => tb.cols.map((c, i) => String(r[i] || '')))), x0 = L + 18, W = R - x0;
       const raw = tb.cols.map((c, i) => Math.max(50, ...all.map((r, k) => Math.max(...r[i].split(/;|\n/).map(z => pdfTextWidth(z.trim(), k === 0, 9.5))) + 14))), tot = raw.reduce((a, c) => a + c, 0), ws = raw.map(w => w * W / tot);
@@ -6589,7 +6601,7 @@ function torDocxXml(D){
       return; }
     const tx = Math.round((b.tx || 0) * 20), nx = Math.round((b.nx || 0) * 20);
     const ind = b.num ? `<w:ind w:left="${tx}" w:hanging="${tx - nx}"/>` : tx ? `<w:ind w:left="${tx}"/>` : '';
-    out.push(P((b.num ? (staff ? runs(b.num) : wR(b.num.replace(/\*\*/g, ''), { font:'Lato', sz:20, b:/\*\*/.test(b.num) })) + '<w:r><w:tab/></w:r>' : '') + runs(b.text || ''), { ind, before:Math.round((b.gapBefore || 0) * 20), jc:b.justify ? 'both' : '', keep:b.keep }));
+    out.push(P((b.num ? (staff ? runs(b.num) : wR(b.num.replace(/\*\*/g, ''), { font:'Lato', sz:20, b:/\*\*/.test(b.num) })) + '<w:r><w:tab/></w:r>' : '') + runs(b.text || ''), { ind, before:Math.round((b.gapBefore || 0) * 20), jc:b.justify ? 'both' : '', keep:(b.group != null && !b.groupEnd) || !!b.keep }));
   });
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2300" w:right="${M}" w:bottom="1440" w:left="${M}" w:header="0" w:footer="300" w:gutter="0"/></w:sectPr></w:body></w:document>`;
 }
@@ -6611,7 +6623,7 @@ function torEditor(d, kind){
   const common = vGrid(2, vF('Version', 'extra.version', x.version || '') + vF('Next review', 'extra.reviewDate', x.reviewDate || '', 'date'));
   if(D.kind === 'staff') return kindBar + vSec('Post') + vGrid(2, vF('Reporting relationship', 'extra.reportingTo', D.reportingTo) + vF('Gross salary', 'extra.grossSalary', D.grossSalary)) +
     vSec('Responsibilities and deliverables') + vTa('One per line (numbered)', 'extra.resp', D.resp, { rows:8 }) + vSec('Employee specifications (qualification and experience)') + vTa('One per line (numbered)', 'extra.spec', D.spec, { rows:3 }) +
-    vSec('Skills and competencies') + vTa('One per line (bullets)', 'extra.skills', D.skills, { rows:5 }) + `<p class="text-[11.5px] text-slate-400 mt-1">The post links to the designation of the same name in Admin Staff (TOR).</p>` + vSec('Review') + common;
+    vSec('Skills and competencies') + vTa('One per line (bullets)', 'extra.skills', D.skills, { rows:5 }) + `<p class="text-[11.5px] text-slate-400 mt-1">The post links to the designation of the same name in Admin Staff (TOR).</p>`;
   return kindBar + `<p class="text-[11.5px] text-slate-400 mt-2">The title above is the subject line under "Terms of Reference (TOR)". In each section: a plain line is a paragraph; "- " numbers an item (4.1); "## " a sub-heading (3.1) with "- " items under it as a., b. and "-- " as i., ii.; "[table]" places the table. Use **double asterisks** for bold.</p>` +
     vSec('Sections') + `<div id="tor-secs" class="space-y-2.5">${D.sections.map(torSecRow).join('')}</div><button type="button" onclick="torAddSec()" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ Section</button>` +
     vSec('Table') + `<p class="text-[11.5px] text-slate-400 -mt-1 mb-2">Several lines in one cell: separate them with ";" (e.g. Oil change; Cleaning; Tyre Air Pressure Inspection).</p>` + vGrid(2, exTableEditor(x.table || (d ? null : null), Object.assign({}, TOR_SVC_TABLE, { off:false }))) + vSec('Review') + common;
@@ -6680,7 +6692,7 @@ function openDocEdit(id, k, torK){
     `<datalist id="doc-people">${sdAll().map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist><datalist id="doc-depts">${DEPARTMENTS.map(z => `<option value="${esc(z.name)}"></option>`).join('')}</datalist><datalist id="doc-desigs">${sdDesigs().map(z => `<option value="${esc(z.name)}"></option>`).join('')}</datalist><datalist id="doc-srf">${DOC_SRF.map(z => `<option value="${esc(z)}"></option>`).join('')}</datalist>` +
     vGrid(2, (k === 'tor' ? '' : vF(k === 'exco' ? 'Exco paper no.' : 'Reference number', 'refNo', d ? d.refNo : docNextNo(k), 'text', { req:1 }) + vF('Date', 'date', d ? d.date : vToday(), 'date', { req:1 })) +      // a TOR is a reusable sample: numbered and dated in the register only
       vF(k === 'minutes' ? 'Meeting' : k === 'srf' ? 'Job title' : k === 'tor' ? (torK === 'staff' ? 'Post' : 'Title (the service, e.g. Corporate Vehicle Servicing – Motorcycles, Vans & Pick-Up)') : 'Title / subject', 'title', d ? d.title : '', 'text', { req:1, span:'sm:col-span-2' }) +
-      `<div><label class="${VEH_LBL}">Department</label><input name="department" list="doc-depts" value="${esc(d ? d.department || '' : me.department || '')}" class="${VEH_FIELD}"></div>` + vS('Status', 'status', DOC_STATUS, d ? d.status || 'Draft' : 'Draft')) +
+      (k === 'tor' && torK === 'staff' ? `<input type="hidden" name="department" value="${esc(d ? d.department || '' : me.department || '')}"><input type="hidden" name="status" value="Draft">` : `<div><label class="${VEH_LBL}">Department</label><input name="department" list="doc-depts" value="${esc(d ? d.department || '' : me.department || '')}" class="${VEH_FIELD}"></div>` + vS('Status', 'status', DOC_STATUS, d ? d.status || 'Draft' : 'Draft'))) +
     (k === 'tor' ? torEditor(d, torK) + vSec('File')
      : k === 'srf' ? srfEditor(d) + vSec('File')
      : k === 'memo' ? vSec('Memo') + vGrid(3, t.fields.slice(0, 3).map(f => docField(f, x)).join('')) +
@@ -6718,15 +6730,16 @@ async function saveDoc(id, k){
 function openDocView(id){
   const d = docById(id); if(!d) return; const t = docType(d.type) || { label:d.type, fields:[] }, x = d.extra || {}, a = docAlert(d);
   const item = (l, v, wide) => `<div class="${wide ? 'col-span-2 sm:col-span-3' : ''}"><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5 ${wide ? 'whitespace-pre-wrap font-normal' : ''}">${v || '—'}</div></div>`;
-  openModal(t.label + ' · ' + (d.refNo || ''), `<div class="flex items-center gap-2 flex-wrap mb-4">${docStatusPill(d.status)}${a ? `<span class="text-xs font-semibold ${a.k === 'crit' ? 'text-rose-600' : 'text-amber-600'}">${esc(a.t)}</span>` : ''}</div>
+  const smp = docIsSample(d), hide = smp ? ['version', 'reviewDate'] : [];
+  openModal(t.label + ' · ' + (d.refNo || ''), `<div class="flex items-center gap-2 flex-wrap mb-4">${smp ? vPill('', 'Sample for recruitment') : docStatusPill(d.status)}${a ? `<span class="text-xs font-semibold ${a.k === 'crit' ? 'text-rose-600' : 'text-amber-600'}">${esc(a.t)}</span>` : ''}</div>
     <h3 class="text-lg font-bold text-slate-900 mb-4">${esc(d.title || '')}</h3>
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">${item('Reference', esc(d.refNo))}${item('Date', d.date ? vDate(d.date) : '')}${item('Department', esc(d.department))}
-      ${t.fields.map(([n, l, kind]) => item(l, n === 'torKind' ? (x[n] === 'service' ? 'Service TOR' : 'Staff TOR') : kind === 'check' ? (x[n] ? 'Yes' : 'No') : kind === 'date' ? (x[n] ? vDate(x[n]) : '') : kind === 'rec' ? exItems(x[n]).map((it, i) => (i + 1) + '. ' + esc(it.text.replace(/\*\*/g, '')) + it.more.map(m => '\n    ' + esc(m.replace(/\*\*/g, ''))).join('')).join('\n') : esc(x[n] || ''), kind === 'area' || kind === 'rec')).join('')}</div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">${item('Reference', esc(d.refNo))}${smp ? '' : item('Date', d.date ? vDate(d.date) : '') + item('Department', esc(d.department))}
+      ${t.fields.filter(([n]) => !hide.includes(n)).map(([n, l, kind]) => item(l, n === 'torKind' ? (x[n] === 'service' ? 'Service TOR' : 'Staff TOR') : kind === 'check' ? (x[n] ? 'Yes' : 'No') : kind === 'date' ? (x[n] ? vDate(x[n]) : '') : kind === 'rec' ? exItems(x[n]).map((it, i) => (i + 1) + '. ' + esc(it.text.replace(/\*\*/g, '')) + it.more.map(m => '\n    ' + esc(m.replace(/\*\*/g, ''))).join('')).join('\n') : esc(x[n] || ''), kind === 'area' || kind === 'rec')).join('')}</div>
     ${d.summary ? `<div class="mb-5"><div class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${d.type === 'exco' ? 'Summary and key points' : d.type === 'memo' ? 'Memo text' : 'Summary'}</div><div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(d.summary.replace(/\*\*/g, ''))}</div></div>` : ''}
     ${(d.type === 'exco' || d.type === 'memo') && exTable(x) ? (tb => `<div class="overflow-x-auto mb-5"><table class="text-sm border border-slate-300 mx-auto"><thead><tr>${tb.cols.map(c => `<th class="border border-slate-300 px-2 py-1 text-left">${esc(c.h)}</th>`).join('')}</tr></thead><tbody>${tb.rows.map(r => `<tr>${tb.cols.map((c, i) => `<td class="border border-slate-300 px-2 py-1">${esc(r[i] || '')}</td>`).join('')}</tr>`).join('')}${tb.total ? `<tr class="font-semibold">${exTotals(tb).map(v => `<td class="border border-slate-300 px-2 py-1">${esc(v)}</td>`).join('')}</tr>` : ''}</tbody></table></div>`)(exTable(x)) : ''}
     ${d.type === 'exco' || d.type === 'memo' ? (fn => `<div class="flex flex-wrap gap-4 mb-4"><button onclick="${fn}('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="${fn}('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>`)(d.type === 'exco' ? 'excoDownload' : 'memoDownload') : d.type === 'tor' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="torDownload('${d.id}', '', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="torDownload('${d.id}', '', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : d.type === 'srf' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="srfDownload('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="srfDownload('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : ''}
-    <div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">${d.link ? vLink(d.link, 'Open the file') : '<span class="text-amber-600">No file linked yet — use Edit to add the SharePoint link.</span>'}</div>
-    <div class="flex flex-wrap gap-2 mb-4">${DOC_STATUS.filter(s => s !== (d.status || 'Draft')).slice(0, 8).map(s => `<button onclick="docSetStatus('${d.id}', '${s}')" class="px-2.5 py-1 rounded-md border border-slate-200 text-[11.5px] font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700">${s}</button>`).join('')}</div>
+    ${smp && !d.link ? '' : `<div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">${d.link ? vLink(d.link, 'Open the file') : '<span class="text-amber-600">No file linked yet — use Edit to add the SharePoint link.</span>'}</div>`}
+    <div class="flex flex-wrap gap-2 mb-4 ${smp ? 'hidden' : ''}">${DOC_STATUS.filter(s => s !== (d.status || 'Draft')).slice(0, 8).map(s => `<button onclick="docSetStatus('${d.id}', '${s}')" class="px-2.5 py-1 rounded-md border border-slate-200 text-[11.5px] font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700">${s}</button>`).join('')}</div>
     ${(d.history || []).length ? `<div class="text-[11px] text-slate-400">${(d.history || []).slice(-5).map(h => esc(h.text) + ' · ' + esc(h.by || '') + ' ' + new Date(h.at).toLocaleDateString()).join(' — ')}</div>` : ''}
     <div class="flex justify-end gap-4 pt-3 mt-4 border-t border-slate-100">${canManageInventory() ? `<button onclick="deleteDoc('${d.id}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Delete</button>` : ''}<button onclick="openDocEdit('${d.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button></div>`, true);
 }

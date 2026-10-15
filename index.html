@@ -1674,7 +1674,6 @@ function currentNav(){
     { id:'weekly-report', label:'Department Weekly Report', icon:'vlog' },
     { id:'leave-plan', label:'Staff Leave Plan', icon:'calendar' },
     { id:'staff-list', label:'Admin Staff', icon:'users' },
-    { id:'performance', label:'Performance Evaluation' + (pfUnlocked() ? '' : ' 🔒'), icon:'perf' },
     { id:'complaints', label:'Admin Complaints', icon:'chat', badge:cntOf(() => state.complaints.filter(c => (c.status || 'Open') === 'Open').length), tone:'warn', hint:'Complaints not yet looked at' },
     { section:'Documentation' },
     ...DOC_TYPES.map(t => ({ id:'docs-' + t.k, label:t.label, icon:'doc_' + t.k, badge:cntOf(() => state.documents.filter(d => d.type === t.k && (d.status === 'Pending approval' || docAlert(d))).length), tone:'warn', hint:'Pending approval, expiring or overdue' })),
@@ -8978,6 +8977,7 @@ function renderApp(){
     authScreen.classList.remove('flex');
     appRoot.classList.remove('hidden');
     if(ui.tab==='admin' && !(authUser && authUser.role==='admin')) ui.tab = 'dashboard';
+    if(ui.tab==='performance') ui.tab = 'dashboard';                         // Performance Evaluation was removed
     if(ui.tab==='locations' && !canManageInventory()) ui.tab = 'dashboard';
     backfillDepartmentAssetCodes();
     render();
@@ -9038,7 +9038,6 @@ function render(){
     else if(ui.tab==='leave-plan') el.innerHTML = viewLeavePlan();
     else if(ui.tab==='staff-list') el.innerHTML = viewStaffList();
     else if(ui.tab==='complaints') el.innerHTML = viewComplaints();
-    else if(ui.tab==='performance') el.innerHTML = viewPerformance();
     else if(ui.tab==='docs' || String(ui.tab).startsWith('docs-')) el.innerHTML = viewDocs(ui.tab === 'docs' ? '' : ui.tab.slice(5));
     else if(ui.tab==='vehicle-reports') el.innerHTML = viewVehicleReports();
     else if(ui.tab==='locations') el.innerHTML = viewLocations();

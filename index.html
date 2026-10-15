@@ -6060,7 +6060,7 @@ function viewDocs(k){
     return `<tr class="${vTr} cursor-pointer align-top" onclick="openDocView('${d.id}')">
       ${noRef ? '' : vTd(`<span class="font-semibold text-slate-800 num whitespace-nowrap">${smp ? '—' : esc(d.refNo || '—')}</span>${k ? '' : `<div class="text-[11px] text-slate-400">${esc(ty.label)}</div>`}`, { first:1 })}
       ${vTd(`<div class="font-semibold text-slate-800">${esc(d.title || '—')}</div><div class="text-[11.5px] text-slate-400">${esc(docSub(d))}</div>${a ? `<div class="text-[11.5px] font-semibold mt-0.5 ${a.k === 'crit' ? 'text-rose-600' : 'text-amber-600'}">${esc(a.t)}</div>` : ''}`, noRef ? { first:1 } : undefined)}
-      ${noRef ? '' : vTd(smp || !d.date ? '—' : vDate(d.date), { cls:'whitespace-nowrap' })}${vTd(esc(d.department || '—'))}${vTd(docIsSample(d) ? vPill('', 'Sample') : docStatusPill(d.status))}
+      ${noRef ? '' : vTd(smp || !d.date ? '—' : vDate(d.date), { cls:'whitespace-nowrap' })}${vTd(esc(d.department || (d.type === 'tor' ? torDeptOf(d.title) : '') || '—'))}${vTd(docIsSample(d) ? vPill('', 'Sample') : docStatusPill(d.status))}
       ${vTd(d.link ? `<a href="${esc(d.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : '<span class="text-xs text-slate-400">—</span>', { last:1 })}</tr>`; }).join('');
   return vHead(k ? t.plural : 'Documentation', k ? 'The ' + t.label.toLowerCase() + ' register: reference number, date, status, details and the link to the file.' : 'EXCO papers, memos, TORs, SOPs, agreements, staff request forms, letters and meeting minutes in one register.',
       (k === 'exco' ? vBtnPlain('Blank paper (Word)', "excoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "excoDownload('', 'pdf', this)") : '') + (k === 'memo' ? vBtnPlain('Blank memo (Word)', "memoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "memoDownload('', 'pdf', this)") : '') + (k === 'srf' ? vBtnPlain('Blank form (Word)', "srfDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "srfDownload('', 'pdf', this)") : '') + (k === 'tor' ? vBtnPlain('Blank TOR', 'openTorBlank()') : '') + (canManageInventory() ? vBtnPlain('Numbering', 'openDocPrefixes()') : '') + vBtnPlain('Export CSV', `docExportCsv('${k || ''}')`) + vBtnPrimary('+ ' + (k ? t.label : 'Document'), `openDocEdit('', '${k || ''}')`)) + kpis +
@@ -6629,6 +6629,13 @@ function torEditor(d, kind){
     vSec('Sections') + `<div id="tor-secs" class="space-y-2.5">${D.sections.map(torSecRow).join('')}</div><button type="button" onclick="torAddSec()" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ Section</button>` +
     vSec('Table') + `<p class="text-[11.5px] text-slate-400 -mt-1 mb-2">Several lines in one cell: separate them with ";" (e.g. Oil change; Cleaning; Tyre Air Pressure Inspection).</p>` + vGrid(2, exTableEditor(x.table || (d ? null : null), Object.assign({}, TOR_SVC_TABLE, { off:false }))) + vSec('Review') + common;
 }
+// the department of a post: named in it ("Senior Officer, Administration"), else that of the staff holding the designation in Admin Staff
+function torDeptOf(post){
+  const p = String(post || '').trim(), low = p.toLowerCase(); if(!p) return '';
+  const named = DEPARTMENTS.map(x => x.name).sort((a, b) => b.length - a.length).find(n => new RegExp('\\b' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(p)); if(named) return named;
+  try{ const ds = sdAll().filter(x => String(x.designation || '').toLowerCase() === low && x.department).map(x => x.department); if(ds.length) return ds.sort((a, b) => ds.filter(v => v === b).length - ds.filter(v => v === a).length)[0]; }catch(e){}
+  return '';
+}
 // switching between a staff and a service TOR in the form: the title typed so far is kept
 function torSwitchKind(id, kind){
   const f = document.getElementById('vform'), cur = f && f['extra.torKind'] ? f['extra.torKind'].value : ''; if(cur === kind) return;
@@ -6699,7 +6706,7 @@ function openDocEdit(id, k, torK){
     `<datalist id="doc-people">${sdAll().map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist><datalist id="doc-depts">${DEPARTMENTS.map(z => `<option value="${esc(z.name)}"></option>`).join('')}</datalist><datalist id="doc-desigs">${sdDesigs().map(z => `<option value="${esc(z.name)}"></option>`).join('')}</datalist><datalist id="doc-srf">${DOC_SRF.map(z => `<option value="${esc(z)}"></option>`).join('')}</datalist>` +
     vGrid(2, (k === 'tor' ? '' : vF(k === 'exco' ? 'Exco paper no.' : 'Reference number', 'refNo', d ? d.refNo : docNextNo(k), 'text', { req:1 }) + vF('Date', 'date', d ? d.date : vToday(), 'date', { req:1 })) +      // a TOR is a reusable sample: numbered and dated in the register only
       vF(k === 'minutes' ? 'Meeting' : k === 'srf' ? 'Job title' : k === 'tor' ? (torK === 'staff' ? 'Post' : 'Title (the service, e.g. Corporate Vehicle Servicing – Motorcycles, Vans & Pick-Up)') : 'Title / subject', 'title', d ? d.title : '', 'text', { req:1, span:'sm:col-span-2' }) +
-      (k === 'tor' && torK === 'staff' ? `<input type="hidden" name="department" value="${esc(d ? d.department || '' : me.department || '')}"><input type="hidden" name="status" value="Draft">` : `<div><label class="${VEH_LBL}">Department</label><input name="department" list="doc-depts" value="${esc(d ? d.department || '' : me.department || '')}" class="${VEH_FIELD}"></div>` + vS('Status', 'status', DOC_STATUS, d ? d.status || 'Draft' : 'Draft'))) +
+      (k === 'tor' && torK === 'staff' ? `<div class="sm:col-span-2"><label class="${VEH_LBL}">Department</label><input name="department" list="doc-depts" value="${esc(d ? d.department || torDeptOf(d.title) : '')}" placeholder="Filled from the post when left blank" class="${VEH_FIELD}"></div><input type="hidden" name="status" value="Draft">` : `<div><label class="${VEH_LBL}">Department</label><input name="department" list="doc-depts" value="${esc(d ? d.department || '' : me.department || '')}" class="${VEH_FIELD}"></div>` + vS('Status', 'status', DOC_STATUS, d ? d.status || 'Draft' : 'Draft'))) +
     (k === 'tor' ? torEditor(d, torK) + vSec('File')
      : k === 'srf' ? srfEditor(d) + vSec('File')
      : k === 'memo' ? vSec('Memo') + vGrid(3, t.fields.slice(0, 3).map(f => docField(f, x)).join('')) +
@@ -6729,6 +6736,7 @@ async function saveDoc(id, k){
   t.fields.forEach(([n, l, kind]) => { if(kind === 'check') extra[n] = extra[n] === '1'; });
   if(k === 'agreement' && extra.startDate && extra.endDate && extra.endDate < extra.startDate) return vFail('The agreement ends before it starts.');
   const old = id ? docById(id) : null;
+  if(k === 'tor' && !String(o.department || '').trim()) o.department = torDeptOf(o.title) || ((authUser || {}).department || '');
   const rec = { id:id || undefined, type:k, refNo, title:o.title.trim(), date:o.date, department:String(o.department || '').trim(), status:DOC_STATUS.includes(o.status) ? o.status : 'Draft', summary:String(o.summary || '').trim(), link, extra,
     history:((old && old.history) || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:!old ? 'Registered' : old.status !== o.status ? 'Status: ' + o.status : 'Edited' }]) };
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;

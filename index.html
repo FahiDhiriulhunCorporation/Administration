@@ -1638,6 +1638,7 @@ const ICONS = {
   doc_srf:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="12" height="14" rx="1.5"/><path d="M7.5 3.5V2.5h5v1"/><path d="M7 9l1.5 1.5L11 8M7 13.5h6"/></svg>',
   doc_letter:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M3 5.5l7 5.5 7-5.5"/></svg>',
   doc_minutes:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="13" rx="1.5"/><path d="M3 8h14M7 2.5v3M13 2.5v3"/><path d="M6.5 11h7M6.5 13.8h4.5"/></svg>',
+  perf:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.8l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 13.6l-4.2 2.2.8-4.7-3.4-3.3 4.7-.7z"/></svg>',
   folder:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 5.5a1 1 0 0 1 1-1h4l1.5 2h7.5a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z"/><path d="M6 11h8M6 13.5h5"/></svg>',
   chat:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 4.5h13v9h-7l-4 3v-3h-2z"/><path d="M10 7v3M10 11.8v.2"/></svg>',
   calendar:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="4" width="14" height="13" rx="1.5"/><path d="M3 8h14M7 2.5v3M13 2.5v3M6.5 11h2M11.5 11h2M6.5 14h2"/></svg>',
@@ -1673,6 +1674,7 @@ function currentNav(){
     { id:'weekly-report', label:'Department Weekly Report', icon:'vlog' },
     { id:'leave-plan', label:'Staff Leave Plan', icon:'calendar' },
     { id:'staff-list', label:'Admin Staff', icon:'users' },
+    { id:'performance', label:'Performance Evaluation', icon:'perf' },
     { id:'complaints', label:'Admin Complaints', icon:'chat', badge:cntOf(() => state.complaints.filter(c => (c.status || 'Open') === 'Open').length), tone:'warn', hint:'Complaints not yet looked at' },
     { section:'Documentation' },
     ...DOC_TYPES.map(t => ({ id:'docs-' + t.k, label:t.label, icon:'doc_' + t.k, badge:cntOf(() => state.documents.filter(d => d.type === t.k && (d.status === 'Pending approval' || docAlert(d))).length), tone:'warn', hint:'Pending approval, expiring or overdue' })),
@@ -1872,6 +1874,7 @@ const VEH_COLS = {
   staffDir:         { collection:'fdc_inventory_staff_directory',       label:'staff records', one:'staff record' },
   complaints:       { collection:'fdc_inventory_complaints',            label:'complaints', one:'complaint' },
   documents:        { collection:'fdc_inventory_documents',             label:'documents', one:'document' },
+  evaluations:      { collection:'fdc_inventory_evaluations',           label:'performance evaluations', one:'performance evaluation' },
 };
 const vehRefs = {}, vehUnsubs = {};
 let vehSettingsUnsub = null;
@@ -6620,7 +6623,7 @@ function torRenumber(){ document.querySelectorAll('#tor-secs .tor-sec').forEach(
 function torAddSec(){ document.getElementById('tor-secs').insertAdjacentHTML('beforeend', torSecRow({})); torRenumber(); }
 function torEditor(d, kind){
   const D = torData(d, kind), x = (d && d.extra) || {};
-  const kindBar = `<div class="flex items-center gap-2 mb-1"><span class="text-xs text-slate-500">Type:</span>${TOR_KINDS.map(([k, l]) => `<button type="button" onclick="torSwitchKind('${d ? d.id : ''}', '${k}')" class="px-2.5 py-1 rounded-md text-xs font-semibold ${k === D.kind ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-800'}">${l}</button>`).join('')}<input type="hidden" name="extra.torKind" value="${D.kind}"></div>`;
+  const kindBar = `<div class="flex items-center gap-2 mt-4 mb-1 pt-3 border-t border-slate-100"><span class="text-xs font-semibold text-slate-500">Type:</span>${TOR_KINDS.map(([k, l]) => `<button type="button" onclick="torSwitchKind('${d ? d.id : ''}', '${k}')" class="px-2.5 py-1 rounded-md text-xs font-semibold ${k === D.kind ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-800'}">${l}</button>`).join('')}<input type="hidden" name="extra.torKind" value="${D.kind}"></div>`;
   const common = vGrid(2, vF('Version', 'extra.version', x.version || '') + vF('Next review', 'extra.reviewDate', x.reviewDate || '', 'date'));
   if(D.kind === 'staff') return kindBar + vSec('Reporting and salary') + vGrid(2, vF('Reporting relationship', 'extra.reportingTo', D.reportingTo) + vF('Gross salary', 'extra.grossSalary', D.grossSalary)) +
     vSec('Responsibilities and deliverables') + vTa('One per line (numbered)', 'extra.resp', D.resp, { rows:8 }) + vSec('Employee specifications (qualification and experience)') + vTa('One per line (numbered)', 'extra.spec', D.spec, { rows:3 }) +
@@ -6774,6 +6777,170 @@ function docExportCsv(k){
   const extraCols = k ? docType(k).fields : [];
   downloadCSV((k ? docType(k).plural.replace(/\s+/g, '-').toLowerCase() : 'documentation') + '.csv', ['Type', 'Reference', 'Date', 'Title', 'Department', 'Status', ...(k ? extraCols.map(f => f[1]) : ['Details']), 'Summary', 'Link'],
     list.map(d => [(docType(d.type) || {}).label || d.type, d.refNo, d.date, d.title, d.department, d.status, ...(k ? extraCols.map(f => (d.extra || {})[f[0]] || '') : [docSub(d)]), d.summary, d.link]));
+}
+
+/* =====================================================================
+   PERFORMANCE EVALUATION — core competencies and KPIs for every designation, drawn from its TOR
+   (Designations & TOR in Admin Staff, and the staff TORs under Documentation), and the evaluation of each staff member against them.
+===================================================================== */
+// what a TOR line is about → the competency it needs and how the work is measured
+const PF_RULES = [
+  { k:'marine', rx:/vessel|boat|marine|\bsea\b|captain|crew|anchor|navigat|launch|voyage|mooring|deck/i, comp:['Seamanship & navigation', 'Operates and navigates the vessel safely in all conditions'], kpi:['Voyages / trips completed safely and on schedule', '% of scheduled trips completed on time, no incidents', '≥ 95%'] },
+  { k:'driving', rx:/driv|vehicle|trip|\bcar\b|fleet|transport|passenger|traffic/i, comp:['Safe driving & vehicle handling', 'Operates corporate vehicles safely and within traffic laws'], kpi:['Trips completed as assigned', '% of assigned trips completed on time', '≥ 95%'] },
+  { k:'safety', rx:/safe|traffic law|regulat|complian|hazard|accident|emergency|first aid|ppe/i, comp:['Safety & compliance', 'Follows laws, regulations and safety rules at all times'], kpi:['Safety incidents and violations', 'Number of accidents, fines or safety breaches', '0'] },
+  { k:'maintenance', rx:/maint|inspect|servic|repair|fault|damage|\boil\b|tyre|tire|battery|engine|breakdown|roadworth/i, comp:['Preventive maintenance & inspection', 'Inspects equipment regularly and reports faults promptly'], kpi:['Inspections and servicing done to schedule', '% of weekly inspections / scheduled services completed', '100%'] },
+  { k:'cleaning', rx:/clean|hygien|tidy|wash|housekeep/i, comp:['Cleanliness & upkeep', 'Keeps assigned assets and areas clean and presentable'], kpi:['Cleanliness standard maintained', '% of cleanliness checks passed', '≥ 95%'] },
+  { k:'records', rx:/\blog|record|report|checklist|document|filing|register|data entry|minutes/i, comp:['Record keeping & reporting', 'Keeps accurate, complete and timely records'], kpi:['Logs, records and reports on time', '% of logs / reports submitted complete and on time', '100%'] },
+  { k:'fuel', rx:/fuel|refuel/i, comp:['Fuel management', 'Keeps the vehicle fuelled and refuels according to the SOP'], kpi:['Fuel managed per SOP', '% of refuels recorded per SOP; no trips missed for lack of fuel', '100%'] },
+  { k:'cost', rx:/cost|budget|expens|payment|invoice|financ|petty|cash|account|price/i, comp:['Resource & cost management', 'Uses fuel, money and materials responsibly and within budget'], kpi:['Costs within budget and accounted for', 'Variance from budget; records reconciled', '≤ 5% variance'] },
+  { k:'deadlines', rx:/renew|expir|deadline|insurance|annual fee|licen[cs]e|permit|due date/i, comp:['Planning & deadline management', 'Tracks due dates and completes renewals in time'], kpi:['Renewals and deadlines met', '% of renewals / submissions completed before the due date', '100%'] },
+  { k:'coordination', rx:/coordinat|liais|communicat|stakeholder|relevant department|correspond|meeting|follow up/i, comp:['Communication & coordination', 'Communicates clearly and coordinates with other departments'], kpi:['Requests coordinated within agreed time', '% of requests / follow-ups closed within the agreed time', '≥ 90%'] },
+  { k:'supervision', rx:/\bsupervis(e|es|ing)\b|supervision of|\blead(s)?\b|\bteam\b|subordinat|mentor|delegat|oversee|\btrain(ing)? (the )?(staff|team)|direct(s)? (the )?(staff|team|work)/i, comp:['Leadership & supervision', 'Plans, assigns and checks the work of the team'], kpi:['Team targets achieved', '% of team tasks / targets completed on time', '≥ 90%'] },
+  { k:'stock', rx:/procure|purchas|stock|inventor|asset|store|supply|supplies|vendor|quotation/i, comp:['Inventory & procurement', 'Keeps stock and assets accounted for; buys on time'], kpi:['Stock and asset accuracy', 'Discrepancies found in stock / asset checks', '0'] },
+  { k:'customer', rx:/customer|client|guest|visitor|public|complain|tenant|resident/i, comp:['Customer service', 'Treats customers and colleagues courteously and responds promptly'], kpi:['Service complaints', 'Number of valid complaints received', '≤ 1 per quarter'] },
+  { k:'planning', rx:/\bplan|strateg|develop|implement|improve|project|initiativ|program/i, comp:['Planning & organisation', 'Plans work ahead and delivers assignments as agreed'], kpi:['Assignments delivered on time', '% of assigned tasks / projects completed by the due date', '≥ 90%'] },
+  { k:'policy', rx:/polic|procedure|\bsop\b|standard operating|guideline|circular/i, comp:['Adherence to policies & SOPs', 'Works according to corporation policies and procedures'], kpi:['Policy / SOP compliance', 'Audit or supervisor findings of non-compliance', '0'] },
+  { k:'it', rx:/system|software|computer|excel|database|\bit\b|digital|online|email/i, comp:['IT proficiency', 'Uses the systems and tools of the job effectively'], kpi:['System records up to date', '% of entries made in the system on time', '100%'] },
+  { k:'availability', rx:/shift|odd hours|on call|punctual|attendance|time management|overtime|availab/i, comp:['Reliability & punctuality', 'Is on time and available for assigned duties and shifts'], kpi:['Punctuality', 'Late sign-ins / early sign-outs in the period (Staff Leave Plan)', '≤ 2 per month'] } ];
+const PF_BASE = [['Integrity & professionalism', 'Acts honestly, respects confidentiality and represents the corporation well'], ['Teamwork', 'Works cooperatively with colleagues and supports the team']];
+const PF_LEAD = [['Decision making', 'Makes sound, timely decisions within authority'], ['People development', 'Coaches staff and builds the capability of the team']];
+const PF_LEVEL_LEAD = /general manager|assistant manager|director|head|manager|chief|senior/i;
+const PF_RATINGS = [[4.5, 'Outstanding'], [3.5, 'Exceeds expectations'], [2.5, 'Meets expectations'], [1.5, 'Needs improvement'], [0, 'Unsatisfactory']];
+const pfRating = s => s ? (PF_RATINGS.find(r => s >= r[0]) || PF_RATINGS[4])[1] : '';
+const pfSpecs = () => vehSettings.perfSpec || {};
+const pfKey = n => String(n || '').trim().toLowerCase();
+const pfSpecOf = name => pfSpecs()[pfKey(name)] || null;
+// every TOR line we know for a designation: its TOR in Admin Staff and staff TORs with the same post
+function pfTorLines(name){
+  const k = pfKey(name), out = { resp:[], skills:[], src:[] }, clean = s => String(s || '').split('\n').map(l => l.trim().replace(/^(\d+[.)]|[-•*]|[a-z][.)])\s*/i, '')).filter(l => l.length > 3);
+  const d = sdDesigs().find(x => pfKey(x.name) === k); if(d && d.tor){ out.resp.push(...clean(d.tor)); out.src.push('Designations & TOR'); }
+  state.documents.filter(x => x.type === 'tor' && (x.extra || {}).torKind !== 'service' && (pfKey(x.title) === k || pfKey((x.extra || {}).designation) === k)).forEach(x => { const e = x.extra || {}; out.resp.push(...clean(e.resp)); out.skills.push(...clean(e.skills), ...clean(e.spec)); out.src.push('TOR ' + (x.title || '')); });
+  out.resp = [...new Set(out.resp)]; out.skills = [...new Set(out.skills)]; return out;
+}
+// the competencies and KPIs a TOR points to (to be checked and adjusted by an admin)
+function pfGenerate(name, level){
+  const L = pfTorLines(name), all = L.resp.concat(L.skills), hit = {};
+  L.resp.forEach(line => PF_RULES.forEach(r => { if(r.rx.test(line)) (hit[r.k] = hit[r.k] || { r, lines:[] }).lines.push(line); }));
+  L.skills.forEach(line => PF_RULES.forEach(r => { if(r.rx.test(line)) (hit[r.k] = hit[r.k] || { r, lines:[] }); }));
+  const order = Object.values(hit).sort((a, b) => b.lines.length - a.lines.length);
+  const comps = []; const addC = (n, d) => { if(!comps.some(c => pfKey(c.name) === pfKey(n))) comps.push({ name:n, desc:d }); };
+  order.slice(0, 7).forEach(h => addC(h.r.comp[0], h.r.comp[1]));
+  PF_BASE.forEach(c => addC(c[0], c[1])); if(PF_LEVEL_LEAD.test((level || '') + ' ' + name)) PF_LEAD.forEach(c => addC(c[0], c[1]));
+  const kpis = [];
+  order.filter(h => h.lines.length).forEach(h => { const line = h.lines[0], short = line.replace(/\s*[,;(].*$/, '').replace(/\.$/, ''); kpis.push({ kpi:h.r.kpi[0], measure:h.r.kpi[1], target:h.r.kpi[2], from:short.length > 90 ? short.slice(0, 88) + '…' : short }); });
+  // responsibilities no rule matched still get a KPI of their own
+  L.resp.filter(l => !PF_RULES.some(r => r.rx.test(l))).slice(0, 3).forEach(l => { const s = l.replace(/\.$/, ''); kpis.push({ kpi:s.length > 70 ? s.slice(0, 68) + '…' : s, measure:'Supervisor assessment of quality and timeliness', target:'Meets the standard', from:s }); });
+  const top = kpis.slice(0, 10), w = top.length ? Math.floor(100 / top.length) : 0;
+  top.forEach((k, i) => { k.weight = i === top.length - 1 ? 100 - w * (top.length - 1) : w; });
+  return { competencies:comps.slice(0, 11), kpis:top, sources:L.src, generatedAt:Date.now(), lines:all.length };
+}
+function pfDesignations(){
+  const names = new Map(); const add = (n, level) => { const k = pfKey(n); if(k && !names.has(k)) names.set(k, { name:String(n).trim(), level:level || '' }); };
+  sdDesigs().forEach(d => add(d.name, d.level)); sdAll().forEach(p => add(p.designation, p.level));
+  state.documents.filter(x => x.type === 'tor' && (x.extra || {}).torKind !== 'service').forEach(x => add(x.title, sdLevelFor(x.title)));
+  Object.keys(pfSpecs()).forEach(k => add(pfSpecs()[k].name || k));
+  return [...names.values()].sort((a, b) => (sdLevels().indexOf(a.level) + 1 || 99) - (sdLevels().indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name));
+}
+async function pfSaveSpecs(map){ vehSettings = Object.assign({}, vehSettings, { perfSpec:map }); await persistVehSettings(); }
+async function pfGenerateAll(onlyMissing){
+  if(!vehRequireAdmin('set competencies and KPIs')) return;
+  const map = Object.assign({}, pfSpecs()); let n = 0, none = [];
+  pfDesignations().forEach(d => { const k = pfKey(d.name); if(onlyMissing && map[k]) return; const g = pfGenerate(d.name, d.level); if(!g.lines){ none.push(d.name); return; } map[k] = Object.assign({ name:d.name }, g); n++; });
+  await pfSaveSpecs(map); rerenderMain(); toast(n + ' designation' + (n === 1 ? '' : 's') + ' updated from their TOR.' + (none.length ? ' No TOR text for: ' + none.slice(0, 4).join(', ') + (none.length > 4 ? '…' : '') + ' — add it under Admin Staff → Designations & TOR.' : ''));
+}
+// evaluations: one per staff member and period
+const pfPeriods = y => [String(y), y + ' H1', y + ' H2'];
+const pfPeriodRange = p => { const m = /^(\d{4})(?: H([12]))?$/.exec(p || ''); if(!m) return null; return m[2] ? (m[2] === '1' ? [m[1] + '-01-01', m[1] + '-06-30'] : [m[1] + '-07-01', m[1] + '-12-31']) : [m[1] + '-01-01', m[1] + '-12-31']; };
+const pfEval = (key, period) => state.evaluations.find(e => e.staffKey === key && e.period === period) || null;
+function pfScore(e){
+  const ks = (e.kpis || []).filter(k => +k.score > 0), cs = (e.comps || []).filter(c => +c.score > 0);
+  const kw = ks.reduce((a, k) => a + (+k.weight || 1), 0), ksc = kw ? ks.reduce((a, k) => a + (+k.score) * (+k.weight || 1), 0) / kw : 0, csc = cs.length ? cs.reduce((a, c) => a + (+c.score), 0) / cs.length : 0;
+  const total = ksc && csc ? ksc * 0.7 + csc * 0.3 : ksc || csc;
+  return { kpi:Math.round(ksc * 100) / 100, comp:Math.round(csc * 100) / 100, total:Math.round(total * 100) / 100 };
+}
+function pfLateCount(key, period){ const r = pfPeriodRange(period); if(!r) return null; let late = 0, early = 0; for(let d = r[0]; d <= r[1]; d = clIsoAdd(d, 1)){ const a = lvAttOf(key, d); if(a.late) late++; if(a.early) early++; } return { late, early }; }
+function viewPerformance(){
+  const tab = vehUi.pfTab || 'eval', admin = canManageInventory();
+  const tabs = vTabs([['eval', 'Evaluations'], ['spec', 'Competencies & KPIs']], tab, 'pfSetTab');
+  return vHead('Performance Evaluation', 'Core competencies and KPIs for each designation, taken from its TOR, and each staff member’s evaluation against them.', '') + `<div class="mb-5">${tabs}</div>` + (tab === 'spec' ? pfSpecView(admin) : pfEvalView(admin));
+}
+function pfSetTab(t){ vehUi.pfTab = t; rerenderMain(); }
+function pfSpecView(admin){
+  const ds = pfDesignations(), specs = pfSpecs(), staffN = n => sdAll().filter(p => pfKey(p.designation) === pfKey(n)).length;
+  const missing = ds.filter(d => !specs[pfKey(d.name)]).length;
+  const card = d => { const s = specs[pfKey(d.name)], L = pfTorLines(d.name);
+    return `<div class="bg-white rounded-xl border border-slate-200 p-5"><div class="flex items-start justify-between gap-3 flex-wrap mb-3"><div><div class="text-base font-bold text-slate-900">${esc(d.name)}</div><div class="text-xs text-slate-400">${esc(d.level || 'Level not set')} · ${staffN(d.name)} staff · ${L.src.length ? 'TOR: ' + esc(L.src.join(', ')) : '<span class="text-amber-600">no TOR text yet</span>'}</div></div>
+      ${admin ? `<div class="flex gap-3">${L.src.length ? `<button onclick="pfRegen('${esc(d.name).replace(/'/g, '&#39;')}')" class="text-xs font-semibold text-brand-600 hover:underline">${s ? 'Regenerate from TOR' : 'Generate from TOR'}</button>` : ''}<button onclick="openPfSpec('${esc(d.name).replace(/'/g, '&#39;')}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button></div>` : ''}</div>
+      ${!s ? `<div class="text-sm text-slate-400">No competencies or KPIs yet.</div>` : `<div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">Core competencies</div><div class="flex flex-wrap gap-1.5 mb-4">${s.competencies.map(c => `<span title="${esc(c.desc || '')}" class="px-2 py-1 rounded-md bg-slate-100 text-[12px] font-semibold text-slate-700">${esc(c.name)}</span>`).join('')}</div>
+        <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">KPIs</div><div class="overflow-x-auto"><table class="w-full text-[13px]"><thead><tr class="text-left text-[10.5px] uppercase tracking-wide text-slate-400"><th class="py-1 pr-3">KPI</th><th class="py-1 pr-3">Measure</th><th class="py-1 pr-3">Target</th><th class="py-1 text-right">Weight</th></tr></thead><tbody>${s.kpis.map(k => `<tr class="border-t border-slate-100 align-top"><td class="py-1.5 pr-3 font-semibold text-slate-800">${esc(k.kpi)}${k.from ? `<div class="text-[11px] font-normal text-slate-400">TOR: ${esc(k.from)}</div>` : ''}</td><td class="py-1.5 pr-3 text-slate-600">${esc(k.measure || '')}</td><td class="py-1.5 pr-3 whitespace-nowrap">${esc(k.target || '')}</td><td class="py-1.5 text-right num">${k.weight || 0}%</td></tr>`).join('')}</tbody></table></div>`}</div>`; };
+  return (admin ? `<div class="flex flex-wrap items-center gap-3 mb-5"><button onclick="pfGenerateAll(true)" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700">Generate for designations without KPIs${missing ? ' (' + missing + ')' : ''}</button><button onclick="if(confirm('Replace the competencies and KPIs of every designation that has TOR text with a fresh set from its TOR? Edits made by hand are lost.')) pfGenerateAll(false)" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Regenerate all from TOR</button><span class="text-xs text-slate-400">Taken from each designation’s TOR (Admin Staff → Designations & TOR, and Staff TORs under Documentation). Check and adjust them before evaluating.</span></div>` : '') +
+    (ds.length ? `<div class="space-y-4">${ds.map(card).join('')}</div>` : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No designations yet. Add them under Admin Staff → Designations & TOR.')}</div>`);
+}
+async function pfRegen(name){ if(!vehRequireAdmin('set competencies and KPIs')) return; const d = pfDesignations().find(x => pfKey(x.name) === pfKey(name)) || { name }; const map = Object.assign({}, pfSpecs()); map[pfKey(name)] = Object.assign({ name:d.name }, pfGenerate(d.name, d.level)); await pfSaveSpecs(map); rerenderMain(); toast('Competencies and KPIs for ' + d.name + ' taken from its TOR.'); }
+function openPfSpec(name){
+  if(!vehRequireAdmin('set competencies and KPIs')) return;
+  const s = pfSpecOf(name) || { competencies:PF_BASE.map(c => ({ name:c[0], desc:c[1] })), kpis:[] };
+  const crow = c => `<div class="pf-c grid grid-cols-[14rem_1fr_auto] gap-2"><input value="${esc(c.name || '')}" placeholder="Competency" class="pf-cn ${VEH_FIELD} !py-1.5 font-semibold"><input value="${esc(c.desc || '')}" placeholder="What it looks like" class="pf-cd ${VEH_FIELD} !py-1.5"><button type="button" onclick="this.parentElement.remove()" class="text-slate-400 hover:text-rose-600 px-1 text-lg">×</button></div>`;
+  const krow = k => `<div class="pf-k grid grid-cols-[1fr_1fr_7rem_4.5rem_auto] gap-2"><input value="${esc(k.kpi || '')}" placeholder="KPI" class="pf-kk ${VEH_FIELD} !py-1.5 font-semibold"><input value="${esc(k.measure || '')}" placeholder="How it is measured" class="pf-km ${VEH_FIELD} !py-1.5"><input value="${esc(k.target || '')}" placeholder="Target" class="pf-kt ${VEH_FIELD} !py-1.5"><input type="number" min="0" max="100" value="${esc(k.weight || '')}" placeholder="%" class="pf-kw ${VEH_FIELD} !py-1.5"><button type="button" onclick="this.parentElement.remove()" class="text-slate-400 hover:text-rose-600 px-1 text-lg">×</button><input type="hidden" class="pf-kf" value="${esc(k.from || '')}"></div>`;
+  window.__pfC = crow; window.__pfK = krow;
+  openModal('Competencies & KPIs — ' + name, vFormOpen + vSec('Core competencies') + `<div id="pf-cs" class="space-y-2">${s.competencies.map(crow).join('')}</div><button type="button" onclick="document.getElementById('pf-cs').insertAdjacentHTML('beforeend', window.__pfC({}))" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ Competency</button>` +
+    vSec('KPIs (weights add up to 100%)') + `<div class="overflow-x-auto"><div id="pf-ks" class="space-y-2 min-w-[40rem]">${s.kpis.map(krow).join('')}</div></div><button type="button" onclick="document.getElementById('pf-ks').insertAdjacentHTML('beforeend', window.__pfK({}))" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ KPI</button>` +
+    vFoot('Save', `savePfSpec('${esc(name).replace(/'/g, '&#39;')}')`), true);
+}
+async function savePfSpec(name){
+  const comps = [...document.querySelectorAll('#pf-cs .pf-c')].map(r => ({ name:r.querySelector('.pf-cn').value.trim(), desc:r.querySelector('.pf-cd').value.trim() })).filter(c => c.name);
+  const kpis = [...document.querySelectorAll('#pf-ks .pf-k')].map(r => ({ kpi:r.querySelector('.pf-kk').value.trim(), measure:r.querySelector('.pf-km').value.trim(), target:r.querySelector('.pf-kt').value.trim(), weight:Math.round(vNum(r.querySelector('.pf-kw').value)), from:r.querySelector('.pf-kf').value })).filter(k => k.kpi);
+  const tw = kpis.reduce((a, k) => a + k.weight, 0); if(kpis.length && tw !== 100) return vFail('The KPI weights add up to ' + tw + '%. Make them 100%.');
+  const map = Object.assign({}, pfSpecs()), old = map[pfKey(name)] || {}; map[pfKey(name)] = Object.assign({}, old, { name, competencies:comps, kpis, editedAt:Date.now(), editedBy:authUser ? authUser.name : '' });
+  await pfSaveSpecs(map); closeModal(); rerenderMain(); toast('Saved.');
+}
+function pfEvalView(admin){
+  const y = +(vehUi.pfYear || vToday().slice(0, 4)), period = vehUi.pfPeriod || String(y), me = authUser ? 'u:' + authUser.uid : '';
+  const staff = sdAll().filter(p => admin || p.key === me), groups = sdLevels().concat(['Not set']).map(L => [L, staff.filter(p => (L === 'Not set' ? !sdLevels().includes(p.level) : p.level === L))]).filter(g => g[1].length);
+  const evs = staff.map(p => pfEval(p.key, period)).filter(Boolean), done = evs.filter(e => e.status !== 'Draft');
+  const avg = done.length ? Math.round(done.reduce((a, e) => a + pfScore(e).total, 0) / done.length * 100) / 100 : 0;
+  const kpis = vKpis(statCard('Staff', fmtNum(staff.length), 'to evaluate for ' + period, 'brand') + statCard('Evaluated', fmtNum(done.length), fmtNum(evs.length - done.length) + ' in draft', done.length === staff.length && staff.length ? 'emerald' : 'amber') +
+    statCard('Average score', avg ? avg.toFixed(2) + ' / 5' : '—', pfRating(avg) || 'No submitted evaluations yet', 'slate') + statCard('Without KPIs', fmtNum(staff.filter(p => !(pfSpecOf(p.designation) || {}).kpis || !pfSpecOf(p.designation).kpis.length).length), 'Designations to set up under Competencies & KPIs', staff.some(p => !pfSpecOf(p.designation)) ? 'amber' : 'slate'));
+  const per = pfPeriods(y).map(p => [p, p.includes('H') ? p.slice(5) === 'H1' ? 'Jan – Jun' : 'Jul – Dec' : 'Full year']);
+  const row = p => { const e = pfEval(p.key, period), sc = e ? pfScore(e) : null, spec = pfSpecOf(p.designation);
+    return `<tr class="${vTr} cursor-pointer" onclick="openPfEval('${esc(p.key)}', '${period}')">${vTd(`<div class="font-semibold text-slate-800">${esc(p.name)}</div><div class="text-[11px] text-slate-400">${esc(p.department || '')}</div>`, { first:1 })}${vTd(esc(p.designation || '—') + (spec ? '' : ' <span class="text-[11px] text-amber-600">no KPIs</span>'))}
+      ${vTd(e ? vPill(e.status === 'Reviewed' ? 'good' : e.status === 'Submitted' ? 'acc' : 'warn', esc(e.status || 'Draft')) : '<span class="text-xs text-slate-400">Not started</span>')}${vTd(sc && sc.total ? `<b class="num">${sc.total.toFixed(2)}</b><div class="text-[11px] text-slate-400">${pfRating(sc.total)}</div>` : '—', { last:1 })}</tr>`; };
+  return `<div class="flex flex-wrap items-center gap-3 mb-5"><select onchange="vehUi.pfYear=this.value; vehUi.pfPeriod=this.value; rerenderMain()" class="${VEH_INPUT}">${[y + 1, y, y - 1, y - 2].map(v => `<option ${v === y ? 'selected' : ''}>${v}</option>`).join('')}</select>${vTabs(per, period, 'pfSetPeriod')}${admin ? `<button onclick="pfExportCsv('${period}')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 ml-auto">Export CSV</button>` : ''}</div>` + kpis +
+    (groups.length ? groups.map(([L, ps]) => `<div class="flex items-baseline gap-2 mb-2"><h2 class="text-sm font-bold text-slate-900">${esc(L)}</h2><span class="text-xs text-slate-400">${ps.length}</span></div>` + vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Staff' }, { t:'Designation' }, { t:'Status' }, { t:'Score' }])}<tbody>${ps.map(row).join('')}</tbody></table>`)).join('') : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No staff.')}</div>`);
+}
+function pfSetPeriod(p){ vehUi.pfPeriod = p; rerenderMain(); }
+function openPfEval(key, period){
+  const p = sdPerson(key), e = pfEval(key, period), admin = canManageInventory(), spec = pfSpecOf(p.designation), ro = !admin;
+  if(!e && !admin){ toast('Your evaluation for ' + period + ' has not been started.', true); return; }
+  if(!e && !spec){ toast('Set the competencies and KPIs for ' + (p.designation || 'this designation') + ' first (Competencies & KPIs).', true); vehUi.pfTab = 'spec'; rerenderMain(); return; }
+  const kp = e ? e.kpis : spec.kpis.map(k => Object.assign({}, k, { actual:'', score:'', comment:'' })), cp = e ? e.comps : spec.competencies.map(c => ({ name:c.name, desc:c.desc, score:'', comment:'' }));
+  const att = pfLateCount(key, period), sel = (cls, v) => `<select class="${cls} ${VEH_FIELD} !py-1.5 bg-white" ${ro ? 'disabled' : ''} onchange="pfLive()"><option value="">—</option>${[5, 4, 3, 2, 1].map(n => `<option value="${n}" ${+v === n ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+  const krow = (k, i) => `<tr class="pf-er border-t border-slate-100 align-top" data-w="${+k.weight || 0}"><td class="py-2 pr-2"><div class="font-semibold text-slate-800 text-[13px]">${esc(k.kpi)}</div><div class="text-[11px] text-slate-400">${esc(k.measure || '')}${k.target ? ' · target ' + esc(k.target) : ''} · ${+k.weight || 0}%</div>${/punctual/i.test(k.kpi) && att ? `<div class="text-[11px] text-brand-600 mt-0.5">Leave plan: ${att.late} late sign-in${att.late === 1 ? '' : 's'}, ${att.early} early sign-out${att.early === 1 ? '' : 's'} in ${esc(period)}</div>` : ''}</td><td class="py-2 pr-2 w-28"><input class="pf-ea ${VEH_FIELD} !py-1.5" value="${esc(k.actual || '')}" placeholder="Actual" ${ro ? 'disabled' : ''}></td><td class="py-2 pr-2 w-20">${sel('pf-es', k.score)}</td><td class="py-2"><input class="pf-ec ${VEH_FIELD} !py-1.5" value="${esc(k.comment || '')}" placeholder="Comment" ${ro ? 'disabled' : ''}></td></tr>`;
+  const crow = c => `<tr class="pf-cr border-t border-slate-100 align-top"><td class="py-2 pr-2"><div class="font-semibold text-slate-800 text-[13px]">${esc(c.name)}</div><div class="text-[11px] text-slate-400">${esc(c.desc || '')}</div></td><td class="py-2 pr-2 w-20">${sel('pf-cs2', c.score)}</td><td class="py-2"><input class="pf-cc ${VEH_FIELD} !py-1.5" value="${esc(c.comment || '')}" placeholder="Comment" ${ro ? 'disabled' : ''}></td></tr>`;
+  window.__pfEval = { key, period, kp, cp };
+  openModal('Evaluation — ' + p.name + ' · ' + period, vFormOpen + `<div class="text-sm text-slate-500 mb-3">${esc(p.designation || '')}${p.department ? ' · ' + esc(p.department) : ''} · scores 1 (unsatisfactory) to 5 (outstanding). KPIs count 70%, competencies 30%.</div>` +
+    vSec('KPIs') + `<div class="overflow-x-auto"><table class="w-full min-w-[40rem]"><thead><tr class="text-left text-[10.5px] uppercase tracking-wide text-slate-400"><th class="pb-1">KPI</th><th class="pb-1">Actual</th><th class="pb-1">Score</th><th class="pb-1">Comment</th></tr></thead><tbody>${kp.map(krow).join('')}</tbody></table></div>` +
+    vSec('Core competencies') + `<div class="overflow-x-auto"><table class="w-full min-w-[34rem]"><tbody>${cp.map(crow).join('')}</tbody></table></div>` +
+    `<div id="pf-live" class="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm"></div>` +
+    vSec('Overall') + vGrid(2, vTa('Strengths', 'strengths', e ? e.strengths : '', { rows:2 }) + vTa('Areas for improvement / development plan', 'improve', e ? e.improve : '', { rows:2 }) + vF('Evaluated by', 'evaluator', e ? e.evaluator : (authUser ? authUser.name : ''), 'text', { attrs:ro ? ' disabled' : '' }) + vS('Status', 'status', ['Draft', 'Submitted', 'Reviewed'], e ? e.status : 'Draft', null, { attrs:ro ? ' disabled' : '' })) +
+    (ro ? '' : vFoot('Save', `savePfEval()`, e ? `deletePfEval('${e.id}')` : '')), true);
+  pfLive();
+}
+function pfReadEval(){ const kr = [...document.querySelectorAll('.pf-er')], cr = [...document.querySelectorAll('.pf-cr')], P = window.__pfEval;
+  return { kpis:P.kp.map((k, i) => ({ kpi:k.kpi, measure:k.measure || '', target:k.target || '', weight:+k.weight || 0, actual:kr[i].querySelector('.pf-ea').value.trim(), score:+kr[i].querySelector('.pf-es').value || 0, comment:kr[i].querySelector('.pf-ec').value.trim() })),
+    comps:P.cp.map((c, i) => ({ name:c.name, desc:c.desc || '', score:+cr[i].querySelector('.pf-cs2').value || 0, comment:cr[i].querySelector('.pf-cc').value.trim() })) }; }
+function pfLive(){ const el = document.getElementById('pf-live'); if(!el || !window.__pfEval) return; const s = pfScore(pfReadEval()); el.innerHTML = s.total ? `KPIs <b>${s.kpi.toFixed(2)}</b> · Competencies <b>${s.comp.toFixed(2)}</b> · Overall <b class="text-base">${s.total.toFixed(2)} / 5</b> — <b>${pfRating(s.total)}</b>` : '<span class="text-slate-400">Score the KPIs and competencies to see the overall rating.</span>'; }
+async function savePfEval(){
+  const P = window.__pfEval, o = vehFormObj(document.getElementById('vform')), r = pfReadEval(), p = sdPerson(P.key), e = pfEval(P.key, P.period);
+  if(o.status !== 'Draft' && (r.kpis.some(k => !k.score) || r.comps.some(c => !c.score))) return vFail('Score every KPI and competency before submitting (or keep it as Draft).');
+  const rec = Object.assign({ id:e ? e.id : undefined, staffKey:P.key, name:p.name, designation:p.designation, department:p.department, period:P.period, status:o.status || 'Draft', evaluator:String(o.evaluator || '').trim(), strengths:String(o.strengths || '').trim(), improve:String(o.improve || '').trim() }, r);
+  rec.score = pfScore(rec).total; rec.rating = pfRating(rec.score);
+  await vehSave('evaluations', rec); closeModal(); rerenderMain(); toast('Evaluation saved.');
+}
+function deletePfEval(id){ if(!vehRequireAdmin('delete evaluations')) return; closeModal(); confirmAction('Delete this evaluation?', async () => { await vehDelete('evaluations', id); rerenderMain(); toast('Deleted.'); }); }
+function pfExportCsv(period){
+  const rows = []; state.evaluations.filter(e => e.period === period).forEach(e => { const s = pfScore(e); rows.push([e.name, e.designation, e.department, e.period, e.status, s.kpi, s.comp, s.total, pfRating(s.total), e.evaluator, e.strengths, e.improve]); });
+  downloadCSV('performance-evaluations-' + period.replace(/\s+/g, '-') + '.csv', ['Staff', 'Designation', 'Department', 'Period', 'Status', 'KPI score', 'Competency score', 'Overall', 'Rating', 'Evaluated by', 'Strengths', 'Areas for improvement'], rows);
 }
 
 /* =====================================================================
@@ -8854,6 +9021,7 @@ function render(){
     else if(ui.tab==='leave-plan') el.innerHTML = viewLeavePlan();
     else if(ui.tab==='staff-list') el.innerHTML = viewStaffList();
     else if(ui.tab==='complaints') el.innerHTML = viewComplaints();
+    else if(ui.tab==='performance') el.innerHTML = viewPerformance();
     else if(ui.tab==='docs' || String(ui.tab).startsWith('docs-')) el.innerHTML = viewDocs(ui.tab === 'docs' ? '' : ui.tab.slice(5));
     else if(ui.tab==='vehicle-reports') el.innerHTML = viewVehicleReports();
     else if(ui.tab==='locations') el.innerHTML = viewLocations();

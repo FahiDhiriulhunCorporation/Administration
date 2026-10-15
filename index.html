@@ -6678,7 +6678,7 @@ function openDocEdit(id, k, torK){
   if(!t){ openModal('New document — choose the kind', pick, true); return; }
   openModal((d ? 'Edit ' : 'New ') + t.label, vFormOpen +
     `<datalist id="doc-people">${sdAll().map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist><datalist id="doc-depts">${DEPARTMENTS.map(z => `<option value="${esc(z.name)}"></option>`).join('')}</datalist><datalist id="doc-desigs">${sdDesigs().map(z => `<option value="${esc(z.name)}"></option>`).join('')}</datalist><datalist id="doc-srf">${DOC_SRF.map(z => `<option value="${esc(z)}"></option>`).join('')}</datalist>` +
-    vGrid(2, vF(k === 'exco' ? 'Exco paper no.' : 'Reference number', 'refNo', d ? d.refNo : docNextNo(k), 'text', { req:1 }) + vF('Date', 'date', d ? d.date : vToday(), 'date', { req:1 }) +
+    vGrid(2, (k === 'tor' ? '' : vF(k === 'exco' ? 'Exco paper no.' : 'Reference number', 'refNo', d ? d.refNo : docNextNo(k), 'text', { req:1 }) + vF('Date', 'date', d ? d.date : vToday(), 'date', { req:1 })) +      // a TOR is a reusable sample: numbered and dated in the register only
       vF(k === 'minutes' ? 'Meeting' : k === 'srf' ? 'Job title' : k === 'tor' ? (torK === 'staff' ? 'Post' : 'Title (the service, e.g. Corporate Vehicle Servicing – Motorcycles, Vans & Pick-Up)') : 'Title / subject', 'title', d ? d.title : '', 'text', { req:1, span:'sm:col-span-2' }) +
       `<div><label class="${VEH_LBL}">Department</label><input name="department" list="doc-depts" value="${esc(d ? d.department || '' : me.department || '')}" class="${VEH_FIELD}"></div>` + vS('Status', 'status', DOC_STATUS, d ? d.status || 'Draft' : 'Draft')) +
     (k === 'tor' ? torEditor(d, torK) + vSec('File')
@@ -6697,6 +6697,7 @@ function openDocEdit(id, k, torK){
 }
 async function saveDoc(id, k){
   const o = vehFormObj(document.getElementById('vform')), t = docType(k); if(!t) return;
+  if(k === 'tor'){ const old0 = id ? docById(id) : null; o.refNo = (old0 && old0.refNo) || docNextNo('tor'); o.date = (old0 && old0.date) || vToday(); }
   const refNo = String(o.refNo || '').trim(); if(!refNo) return vFail('Enter the reference number.'); if(/\/$/.test(refNo)) return vFail('Complete the reference number (it ends with the running number).');
   if(!String(o.title || '').trim()) return vFail('Enter the title.'); if(!o.date) return vFail('Enter the date.');
   const dup = state.documents.find(d => d.id !== id && d.type === k && String(d.refNo || '').trim().toLowerCase() === refNo.toLowerCase()); if(dup) return vFail(refNo + ' is already used for "' + (dup.title || '') + '".');

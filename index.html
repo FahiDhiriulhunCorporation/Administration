@@ -451,7 +451,7 @@ function refreshAppearanceModal(){
   <!-- Sidebar -->
   <aside id="sidebar" style="width:18rem" class="fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 left-0 w-72 shrink-0 app-chrome text-slate-200 flex flex-col z-40 -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-out">
     <div class="px-4 py-5 border-b border-white/10 flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2.5 min-w-0"><img data-logo alt="" class="w-9 h-9 rounded-lg shrink-0"><div id="app-title" class="text-[16px] font-extrabold tracking-tight text-white whitespace-nowrap">Administration</div></div>
+      <div class="flex items-center gap-2.5 min-w-0"><img data-logo alt="" class="w-9 h-9 rounded-lg shrink-0"><div id="app-title" style="cursor:default;-webkit-user-select:none;user-select:none" class="text-[16px] font-extrabold tracking-tight text-white whitespace-nowrap">Administration</div></div>
       <div class="flex items-center gap-0.5"><button onclick="gsOpen()" title="Search everything (Ctrl+K)" aria-label="Search" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17" stroke-linecap="round"/></svg></button><button onclick="ntToggle(this)" title="Notifications" aria-label="Notifications" class="nt-btn relative w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M5 8.5a5 5 0 0 1 10 0c0 4 1.5 5.5 1.5 5.5h-13S5 12.5 5 8.5Z"/><path d="M8.3 16.5a1.8 1.8 0 0 0 3.4 0" stroke-linecap="round"/></svg><span class="nt-badge absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9.5px] font-bold leading-4 text-center" style="display:none">0</span></button>
       <button onclick="openAppearanceModal()" id="theme-toggle-btn" title="Appearance: light/dark mode and colour scheme" aria-label="Appearance" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white">
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path stroke-linejoin="round" d="M10 2.5a7.5 7.5 0 0 0 0 15c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.5 1.6-1.5h1.8a3.3 3.3 0 0 0 3.3-3.3C17.5 5.5 14.1 2.5 10 2.5z"/><circle cx="6.3" cy="9.3" r="1" fill="currentColor" stroke="none"/><circle cx="8.6" cy="6.1" r="1" fill="currentColor" stroke="none"/><circle cx="12.4" cy="6.1" r="1" fill="currentColor" stroke="none"/></svg>
@@ -1615,23 +1615,55 @@ function loadScriptOnce(src){
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+
 /* =====================================================================
-   ASSETS — PDF fonts, letterhead images and Word/Excel templates live in assets.js (next to index.html),
+   UPDATES — the installed app and open tabs notice when a newer index.html is on the website
+===================================================================== */
+const APP_BUILD = '3.26.172';                 // version: redesigns . year . workflow runs
+let updLast = 0;
+async function updCheck(force){
+  if(!navigator.onLine || location.protocol === 'file:') return;
+  if(!force && Date.now() - updLast < 20 * 60000) return; updLast = Date.now();
+  try{
+    const t = await fetch(location.pathname + '?u=' + Date.now(), { cache:'no-store' }).then(r => r.ok ? r.text() : '');
+    const m = /const APP_BUILD = '([^']+)'/.exec(t);
+    if(m && m[1] !== APP_BUILD) updBanner();
+  }catch(e){}
+}
+function updBanner(){
+  if(document.getElementById('upd-bar')) return;
+  const b = document.createElement('div'); b.id = 'upd-bar';
+  b.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9997;display:flex;align-items:center;gap:12px;background:#0f172a;color:#fff;border:1px solid #334155;padding:10px 12px 10px 16px;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:13.5px';
+  b.innerHTML = '<span>✨ A new version of Administration is available.</span><button onclick="updNow()" style="background:#f59e0b;color:#111;font-weight:700;border-radius:8px;padding:6px 12px">Update now</button><button onclick="this.parentNode.remove()" title="Later" style="color:#94a3b8;font-size:18px;line-height:1;padding:0 4px">×</button>';
+  document.body.appendChild(b);
+}
+async function updNow(){
+  try{ await fetch(location.pathname, { cache:'reload' }); await fetch('assets.json?v=' + ASSETS_VER, { cache:'reload' }).catch(() => {}); }catch(e){}
+  try{ const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); }catch(e){}
+  try{ const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.update())); }catch(e){}
+  location.reload();
+}
+window.addEventListener('load', () => setTimeout(() => updCheck(true), 4000));
+window.addEventListener('focus', () => updCheck(false));
+document.addEventListener('visibilitychange', () => { if(!document.hidden) updCheck(false); });
+setInterval(() => updCheck(false), 30 * 60000);
+/* =====================================================================
+   ASSETS — PDF fonts, letterhead images and Word/Excel templates live in assets.json (next to index.html),
    so the app itself opens faster. They load quietly in the background and, if needed sooner, on first use.
 ===================================================================== */
-const ASSETS_VER = 'bd260fe319';
+const ASSETS_VER = '90b6fa1f7b';
 let __ASSETS = null, __assetsLoading = null;
 function assetsLoadSync(){
   if(__ASSETS) return __ASSETS;
   if(window.__APP_ASSETS){ __ASSETS = window.__APP_ASSETS; return __ASSETS; }
-  try{ const x = new XMLHttpRequest(); x.open('GET', 'assets.js?v=' + ASSETS_VER, false); x.send(); if(x.responseText && x.status < 400) (0, eval)(x.responseText); }catch(e){}
+  try{ const x = new XMLHttpRequest(); x.open('GET', 'assets.json?v=' + ASSETS_VER, false); x.send(); if(x.responseText && x.status < 400) window.__APP_ASSETS = JSON.parse(x.responseText); }catch(e){}
   __ASSETS = window.__APP_ASSETS || null;
-  if(!__ASSETS){ toast('The file assets.js is missing — upload it to GitHub next to index.html (it holds the PDF fonts and templates).', true); throw new Error('assets.js missing'); }
+  if(!__ASSETS){ toast('The file assets.json is missing — upload it to GitHub next to index.html (it holds the PDF fonts and templates).', true); throw new Error('assets.json missing'); }
   return __ASSETS;
 }
 function assetsPreload(){
   if(__ASSETS || __assetsLoading) return __assetsLoading;
-  __assetsLoading = fetch('assets.js?v=' + ASSETS_VER).then(r => r.ok ? r.text() : Promise.reject(r.status)).then(t => { if(!__ASSETS){ (0, eval)(t); __ASSETS = window.__APP_ASSETS || null; } }).catch(() => { __assetsLoading = null; });
+  __assetsLoading = fetch('assets.json?v=' + ASSETS_VER).then(r => r.ok ? r.json() : Promise.reject(r.status)).then(j => { if(!__ASSETS){ window.__APP_ASSETS = j; __ASSETS = j; } }).catch(() => { __assetsLoading = null; });
   return __assetsLoading;
 }
 ["PDF_FONTS", "PETTYCASH_TEMPLATE_B64", "PCPDF_IMAGES", "HANDOVER_TEMPLATE_B64", "PDF_IMAGES", "PC_REPL_TEMPLATE_B64", "PC_STATEMENT_TEMPLATE_B64", "BC_BACK_SVG", "EXCO_HDR_PNG", "ID_SVG", "BC_FRONT_SVG"].forEach(n => Object.defineProperty(window, n, { configurable:true, get(){ return assetsLoadSync()[n]; } }));
@@ -4131,14 +4163,14 @@ function pcStatementCsv(){
   downloadCSV('petty-cash-statement_' + D.from + '_to_' + D.to + '.csv', ['Location', 'Petty Cash Custodian', 'Date', 'Request No.', 'Purpose', 'Type', 'Requester', 'HOD', 'Items', 'Signed', 'Amount (MVR)'], rows);
 }
 
-/* PETTYCASH_TEMPLATE_B64 is in assets.js */
+/* PETTYCASH_TEMPLATE_B64 is in assets.json */
 
 
 /* =====================================================================
    PETTY CASH — PDF output (A4): the Petty Cash Request Form, drawn to match the Word template, and the location Statement
 ===================================================================== */
 const PCPDF_NOTES = [[["Note:", true]], [["Request Protocol:", true], [" All requests for petty cash and staff expense reimbursement must be approved by the Head of Department (HOD) using the designated petty cash request form.", false]], [["Nature of Expenses:", true], [" Petty cash should only be used for minor expenses such as taxi fares, postage, and office supplies. Larger purchases should be planned in advance and processed through the Procurement Department.", false]], [["Approval Process: ", true], ["Petty cash requests must be authorized by the HOD of the respective department and submitted to the petty cash custodian.", false], [" The custodian shall review the request prior to disbursing funds. ", false], ["Petty cash purchases should be made only after the petty cash has been received from the custodian.", false], [" Note that petty cash requests for reimbursement of expenses carried out without prior approval may be rejected.", false]], [["Expense Limit:", true], [" Petty cash expenses should not exceed MVR 1000 for any single bill or invoice. If the amount exceeds MVR 1000, justification for the purchase and approval must be provided to the custodian along with the request form.", false]]];
-/* PCPDF_IMAGES is in assets.js */
+/* PCPDF_IMAGES is in assets.json */
 const PCA4_W = 595.28, PCA4_H = 841.89, PC_TOP = 103.5, PC_BOTTOM = 790;
 const PC_DARK = [0.133, 0.122, 0.122], PC_GREY_A = [0.769, 0.773, 0.776], PC_GREY_B = [0.725, 0.729, 0.733], PC_YELLOW = [0.91, 0.937, 0.639], PC_WHITE = [1, 1, 1];
 function pdfAddFont(f, key, name){
@@ -4415,7 +4447,7 @@ async function generatePettyCashStatementPdf(btn){
    (FDC-PTC-<location>-<yy>-<nn>), one row per voucher with the invoice's supplier, date and bill number,
    the amount in its expense-category column, totals, and the cash reconciliation. Built from the finance workbook itself.
 ===================================================================== */
-/* PC_STATEMENT_TEMPLATE_B64 is in assets.js */
+/* PC_STATEMENT_TEMPLATE_B64 is in assets.json */
 const PC_STATEMENT_ROWS = 23, PC_CAT_COLS = ['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S'];
 const pcStatementNoRe = /^FDC-PTC-([A-Z0-9]+)-(\d\d)-(\d+)$/;
 const pcStatementSeq = no => { const m = pcStatementNoRe.exec(no || ''); return m ? +m[3] : 0; };
@@ -5042,7 +5074,7 @@ async function savePcRenameStatement(oldNo){
   vehUi.stSelLoc = ''; closeModal(); rerenderMain(); toast('Statement renamed to ' + no + '.');
 }
 /* ---------- Petty Cash Replenishment Request: raised on a closed statement, printed on the finance "Petty Cash Request Form" (Replenish) ---------- */
-/* PC_REPL_TEMPLATE_B64 is in assets.js */
+/* PC_REPL_TEMPLATE_B64 is in assets.json */
 const pcReplNoRe = /^FDC-PTC-(\d\d)-(\d+)$/;
 function pcNextReplNo(){
   const yy = vToday().slice(2, 4); let max = 0;
@@ -5817,8 +5849,8 @@ async function saveSdEdit(key){
   closeModal(); rerenderMain(); toast(old ? 'Saved.' : rec.name + ' added.');
 }
 /* ---------- business cards: the FDC card (front: the logo; back: name, designation, email and phone) ---------- */
-/* BC_FRONT_SVG is in assets.js */
-/* BC_BACK_SVG is in assets.js */
+/* BC_FRONT_SVG is in assets.json */
+/* BC_BACK_SVG is in assets.json */
 const BC_W = 269.008, BC_H = 161.008, BC_X = 80.26, BC_MAXW = 172, BC_INK = '#414141', BC_INK_PDF = [0.255, 0.255, 0.255];
 let _bcUrl = null;
 const bcUrls = () => _bcUrl || (_bcUrl = { front:URL.createObjectURL(new Blob([BC_FRONT_SVG], { type:'image/svg+xml' })), back:URL.createObjectURL(new Blob([BC_BACK_SVG], { type:'image/svg+xml' })) });
@@ -5923,7 +5955,7 @@ function qrEncode(text){
 const qrSvgPath = (q, x0, y0, s) => { let d = ''; for(let y = 0; y < q.size; y++) for(let x = 0; x < q.size; x++) if(q.m[y][x]) d += `M${pdfN(x0 + x * s)} ${pdfN(y0 + y * s)}h${pdfN(s)}v${pdfN(s)}h${pdfN(-s)}z`; return d; };
 
 /* ---------- staff ID cards: the FDC card (photo, ID, name, designation, logo and a QR code), 54 × 85 mm ---------- */
-/* ID_SVG is in assets.js */
+/* ID_SVG is in assets.json */
 const ID_W = 153.071, ID_H = 240.945, ID_CX = 76.09, ID_PH = { cx:76.09, cy:57.21, r:35.36 }, ID_QR = { x:92.7, y:185.66, s:25.2 }, ID_INK = '#231f20', ID_INK_PDF = [0.137, 0.122, 0.125], ID_QR_INK = [0.065, 0.059, 0.052];
 let _idUrl = null; const idUrl = () => _idUrl || (_idUrl = URL.createObjectURL(new Blob([ID_SVG], { type:'image/svg+xml' })));
 const idEsc = v => String(v || '').replace(/([\;,:"])/g, '\\$1');
@@ -6483,12 +6515,19 @@ document.addEventListener('mouseover', e => {
   eggHoldT = setTimeout(() => { eggHoldT = 0; eggCredits(el); }, 1000);
   el.addEventListener('mouseleave', () => { clearTimeout(eggHoldT); eggHoldT = 0; }, { once:true });
 });
+// phones and tablets have no hover: press and hold the title for 1 second instead
+document.addEventListener('pointerdown', e => {
+  if(e.pointerType === 'mouse') return;
+  const el = e.target.closest && e.target.closest('#app-title'); if(!el) return;
+  const t = setTimeout(() => eggCredits(el), 1000), stop = () => { clearTimeout(t); document.removeEventListener('pointerup', stop); document.removeEventListener('pointercancel', stop); };
+  document.addEventListener('pointerup', stop); document.addEventListener('pointercancel', stop);
+});
 function eggCredits(el){
   if(document.getElementById('egg-credits')) return;
   const r = el.getBoundingClientRect(), lm = new Date(document.lastModified), ver = isNaN(lm) ? '' : fmtD(lm);
   const d = document.createElement('div'); d.id = 'egg-credits';
   d.style.cssText = `position:fixed;left:${r.left}px;top:${r.bottom + 10}px;z-index:9999;width:250px;padding:16px 18px;border-radius:14px;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;box-shadow:0 18px 40px rgba(0,0,0,.4);transform-origin:top left;transform:perspective(600px) rotateX(-90deg);transition:transform .45s cubic-bezier(.2,1.3,.4,1);font-size:13px`;
-  d.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><img src="${APP_LOGO}" style="width:30px;height:30px" alt=""><div><div style="font-weight:800;color:#fff">Administration</div><div style="font-size:11px;color:#94a3b8">${ver ? 'Version ' + ver : ''}</div></div></div>
+  d.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><img src="${APP_LOGO}" style="width:30px;height:30px" alt=""><div><div style="font-weight:800;color:#fff">Administration</div><div style="font-size:11px;color:#94a3b8">Version ${APP_BUILD}</div></div></div>
     <div style="color:#cbd5e1">Built by <b style="color:#fbbf24">Yoosuf Niyaz</b></div><div style="margin-top:6px;color:#94a3b8;font-size:12px;line-height:1.5">With thanks to the Admin team for every idea, test and “can it also…?” ⭐</div>`;
   document.body.appendChild(d); requestAnimationFrame(() => { d.style.transform = 'perspective(600px) rotateX(0)'; });
   const close = () => { d.style.transform = 'perspective(600px) rotateX(-90deg)'; setTimeout(() => d.remove(), 400); document.removeEventListener('mousedown', close); };
@@ -7192,7 +7231,7 @@ function viewDocs(k){
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(all.length ? 'No documents match.' : 'Nothing registered yet. Use "+ ' + (k ? t.label : 'Document') + '" to add the first one.')}</div>`);
 }
 /* ---------- EXCO paper: the form of the Administration's EXCO paper, as a Word file and a PDF (blank or filled) ---------- */
-/* EXCO_HDR_PNG is in assets.js */
+/* EXCO_HDR_PNG is in assets.json */
 const EXCO_FOOT = ['+960 3313244  |  Info@fdc.mv  |  www.fdc.mv', '2nd Floor, H.Fathangumaage, 20026, Sosun Magu, Male’, Republic of Maldives'];
 // **bold** inside the text becomes bold in the Word file and the PDF
 const exRuns = s => String(s || '').split(/(\*\*[^*]+\*\*)/).filter(x => x !== '').map(x => /^\*\*[^*]+\*\*$/.test(x) ? { t:x.slice(2, -2), bold:true } : { t:x, bold:false });
@@ -14543,7 +14582,7 @@ function viewHandovers(){
    The template below is the organisation's own Handover_v2_4.docx with its sample values replaced by
    {{PLACEHOLDERS}}; everything else (logo, fonts, borders, footer) is untouched. The file is built in the browser,
    so it needs the small JSZip library (loaded the first time it's used). */
-/* HANDOVER_TEMPLATE_B64 is in assets.js */
+/* HANDOVER_TEMPLATE_B64 is in assets.json */
 const JSZIP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
 const DOC_MONTHS = ['Jan','Feb','Mar','Apr','May','June','July','Aug','Sept','Oct','Nov','Dec'];
 function xmlEsc(s){
@@ -14662,8 +14701,8 @@ async function generateHandoverDocument(id, btn){
    HANDOVER PDF — drawn directly (no server and no extra library) to match the Word template:
    same page, logo, fonts (Poppins), table grid, shading and signature boxes. Signature images are included.
 ===================================================================== */
-/* PDF_FONTS is in assets.js */
-/* PDF_IMAGES is in assets.js */
+/* PDF_FONTS is in assets.json */
+/* PDF_IMAGES is in assets.json */
 const PDF_CP1252 = { 0x20AC:0x80, 0x201A:0x82, 0x0192:0x83, 0x201E:0x84, 0x2026:0x85, 0x2020:0x86, 0x2021:0x87, 0x02C6:0x88, 0x2030:0x89, 0x0160:0x8A, 0x2039:0x8B, 0x0152:0x8C, 0x017D:0x8E,
   0x2018:0x91, 0x2019:0x92, 0x201C:0x93, 0x201D:0x94, 0x2022:0x95, 0x2013:0x96, 0x2014:0x97, 0x02DC:0x98, 0x2122:0x99, 0x0161:0x9A, 0x203A:0x9B, 0x0153:0x9C, 0x017E:0x9E, 0x0178:0x9F };
 const PDF_W = 612, PDF_H = 792, PDF_TOP = 99, PDF_BOTTOM = 720;        // Letter; body area top / bottom (points, from the top of the page)

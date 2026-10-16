@@ -10790,7 +10790,7 @@ function viewAdmin(){
       ${firebaseAuth ? `<button onclick="openAddMemberModal()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Add member</button>` : ''}
     </div>
     <div class="bg-amber-50 text-amber-800 text-[11.5px] rounded-lg px-3.5 py-2.5 mb-4 leading-relaxed">
-      Nobody can change an existing person's password directly here — that would need a backend server. You can add a member, update someone's designation, department, and role, or send them a password reset email.
+      Nobody can change an existing person's password directly here — that would need a backend server. You can add a member, update someone's name, designation, department, and role, or send them a password reset email.
     </div>
     ${pendingMemberList().length ? `<div class="bg-amber-50 text-amber-800 text-[11.5px] rounded-lg px-3.5 py-2.5 mb-4 leading-relaxed"><b>Pending</b> members already have a sign-in but haven't opened the app yet. They become full members the first time they sign in.</div>` : ''}
     <div class="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
@@ -11148,7 +11148,11 @@ function openEditUserModal(uid){
   const lockRole = isSelf && p.role==='admin' && adminCount<=1;
   const body = `
     <div id="admin-edit-error" class="hidden bg-rose-50 text-rose-700 text-sm rounded-lg px-3.5 py-2.5 mb-4"></div>
-    <div class="mb-3 text-sm font-semibold text-slate-800">${esc(p.name)} <span class="text-slate-400 font-normal">· ${esc(p.email)}</span></div>
+    <div class="mb-3 text-sm text-slate-400">${esc(p.email)}</div>
+    <div class="mb-3">
+      <label class="block text-xs font-semibold text-slate-600 mb-1.5">Name</label>
+      <input type="text" id="ae-name" value="${esc(p.name||'')}" autocomplete="off" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+    </div>
     <div class="grid grid-cols-2 gap-3 mb-4">
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5">Designation</label>
@@ -11180,18 +11184,22 @@ function openEditUserModal(uid){
 async function saveUserEdit(uid){
   const errEl = document.getElementById('admin-edit-error');
   errEl.classList.add('hidden');
+  const name = document.getElementById('ae-name').value.trim().replace(/\s+/g, ' ');
   const designation = document.getElementById('ae-designation').value.trim();
   const department = document.getElementById('ae-department').value.trim();
   const roleEl = document.getElementById('ae-role');
+  if(!name){ errEl.textContent = 'Enter the name.'; errEl.classList.remove('hidden'); return; }
   const target = state.profiles.find(x=>x.uid===uid);
   const adminCount = state.profiles.filter(x=>x.role==='admin').length;
   if(!roleEl.disabled && target.role==='admin' && roleEl.value==='member' && adminCount<=1){
     errEl.textContent = 'At least one admin is required.'; errEl.classList.remove('hidden'); return;
   }
   try{
-    const data = { designation, department };
+    const data = { name, designation, department };
     if(!roleEl.disabled) data.role = roleEl.value;
     await firestoreProfilesRef.doc(uid).set(data, { merge:true });
+    if(authUser && authUser.uid === uid){ authUser.name = name; try{ if(firebaseAuth && firebaseAuth.currentUser) firebaseAuth.currentUser.updateProfile({ displayName:name }).catch(() => {}); }catch(e){} }
+    const sd = (state.staffDir || []).find(d => d.key === 'u:' + uid); if(sd && sd.name && sd.name !== name){ try{ await vehSave('staffDir', { id:sd.id, name }); }catch(e){} }   // keep the Admin Staff record in step
     closeModal();
     toast('User updated.');
   }catch(e){
@@ -11346,6 +11354,31 @@ async function savePendingMember(m){
   pendingMembers[pmKey(m.email)] = m;
   try{ rerenderMain(); }catch(e){}
 }
+function openEditPendingMember(email){
+  const m = pendingMembers[pmKey(email)]; if(!m) return;
+  const inp = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent';
+  openModal('Edit pending member', `
+    <div id="pe-error" class="hidden bg-rose-50 text-rose-700 text-sm rounded-lg px-3.5 py-2.5 mb-4"></div>
+    <div class="mb-3 text-sm text-slate-400">${esc(m.email)}</div>
+    <div class="mb-3"><label class="block text-xs font-semibold text-slate-600 mb-1.5">Name</label><input type="text" id="pe-name" value="${esc(m.name || '')}" autocomplete="off" class="${inp}"></div>
+    <div class="grid grid-cols-2 gap-3 mb-5">
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Designation</label><input type="text" id="pe-designation" value="${esc(m.designation || '')}" class="${inp}"></div>
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Department</label><input type="text" id="pe-department" value="${esc(m.department || '')}" list="pe-dept-list" class="${inp}"><datalist id="pe-dept-list">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist></div>
+    </div>
+    <div class="flex justify-end gap-2.5">
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="closeModal()">Cancel</button>
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="saveEditPendingMember('${esc(m.email)}')">Save</button>
+    </div>`, true);
+}
+async function saveEditPendingMember(email){
+  const m = pendingMembers[pmKey(email)], errEl = document.getElementById('pe-error'); if(!m) return;
+  const name = document.getElementById('pe-name').value.trim().replace(/\s+/g, ' ');
+  if(!name){ errEl.textContent = 'Enter the name.'; errEl.classList.remove('hidden'); return; }
+  try{
+    await savePendingMember(Object.assign({}, m, { name, designation:document.getElementById('pe-designation').value.trim(), department:document.getElementById('pe-department').value.trim() }));
+    closeModal(); toast('Pending member updated.');
+  }catch(e){ errEl.textContent = syncErrorMessage(e, 'fdc_inventory_meta (pendingMembers doc)', 'save'); errEl.classList.remove('hidden'); }
+}
 function removePendingMember(email){
   confirmAction('Remove ' + email + ' from the pending list? Their sign-in account is not touched.', async () => {
     try{
@@ -11366,6 +11399,7 @@ function pendingRowsHtml(){
         <td class="py-3 text-slate-500">${esc(m.department || '—')}</td>
         <td class="py-3 pr-4"><span class="inline-flex px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">Member</span></td>
         <td class="py-3 pr-5 sm:pr-6 text-right whitespace-nowrap">
+          <button onclick="openEditPendingMember('${esc(m.email)}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Edit</button>
           <button onclick="sendPasswordResetForUser('${esc(m.email)}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Send password reset email</button>
           <button onclick="removePendingMember('${esc(m.email)}')" class="text-xs font-semibold text-rose-600 hover:underline">Remove</button></td>
       </tr>`).join('');

@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.179';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.180';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -6864,7 +6864,7 @@ function viewMyWork(){
   const srs = (state.stockRequests || []).filter(r => r.requestedByUid === authUser.uid).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0)).slice(0, 8);
   const trs = (state.travelRequests || []).filter(t => t.createdBy === authUser.name || t.staffKey === me).filter(t => t.status !== 'Closed');
   const nm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(), myName = nm(authUser.name);
-  const prs = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') !== 'closed' && ((myName && nm(p.requester) === myName) || (p.createdByEmail && p.createdByEmail === authUser.email))).sort((a, b) => String(b.requisitionDate || '').localeCompare(String(a.requisitionDate || '')));
+  const prs = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') !== 'closed' && ((myName && nm(p.requester) === myName) || (p.createdByEmail && p.createdByEmail === authUser.email))).sort((a, b) => prNumberCollator.compare(String(b.prNumber || ''), String(a.prNumber || '')));
   const reqBody = prs.map(p => { const st = prStatusMeta(p.status || 'open'); return row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requisitionDate ? vDate(p.requisitionDate) : ''].filter(Boolean).join(' · ')) + (p.status === 'pending_approval' ? ' · waiting for ' + esc(apNames()) : ''), vPill(p.status === 'released' ? 'good' : p.status === 'pending_approval' ? 'warn' : 'acc', esc(st.label)), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`); }).join('') + pcs.map(r => { const s = pcStatus(r); return row('Petty cash ' + esc(r.number || ''), esc([r.purpose, vDate(r.date)].filter(Boolean).join(' · ')), vPill(s.kind, esc(s.label)), `goTo('petty-cash'); openPcDetails('${r.id}')`); }).join('') +
     srs.map(r => row('Stock request', esc([fmtD(r.requestedAt), (getLocation(r.locationId) || {}).name].filter(Boolean).join(' · ')), vPill(r.status === 'approved' ? 'good' : r.status === 'rejected' ? 'crit' : 'warn', esc(r.status || 'pending')), `ui.movementsView='requests'; goTo('movements')`)).join('') +
     trs.map(t => row('Travel: ' + esc(t.destination || t.purpose || ''), esc(t.status || ''), vPill('acc', esc(t.status || 'Open')), `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelDetail('${t.id}')`)).join('');

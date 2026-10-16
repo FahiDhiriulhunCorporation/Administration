@@ -423,6 +423,9 @@ function refreshAppearanceModal(){
     table.pc-cards td:first-child::before{display:none}
     table.pc-cards td:first-child > div, table.pc-cards td:first-child > span{display:block;text-align:left}
   }
+  /* sticky notes keep their paper colour in dark mode */
+  textarea.note-ta, html[data-theme="dark"] textarea.note-ta{background:transparent!important;border:0!important;box-shadow:none!important}
+  textarea.note-ta::placeholder{color:currentColor!important;opacity:.45}
 </style>
 <script>
   if('serviceWorker' in navigator){
@@ -1619,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.172';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.179';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -1913,7 +1916,7 @@ function currentNav(){
   ];
   if(canManageInventory() || (authUser && authUser.role==='admin')) nav.push({ section:'Settings' });
   if(canManageInventory()) nav.push({ id:'locations', label:'Locations', icon:'locations' });
-  if(canManageInventory()) nav.push({ id:'backups', label:'Backups', icon:'statement', badge:cntOf(() => bkDaysSince() >= 7 ? 1 : 0), tone:'warn', hint:'No backup file downloaded in the last 7 days' });
+  if(canManageInventory()) nav.push({ id:'backups', label:'Backups', icon:'statement' });
   if(authUser && authUser.role==='admin') nav.push({ id:'admin', label:'Admin Panel', icon:'admin' });
   return nav;
 }
@@ -1938,14 +1941,14 @@ function renderNav(){
   const item = n => `
     <a href="#" onclick="goTo('${n.id}');return false;"
        class="flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors ${navIsActive(n) ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
-      ${ICONS[n.icon]}<span class="flex-1">${n.label}</span>${n.badge ? `<span ${n.hint ? `title="${esc(n.hint)}"` : ''} class="ml-auto min-w-[1.25rem] text-center px-1.5 py-0.5 rounded-full text-[10.5px] font-bold ${n.tone==='crit' ? 'bg-rose-500 text-white' : 'bg-amber-400 text-slate-900'}">${n.badge}</span>` : ''}
+      ${ICONS[n.icon]}<span class="flex-1">${n.label}</span>${n.badge ? `<span ${n.hint ? `title="${esc(n.hint)}"` : ''} class="ml-auto min-w-[1.25rem] text-center px-1.5 py-0.5 rounded-full text-[10.5px] font-bold nav-badge" style="${n.tone==='crit' ? 'background:#dc2626;color:#fff;font-weight:800' : 'background:#fbbf24;color:#1c1917'}">${n.badge}</span>` : ''}
     </a>`;
   document.getElementById('nav-list').innerHTML = groups.map(g => {
     if(!g.name) return g.items.map(item).join('');
     const active = g.items.some(navIsActive), shut = collapsed.has(g.name) && !active;
     const badge = g.items.reduce((t, n) => t + (Number(n.badge) || 0), 0), crit = g.items.some(n => n.badge && n.tone === 'crit');
     return `<button type="button" onclick="toggleNavSection('${g.name}')" class="w-full flex items-center gap-2 px-3 pt-3.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300">
-        <span class="flex-1 text-left">${g.name}</span>${shut && badge ? `<span class="min-w-[1.1rem] text-center px-1.5 rounded-full text-[10px] font-bold normal-case tracking-normal ${crit ? 'bg-rose-500 text-white' : 'bg-amber-400 text-slate-900'}">${badge}</span>` : ''}
+        <span class="flex-1 text-left">${g.name}</span>${shut && badge ? `<span class="min-w-[1.1rem] text-center px-1.5 rounded-full text-[10px] font-bold normal-case tracking-normal nav-badge" style="${crit ? 'background:#dc2626;color:#fff;font-weight:800' : 'background:#fbbf24;color:#1c1917'}">${badge}</span>` : ''}
         <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" class="transition-transform ${shut ? '-rotate-90' : ''}"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8l5 5 5-5"/></svg>
       </button>${shut ? '' : g.items.map(item).join('')}`;
   }).join('');
@@ -6643,7 +6646,7 @@ function viewerBlock(){ if(!amIViewer()) return false; toast('You have view-only
 function fsAfterInit(db){
   try{ db.enablePersistence({ synchronizeTabs:true }).catch(() => {}); }catch(e){}            // keeps a copy on this device, so the app works offline
   if(window._fsPatched || !window.firebase || !firebase.firestore) return; window._fsPatched = 1;
-  const F = firebase.firestore, own = path => !!authUser && (path === 'fdc_inventory_profiles/' + authUser.uid);
+  const F = firebase.firestore, own = path => !!authUser && (path === 'fdc_inventory_profiles/' + authUser.uid || path === 'fdc_inventory_notes/' + authUser.uid);
   const guard = path => { if(amIViewer() && !own(path)){ toast('You have view-only access.', true); return true; } return false; };
   // offline: the change is kept on this device and sent when the connection is back, so don't keep the screen waiting
   const soft = p => { if(navigator.onLine) return p; p.catch(e => console.warn('Saved offline, will sync later', e)); return Promise.resolve(); };
@@ -6736,7 +6739,6 @@ function ntList(){
     if(lv.length) add('lv-' + tm, '🌴', (admin ? 'Leave starts tomorrow: ' : 'Your leave starts tomorrow') + (admin ? lv.map(x => x.name).slice(0, 4).join(', ') : ''), '', dayAt(t0), `goTo('leave-plan')`); }catch(e){}
   if(admin){
     try{ const v = vehAlerts(); if(v.length) add('veh-' + t0 + v.length, '🚗', v.length + ' vehicle alert' + (v.length === 1 ? '' : 's'), 'Insurance, registration or service due', dayAt(t0), `goTo('vehicles')`); }catch(e){}
-    try{ const days = bkDaysSince(); if(days >= 7) add('bk-' + t0, '💾', days >= 9999 ? 'No backup file downloaded yet' : 'Last backup downloaded ' + days + ' days ago', 'Download a backup', dayAt(t0), `goTo('backups')`); }catch(e){}
   }
   return out.sort((a, b) => b.at - a.at).slice(0, 40);
 }
@@ -6861,20 +6863,68 @@ function viewMyWork(){
   const pcs = (state.pettyCash || []).filter(r => r.requesterUid === authUser.uid && !r.statementNo).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const srs = (state.stockRequests || []).filter(r => r.requestedByUid === authUser.uid).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0)).slice(0, 8);
   const trs = (state.travelRequests || []).filter(t => t.createdBy === authUser.name || t.staffKey === me).filter(t => t.status !== 'Closed');
-  const reqBody = pcs.map(r => { const s = pcStatus(r); return row('Petty cash ' + esc(r.number || ''), esc([r.purpose, vDate(r.date)].filter(Boolean).join(' · ')), vPill(s.kind, esc(s.label)), `goTo('petty-cash'); openPcDetails('${r.id}')`); }).join('') +
+  const nm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(), myName = nm(authUser.name);
+  const prs = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') !== 'closed' && ((myName && nm(p.requester) === myName) || (p.createdByEmail && p.createdByEmail === authUser.email))).sort((a, b) => String(b.requisitionDate || '').localeCompare(String(a.requisitionDate || '')));
+  const reqBody = prs.map(p => { const st = prStatusMeta(p.status || 'open'); return row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requisitionDate ? vDate(p.requisitionDate) : ''].filter(Boolean).join(' · ')) + (p.status === 'pending_approval' ? ' · waiting for ' + esc(apNames()) : ''), vPill(p.status === 'released' ? 'good' : p.status === 'pending_approval' ? 'warn' : 'acc', esc(st.label)), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`); }).join('') + pcs.map(r => { const s = pcStatus(r); return row('Petty cash ' + esc(r.number || ''), esc([r.purpose, vDate(r.date)].filter(Boolean).join(' · ')), vPill(s.kind, esc(s.label)), `goTo('petty-cash'); openPcDetails('${r.id}')`); }).join('') +
     srs.map(r => row('Stock request', esc([fmtD(r.requestedAt), (getLocation(r.locationId) || {}).name].filter(Boolean).join(' · ')), vPill(r.status === 'approved' ? 'good' : r.status === 'rejected' ? 'crit' : 'warn', esc(r.status || 'pending')), `ui.movementsView='requests'; goTo('movements')`)).join('') +
     trs.map(t => row('Travel: ' + esc(t.destination || t.purpose || ''), esc(t.status || ''), vPill('acc', esc(t.status || 'Open')), `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelDetail('${t.id}')`)).join('');
   let leave = []; try{ leave = ((lvBetween(t0, clIsoAdd(t0, 60)).find(x => x.key === me) || {}).items || []); }catch(e){}
   const leaveBody = leave.slice(0, 10).map(x => row(esc(lvCodeLabel(x.code)), esc(x.from === x.to ? vDate(x.from) : vDate(x.from) + ' – ' + vDate(x.to)) + ' · ' + (tkDays(x.from, x.to) + 1) + ' day' + (x.from === x.to ? '' : 's'), '', `goTo('leave-plan')`)).join('');
   const over = tasks.filter(tkOverdue).length;
   return vHead('My Work', `Hello ${esc(first)} — everything that needs you, in one place.`, '') +
-    vKpis(statCard('My open tasks', fmtNum(tasks.length), over ? over + ' overdue' : 'None overdue', over ? 'rose' : 'brand') + statCard('Waiting for my approval', fmtNum(apN), apIsApprover() ? 'PRs and documents' : 'You are not an approver', apN ? 'amber' : 'slate') + statCard('My requests', fmtNum(pcs.length + srs.length + trs.length), 'Petty cash, stock and travel', 'slate') + statCard('My leave', fmtNum(leave.length), 'In the next 60 days', 'emerald')) +
-    `<div class="grid grid-cols-1 xl:grid-cols-2 gap-x-5">` +
+    vKpis(statCard('My open tasks', fmtNum(tasks.length), over ? over + ' overdue' : 'None overdue', over ? 'rose' : 'brand') + statCard('Waiting for my approval', fmtNum(apN), apIsApprover() ? 'PRs and documents' : 'You are not an approver', apN ? 'amber' : 'slate') + statCard('My requests', fmtNum(prs.length + pcs.length + srs.length + trs.length), 'PRs, petty cash, stock and travel', 'slate') + statCard('My leave', fmtNum(leave.length), 'In the next 60 days', 'emerald')) +
+    `<div class="grid grid-cols-1 xl:grid-cols-2 gap-x-5 items-start"><div>` +
     panel('My tasks', tasks.length, taskBody, 'No open tasks — nice work ✨') +
     (apIsApprover() ? panel('Waiting for my approval', apN, apBody, 'Nothing waiting for you.') : '') +
-    panel('My requests', pcs.length + srs.length + trs.length, reqBody, 'No open requests.') +
-    panel('My upcoming leave', leave.length, leaveBody, 'No leave planned in the next 60 days.') + `</div>`;
+    panel('My upcoming leave', leave.length, leaveBody, 'No leave planned in the next 60 days.') + `</div><div>` +
+    notesPanel() +
+    panel('My requests', prs.length + pcs.length + srs.length + trs.length, reqBody, 'No open requests.') + `</div></div>`;
 }
+
+
+/* ---------- sticky notes on My Work (private to each person: fdc_inventory_notes/{uid}) ---------- */
+const NOTE_COLORS = { yellow:['#fef3c7', '#fde68a', '#78350f'], green:['#dcfce7', '#bbf7d0', '#14532d'], blue:['#dbeafe', '#bfdbfe', '#1e3a8a'], pink:['#fce7f3', '#fbcfe8', '#831843'], purple:['#ede9fe', '#ddd6fe', '#4c1d95'] };
+let myNotes = null, notesUnsub = null, notesSaveT = 0, notesShowDone = false;
+const NOTES_LS = () => 'fdc_notes_' + (authUser ? authUser.uid : 'local');
+function notesStart(){
+  if(notesUnsub || myNotes && !firestoreDb) return;
+  try{ myNotes = JSON.parse(localStorage.getItem(NOTES_LS()) || '[]'); }catch(e){ myNotes = []; }
+  if(!authUser || !firestoreDb) return;
+  notesUnsub = firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).onSnapshot(d => {
+    const list = (d.exists && d.data().list) || [];
+    if(Date.now() - (window._notesTyping || 0) < 2500) return;                    // don't disturb someone typing
+    myNotes = list; try{ localStorage.setItem(NOTES_LS(), JSON.stringify(list)); }catch(e){}
+    if(ui.tab === 'my-work') rerenderMain();
+  }, () => {});
+}
+function notesPersist(){
+  try{ localStorage.setItem(NOTES_LS(), JSON.stringify(myNotes)); }catch(e){}
+  clearTimeout(notesSaveT);
+  notesSaveT = setTimeout(() => { if(authUser && firestoreDb) firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).set({ list:myNotes, updatedAt:Date.now() }).catch(e => toast('Note not saved: ' + e.message, true)); }, 600);
+}
+function notesPanel(){
+  if(myNotes === null) notesStart();
+  const list = (myNotes || []).slice().sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || (b.at || 0) - (a.at || 0));
+  const open = list.filter(n => !n.done), done = list.filter(n => n.done), show = notesShowDone ? list : open;
+  const card = n => { const c = NOTE_COLORS[n.color] || NOTE_COLORS.yellow;
+    return `<div class="relative rounded-lg p-3 pt-2.5 flex flex-col" style="background:${c[0]};border:1px solid ${c[1]};color:${c[2]};min-height:120px;box-shadow:0 2px 6px rgba(0,0,0,.08);${n.done ? 'opacity:.6' : ''}">
+      <div class="flex items-center gap-1 mb-1" style="font-size:11px">
+        ${Object.keys(NOTE_COLORS).map(k => `<button onclick="noteSet('${n.id}','color','${k}')" title="${k}" style="width:12px;height:12px;border-radius:999px;background:${NOTE_COLORS[k][1]};border:${k === (n.color || 'yellow') ? '2px solid ' + c[2] : '1px solid rgba(0,0,0,.15)'}"></button>`).join('')}
+        <span style="flex:1"></span>
+        <button onclick="noteSet('${n.id}','pin',${!n.pin})" title="${n.pin ? 'Unpin' : 'Pin to top'}" style="opacity:${n.pin ? 1 : .45}">📌</button>
+        <button onclick="noteSet('${n.id}','done',${!n.done})" title="${n.done ? 'Reopen' : 'Mark done'}" style="font-weight:700">${n.done ? '↺' : '✓'}</button>
+        <button onclick="noteRemove('${n.id}')" title="Delete" style="font-size:15px;line-height:1">×</button>
+      </div>
+      <textarea id="note-${n.id}" oninput="noteType('${n.id}', this.value)" placeholder="Write a note…" class="note-ta flex-1 w-full resize-none outline-none border-0 p-0 text-[13.5px] leading-snug" style="background:transparent!important;color:${c[2]}!important;min-height:80px;${n.done ? 'text-decoration:line-through' : ''}">${esc(n.text || '')}</textarea>
+      <div style="font-size:10.5px;opacity:.6;margin-top:4px">${fmtDT(n.at)}</div></div>`; };
+  return `<div class="bg-white rounded-xl border border-slate-200 mb-5 overflow-hidden"><div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-2"><h2 class="text-sm font-bold text-slate-900">My notes</h2>
+      <div class="flex items-center gap-3">${done.length ? `<button onclick="notesShowDone=!notesShowDone; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:underline">${notesShowDone ? 'Hide done' : 'Show done (' + done.length + ')'}</button>` : ''}<button onclick="noteAdd()" class="text-xs font-semibold text-brand-600 hover:underline">+ Note</button></div></div>
+    <div class="p-4">${show.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${show.map(card).join('')}</div>` : `<button onclick="noteAdd()" class="w-full rounded-lg border-2 border-dashed border-slate-200 py-8 text-sm text-slate-400 hover:text-slate-600 hover:border-slate-300">${list.length ? 'No open notes — all done ✓' : 'Jot something down — only you can see your notes'} · + Note</button>`}</div></div>`;
+}
+function noteAdd(){ if(myNotes === null) notesStart(); const id = 'n' + Date.now().toString(36); myNotes = [{ id, text:'', color:'yellow', at:Date.now() }].concat(myNotes || []); notesPersist(); rerenderMain(); setTimeout(() => { const t = document.getElementById('note-' + id); if(t) t.focus(); }, 30); }
+function noteType(id, v){ window._notesTyping = Date.now(); const n = (myNotes || []).find(x => x.id === id); if(!n) return; n.text = v.slice(0, 2000); n.at = Date.now(); notesPersist(); }
+function noteSet(id, k, v){ const n = (myNotes || []).find(x => x.id === id); if(!n) return; n[k] = v; notesPersist(); rerenderMain(); }
+function noteRemove(id){ const n = (myNotes || []).find(x => x.id === id); if(!n) return; const go = () => { myNotes = myNotes.filter(x => x.id !== id); notesPersist(); rerenderMain(); }; if(!String(n.text || '').trim()) go(); else confirmAction('Delete this note?', go); }
 
 /* ---------- saved filters (this browser, per person) ---------- */
 const SF_SKIP = /^(wrId|selected|pcShown|sdShown|stSel|cpEditIdx)/;
@@ -6973,7 +7023,7 @@ function viewBackups(){
   setTimeout(viewBackupsAsync, 0);
   return vHead('Backups', 'Copies of all the app\'s records — stock, assets, vehicles, petty cash, tasks, staff, documents and settings.', '') +
     vPanel('Download a backup file', days >= 9999 ? 'Never downloaded on this computer' : 'Last downloaded ' + (days === 0 ? 'today' : days + ' day' + (days === 1 ? '' : 's') + ' ago'), `<div class="px-5 sm:px-6 py-5">
-      <p class="text-sm text-slate-600 mb-3">Download a copy at least once a week and keep it on OneDrive or SharePoint. A reminder appears in the bell when it is more than 7 days old.</p>
+      <p class="text-sm text-slate-600 mb-3">Download a copy now and then (weekly is a good habit) and keep it on OneDrive or SharePoint. Automatic daily copies are also kept in this browser.</p>
       <label class="flex items-center gap-2 text-sm text-slate-600 mb-4"><input type="checkbox" id="bk-files"> Include petty cash attachments and signatures (larger file)</label>
       <div class="flex flex-wrap gap-2.5">${vBtnPrimary('Download backup', 'bkDownload(this)')}${vBtnPlain('Restore from a file…', "document.getElementById('bk-file').click()")}<input type="file" id="bk-file" accept=".json,application/json" class="hidden" onchange="bkRestoreFile(this)"></div></div>`) +
     vPanel('Automatic daily copies (this browser)', 'Last 14 days', `<div id="bk-snaps"><div class="px-6 py-6 text-sm text-slate-400">Loading…</div></div>`) +
@@ -11649,8 +11699,8 @@ function viewAdmin(){
         <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Admin Panel</h1>
         <p class="text-sm text-slate-500 mt-0.5">Manage everyone signed in to this shared database.</p>
       </div>
-      ${firebaseAuth ? `<button onclick="openApproversModal()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 mr-2">Approvers</button>` : ''}
-      ${firebaseAuth ? `<button onclick="openAddMemberModal()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Add member</button>` : ''}
+      <div class="flex items-center gap-2.5 flex-wrap">${firebaseAuth ? `<button onclick="openApproversModal()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Approvers</button>` : ''}
+      ${firebaseAuth ? `<button onclick="openAddMemberModal()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Add member</button>` : ''}</div>
     </div>
     <div class="bg-amber-50 text-amber-800 text-[11.5px] rounded-lg px-3.5 py-2.5 mb-4 leading-relaxed">
       Nobody can change an existing person's password directly here — that would need a backend server. You can add a member, update someone's name, designation, department, and role, or send them a password reset email.

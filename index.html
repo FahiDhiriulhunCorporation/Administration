@@ -387,6 +387,20 @@ function refreshAppearanceModal(){
     .rh-section{ break-inside: avoid; }
     body{ background:#fff; }
   }
+
+  /* dd-mm-yyyy date fields: the small calendar */
+  .dmy-cal{position:fixed;z-index:9999;width:256px;padding:10px;border-radius:12px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 12px 32px rgba(15,23,42,.18);font-size:13px;color:#0f172a;font-family:inherit}
+  .dmy-head{display:flex;align-items:center;gap:2px;margin-bottom:6px}.dmy-head b{flex:1;text-align:center;font-weight:700;font-size:13px}
+  .dmy-head button{width:26px;height:26px;border-radius:6px;color:#475569;font-size:15px;line-height:1}.dmy-head button:hover{background:#f1f5f9}
+  .dmy-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}.dmy-dow span{text-align:center;font-size:10.5px;font-weight:600;color:#94a3b8;padding:3px 0}
+  .dmy-grid button{height:30px;border-radius:7px;color:#0f172a;font-variant-numeric:tabular-nums}.dmy-grid button:hover{background:#eef2ff}
+  .dmy-grid button.today{box-shadow:inset 0 0 0 1.5px rgb(var(--brand-500))}.dmy-grid button.on{background:rgb(var(--brand-600));color:#fff;font-weight:700}
+  .dmy-grid button:disabled{color:#cbd5e1;cursor:not-allowed;background:none}
+  .dmy-foot{display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9}.dmy-foot button{font-size:12px;font-weight:600;color:rgb(var(--brand-600));padding:3px 8px;border-radius:6px}.dmy-foot button:hover{background:#eef2ff}
+  html[data-theme="dark"] .dmy-cal{background:#1e293b;border-color:#334155;color:#e2e8f0;box-shadow:0 12px 32px rgba(0,0,0,.5)}
+  html[data-theme="dark"] .dmy-head button{color:#cbd5e1}html[data-theme="dark"] .dmy-head button:hover,html[data-theme="dark"] .dmy-grid button:hover,html[data-theme="dark"] .dmy-foot button:hover{background:#334155}
+  html[data-theme="dark"] .dmy-grid button{color:#e2e8f0}html[data-theme="dark"] .dmy-grid button:disabled{color:#475569}html[data-theme="dark"] .dmy-grid button.on{color:#fff}html[data-theme="dark"] .dmy-foot{border-color:#334155}html[data-theme="dark"] .dmy-foot button{color:#a5b4fc}
+  .dmy-bad{outline:2px solid #f43f5e!important}
 </style>
 <script>
   if('serviceWorker' in navigator){
@@ -1574,11 +1588,113 @@ function loadScriptOnce(src){
 }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* =====================================================================
+   DATES — every date in the app reads dd-mm-yyyy. Date fields are shown as dd-mm-yyyy text boxes with a small
+   calendar; the real <input type="date"> stays (hidden) underneath and keeps its yyyy-mm-dd value, so forms and
+   saving are unchanged.
+===================================================================== */
+const dmyPad = n => String(n).padStart(2, '0');
+const dmyOf = d => dmyPad(d.getDate()) + '-' + dmyPad(d.getMonth() + 1) + '-' + d.getFullYear();
+const isoToDmy = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; };
+function fmtD(ts){ const d = ts instanceof Date ? ts : new Date(ts); return isNaN(d) ? '' : dmyOf(d); }
+function fmtDT(ts){ const d = ts instanceof Date ? ts : new Date(ts); return isNaN(d) ? '' : dmyOf(d) + ' ' + dmyPad(d.getHours()) + ':' + dmyPad(d.getMinutes()); }
+// typed text → yyyy-mm-dd (accepts 5-3-2026, 05/03/26, 05.03.2026, 2026-03-05)
+function dmyParse(t){
+  t = String(t || '').trim(); if(!t) return '';
+  let m = /^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/.exec(t), y, mo, d;
+  if(m){ y = +m[1]; mo = +m[2]; d = +m[3]; }
+  else { m = /^(\d{1,2})[-\/. ](\d{1,2})[-\/. ](\d{2}|\d{4})$/.exec(t) || /^(\d{2})(\d{2})(\d{4}|\d{2})$/.exec(t); if(!m) return null; d = +m[1]; mo = +m[2]; y = +m[3]; if(y < 100) y += 2000; }
+  const dt = new Date(Date.UTC(y, mo - 1, d)); if(dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  return y + '-' + dmyPad(mo) + '-' + dmyPad(d);
+}
+const DMY_VALUE = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+Object.defineProperty(HTMLInputElement.prototype, 'value', { configurable:true, enumerable:DMY_VALUE.enumerable,
+  get(){ return DMY_VALUE.get.call(this); },
+  set(v){ DMY_VALUE.set.call(this, v); if(this._dmy) this._dmy.value = isoToDmy(DMY_VALUE.get.call(this)); } });   // code that sets a date field updates what is shown
+function dmyCommit(real, iso){
+  if(DMY_VALUE.get.call(real) === iso){ real._dmy.value = isoToDmy(iso); return; }
+  DMY_VALUE.set.call(real, iso); real._dmy.value = isoToDmy(iso);
+  real.dispatchEvent(new Event('input', { bubbles:true })); real.dispatchEvent(new Event('change', { bubbles:true }));
+}
+function dmyEnhance(root){
+  (root || document).querySelectorAll('input[type="date"]:not([data-dmy])').forEach(real => {
+    real.setAttribute('data-dmy', '1');
+    const box = document.createElement('input');
+    box.type = 'text'; box.className = real.className; box.style.cssText = real.style.cssText; box.placeholder = 'dd-mm-yyyy'; box.autocomplete = 'off'; box.inputMode = 'numeric';
+    box.disabled = real.disabled; box.readOnly = real.readOnly; box.title = real.title || ''; box.value = isoToDmy(real.value);
+    if(real.getAttribute('aria-label')) box.setAttribute('aria-label', real.getAttribute('aria-label'));
+    box.setAttribute('data-dmy-box', '1');
+    real._dmy = box; box._real = real;
+    real.style.display = 'none';
+    real.after(box);
+    box.addEventListener('focus', () => dmyOpen(box));
+    box.addEventListener('click', () => dmyOpen(box));
+    box.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); dmyFromText(box); dmyClose(); } else if(e.key === 'Escape'){ dmyClose(); } else if(e.key === 'Tab') dmyClose(); });
+    box.addEventListener('blur', () => setTimeout(() => { if(!DMY.cal || !DMY.cal.contains(document.activeElement)) dmyFromText(box); }, 150));
+    box.addEventListener('input', () => { const iso = dmyParse(box.value); if(iso && box.value.replace(/\D/g, '').length >= 8){ DMY.view = iso.slice(0, 7); dmyDraw(); } });
+  });
+}
+function dmyFromText(box){
+  const real = box._real; if(!real) return; const t = box.value.trim();
+  if(!t){ dmyCommit(real, ''); return; }
+  const iso = dmyParse(t);
+  if(iso === null){ box.value = isoToDmy(real.value); box.classList.add('dmy-bad'); setTimeout(() => box.classList.remove('dmy-bad'), 900); return; }
+  dmyCommit(real, iso);
+}
+const DMY = { cal:null, box:null, view:'' };
+function dmyOpen(box){
+  if(box.disabled || box.readOnly) return;
+  if(DMY.box === box && DMY.cal) return;
+  DMY.box = box; DMY.view = (box._real.value || box._real.min || localDateStr(new Date())).slice(0, 7);
+  if(!DMY.cal){
+    DMY.cal = document.createElement('div'); DMY.cal.className = 'dmy-cal'; DMY.cal.tabIndex = -1;
+    DMY.cal.addEventListener('mousedown', e => e.preventDefault());                 // keep the focus in the text box
+    document.body.appendChild(DMY.cal);
+  }
+  dmyDraw(); dmyPlace();
+}
+function dmyPlace(){
+  if(!DMY.cal || !DMY.box) return;
+  const r = DMY.box.getBoundingClientRect(), h = DMY.cal.offsetHeight || 300, w = DMY.cal.offsetWidth || 260;
+  let top = r.bottom + 4; if(top + h > window.innerHeight - 8 && r.top - h - 4 > 8) top = r.top - h - 4;
+  DMY.cal.style.top = Math.max(8, top) + 'px'; DMY.cal.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+}
+function dmyClose(){ if(DMY.cal){ DMY.cal.remove(); DMY.cal = null; } DMY.box = null; }
+function dmyDraw(){
+  if(!DMY.cal || !DMY.box) return;
+  const real = DMY.box._real, sel = real.value, today = localDateStr(new Date()), min = real.min || '', max = real.max || '';
+  const [y, m] = DMY.view.split('-').map(Number), first = new Date(y, m - 1, 1), start = (first.getDay() + 6) % 7, days = new Date(y, m, 0).getDate();
+  let cells = '';
+  for(let i = 0; i < start; i++) cells += '<span></span>';
+  for(let d = 1; d <= days; d++){
+    const iso = y + '-' + dmyPad(m) + '-' + dmyPad(d), off = (min && iso < min) || (max && iso > max);
+    cells += `<button type="button" data-iso="${iso}" class="${iso === sel ? 'on' : ''} ${iso === today ? 'today' : ''}" ${off ? 'disabled' : ''}>${d}</button>`;
+  }
+  const label = first.toLocaleDateString('en-GB', { month:'long', year:'numeric' });
+  DMY.cal.innerHTML = `<div class="dmy-head"><button type="button" data-nav="-12" title="Previous year">«</button><button type="button" data-nav="-1" title="Previous month">‹</button><b>${label}</b><button type="button" data-nav="1" title="Next month">›</button><button type="button" data-nav="12" title="Next year">»</button></div>
+    <div class="dmy-grid dmy-dow">${['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(x => `<span>${x}</span>`).join('')}</div><div class="dmy-grid">${cells}</div>
+    <div class="dmy-foot"><button type="button" data-act="clear">Clear</button><button type="button" data-act="today">Today</button></div>`;
+  DMY.cal.onclick = e => {
+    const b = e.target.closest('button'); if(!b || b.disabled) return; const box = DMY.box; if(!box) return;
+    if(b.dataset.nav){ const d = new Date(y, m - 1 + (+b.dataset.nav), 1); DMY.view = d.getFullYear() + '-' + dmyPad(d.getMonth() + 1); dmyDraw(); return; }
+    if(b.dataset.act === 'clear'){ dmyCommit(box._real, ''); dmyClose(); return; }
+    const iso = b.dataset.act === 'today' ? today : b.dataset.iso;
+    if(iso){ dmyCommit(box._real, iso); dmyClose(); }
+  };
+  dmyPlace();
+}
+document.addEventListener('mousedown', e => { if(DMY.cal && !DMY.cal.contains(e.target) && e.target !== DMY.box) dmyClose(); });
+window.addEventListener('resize', () => dmyPlace());
+document.addEventListener('scroll', () => dmyPlace(), true);
+new MutationObserver(muts => {
+  if(DMY.box && !document.body.contains(DMY.box)) dmyClose();
+  for(const m of muts) for(const n of m.addedNodes) if(n.nodeType === 1 && (n.matches && n.matches('input[type="date"]') || n.querySelector && n.querySelector('input[type="date"]:not([data-dmy])'))){ dmyEnhance(document); return; }
+}).observe(document.documentElement, { childList:true, subtree:true });
+document.addEventListener('DOMContentLoaded', () => dmyEnhance(document));
 function fmtDate(d){
   if(!d) return '—';
-  const dt = new Date(d + 'T00:00:00');
-  if(isNaN(dt)) return d;
-  return dt.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+  const iso = isoToDmy(d); if(iso) return iso;
+  const dt = new Date(d); return isNaN(dt) ? d : dmyOf(dt);
 }
 function fmtNum(n){ return (Number(n)||0).toLocaleString(undefined, { maximumFractionDigits:2 }); }
 function fmtMVR(n){ return 'MVR ' + (Number(n)||0).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 }); }
@@ -2132,9 +2248,9 @@ function vBucketList(from, to, g){
 }
 function vBucketLabel(k, g, long){
   if(g === 'month') return vParse(k + '-01').toLocaleDateString('en-GB', { month:'short', year: long ? 'numeric' : '2-digit' });
-  const s = vParse(k).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+  const s = isoToDmy(k).slice(0, 5);
   if(g === 'week') return long ? 'Week of ' + s + ' ' + k.slice(0, 4) : s;
-  return long ? vParse(k).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) : s;
+  return long ? vParse(k).toLocaleDateString('en-GB', { weekday:'short' }) + ' ' + isoToDmy(k) : s;
 }
 function vRepData(){
   const rg = vRepRange(), g = vRepGran(rg.from, rg.to);
@@ -3047,7 +3163,7 @@ function pcSteps(r){
   const reimb = r.option === 'Reimbursement', rq = pcRequester(r), sig = r.requesterSignature, inv = pcInvoices(r), proc = !!r.processedDate;
   const s = {
     requested: { label:'Requested', done:true, text:vDate(r.date) + ' · ' + (rq.name || 'the requester') },
-    signed: pcSigned(r) ? { label:'Signed by the requester', done:true, text:sig.name + ' · ' + new Date(sig.signedAt).toLocaleString() } : r.formLink ? { label:'Signed form attached', done:true, text:'A link to the signed form is attached, so no digital signature is needed' } : { label:'Signed by the requester', done:false, text:'Waiting for ' + (rq.name || 'the requester') },
+    signed: pcSigned(r) ? { label:'Signed by the requester', done:true, text:sig.name + ' · ' + fmtDT(sig.signedAt) } : r.formLink ? { label:'Signed form attached', done:true, text:'A link to the signed form is attached, so no digital signature is needed' } : { label:'Signed by the requester', done:false, text:'Waiting for ' + (rq.name || 'the requester') },
     invoice: { label:'Invoice added', done:pcHasInvoice(r), text:pcHasInvoice(r) ? inv.length + ' invoice' + (inv.length === 1 ? '' : 's') + ' · ' + fmtMVR(pcInvoiceTotal(r)) : 'No invoice yet' },
     processed: { label:reimb ? 'Reimbursement paid' : 'Cash handed over', done:proc, text:proc ? [vDate(r.processedDate), r.processedBy, fmtMVR(r.processedAmount), 'received by ' + pcCashReceiver(r).name].filter(Boolean).join(' · ') + (r.processNote ? '\n' + r.processNote : '') + (vNum(r.balanceReturned) ? '\nBalance returned ' + fmtMVR(r.balanceReturned) : '') : 'Not processed yet' },
     statement: { label:'Included in a statement', done:!!r.statementNo, text:r.statementNo ? r.statementNo + (pcInClosed(r) ? ' · closed' : ' · open') : 'Not in a statement yet' },
@@ -4470,7 +4586,7 @@ const pcDiffHtml = rc => !rc.counted ? '<span class="text-slate-400 text-xs">Not
 function pcCashHtml(){
   const rows = pcFundList().map(f => ({ f, rc:pcReconcile(f) })).filter(x => x.rc.assigned || x.rc.counted);
   if(!rows.length) return '';
-  return vPanel('Cash at hand', 'Cash at hand + pending replenishment = cash balance, which should equal the assigned balance less the amount used', `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Location / fund' }, { t:'Assigned', n:1 }, { t:'Amount used', n:1 }, { t:'Pending replenishment', n:1 }, { t:'Cash at hand', n:1 }, { t:'Unbalanced' }, { t:'' }])}<tbody>${rows.map(({ f, rc }) => `<tr class="${vTr}">${vTd(`<span class="inline-flex items-center gap-2"><i class="w-2.5 h-2.5 rounded-full" style="background:${esc(f.color)}"></i><span class="font-semibold">${esc(f.name)}</span></span>`, { first:1 })}${vTd(fmtMVR(rc.assigned), { n:1 })}${vTd(fmtMVR(rc.spent), { n:1 })}${vTd(fmtMVR(rc.pending), { n:1 })}${vTd(rc.counted ? `<b>${fmtMVR(rc.cash)}</b><div class="text-[11px] text-slate-400">${esc(new Date(rc.at).toLocaleDateString('en-GB', { day:'numeric', month:'short' }))} · ${esc(rc.by || '')}</div>` : '<span class="text-slate-400">—</span>', { n:1 })}${vTd(pcDiffHtml(rc))}${vTd(pcCanCount(f.id) ? `<button onclick="openPcCashCount('${esc(f.id)}')" class="text-xs font-semibold text-brand-600 hover:underline whitespace-nowrap">${rc.counted ? 'Update count' : 'Count cash'}</button>` : '', { last:1, cls:'text-right' })}</tr>`).join('')}</tbody></table></div>`);
+  return vPanel('Cash at hand', 'Cash at hand + pending replenishment = cash balance, which should equal the assigned balance less the amount used', `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Location / fund' }, { t:'Assigned', n:1 }, { t:'Amount used', n:1 }, { t:'Pending replenishment', n:1 }, { t:'Cash at hand', n:1 }, { t:'Unbalanced' }, { t:'' }])}<tbody>${rows.map(({ f, rc }) => `<tr class="${vTr}">${vTd(`<span class="inline-flex items-center gap-2"><i class="w-2.5 h-2.5 rounded-full" style="background:${esc(f.color)}"></i><span class="font-semibold">${esc(f.name)}</span></span>`, { first:1 })}${vTd(fmtMVR(rc.assigned), { n:1 })}${vTd(fmtMVR(rc.spent), { n:1 })}${vTd(fmtMVR(rc.pending), { n:1 })}${vTd(rc.counted ? `<b>${fmtMVR(rc.cash)}</b><div class="text-[11px] text-slate-400">${esc(fmtD(rc.at))} · ${esc(rc.by || '')}</div>` : '<span class="text-slate-400">—</span>', { n:1 })}${vTd(pcDiffHtml(rc))}${vTd(pcCanCount(f.id) ? `<button onclick="openPcCashCount('${esc(f.id)}')" class="text-xs font-semibold text-brand-600 hover:underline whitespace-nowrap">${rc.counted ? 'Update count' : 'Count cash'}</button>` : '', { last:1, cls:'text-right' })}</tr>`).join('')}</tbody></table></div>`);
 }
 function pcCountRecalc(){
   let total = 0; document.querySelectorAll('#pc-count-body input[data-d]').forEach(i => { const q = Math.max(0, Math.floor(vNum(i.value))), d = +i.dataset.d, t = pcRound(d * q); total += t; i.closest('tr').querySelector('.pc-ct').textContent = pcMoneyPlain(t); });
@@ -4484,7 +4600,7 @@ function openPcCashCount(fundId){
   if(!pcCanCount(fundId)){ toast('Only the petty cash custodian (or an admin) can update the cash count.', true); return; }
   const cnt = pcCountOf(fundId), counts = (cnt && cnt.counts) || {}, rc = pcReconcile(f);
   openModal('Cash at hand — ' + f.name, `
-    <div class="text-[12.5px] text-slate-500 mb-3">Enter how many notes and coins of each kind are in the petty cash, and any amount waiting to be replenished. You can update this at any time.${cnt ? `<br>Last counted ${esc(new Date(cnt.countedAt).toLocaleString())} by ${esc(cnt.countedBy || '')}.` : ''}</div>
+    <div class="text-[12.5px] text-slate-500 mb-3">Enter how many notes and coins of each kind are in the petty cash, and any amount waiting to be replenished. You can update this at any time.${cnt ? `<br>Last counted ${esc(fmtDT(cnt.countedAt))} by ${esc(cnt.countedBy || '')}.` : ''}</div>
     <table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wider text-slate-400"><th class="py-1.5 font-semibold">Denomination</th><th class="py-1.5 font-semibold w-32">Quantity</th><th class="py-1.5 font-semibold text-right">Total MVR</th></tr></thead>
       <tbody id="pc-count-body" data-expected="${rc.expected}" data-tracked="${rc.tracked}">${PC_DENOMS.map(d => `<tr class="border-t border-slate-100"><td class="py-1.5 font-semibold text-slate-700 num">${d}</td><td class="py-1.5"><input type="number" min="0" step="1" data-d="${d}" value="${esc(counts[String(d)] || '')}" placeholder="0" oninput="pcCountRecalc()" class="${VEH_FIELD} !py-1.5"></td><td class="py-1.5 text-right num pc-ct">0.00</td></tr>`).join('')}</tbody></table>
     <div class="border-t border-slate-200 mt-1 pt-3 grid grid-cols-2 gap-y-2.5 text-sm items-center">
@@ -4596,7 +4712,7 @@ function viewPettyCashCount(){
         <select onchange="vehUi.ccFund=this.value; rerenderMain();" class="${VEH_INPUT} w-full">${funds}</select></label>
       <label class="block"><span class="block text-xs font-semibold text-slate-500 mb-1">Date</span>
         <input type="date" value="${esc(dr.date)}" onchange="pcCcSet('date', this)" class="${VEH_FIELD}"></label>
-      <div class="text-[12px] text-slate-500">${cnt ? `Last saved ${esc(new Date(cnt.countedAt).toLocaleString())}${cnt.countedBy ? ' by ' + esc(cnt.countedBy) : ''}.` : 'Not counted yet.'}${can ? '' : '<br><span class="text-amber-700">Only the petty cash custodian (or an admin) can save a count here. You can still export.</span>'}</div>
+      <div class="text-[12px] text-slate-500">${cnt ? `Last saved ${esc(fmtDT(cnt.countedAt))}${cnt.countedBy ? ' by ' + esc(cnt.countedBy) : ''}.` : 'Not counted yet.'}${can ? '' : '<br><span class="text-amber-700">Only the petty cash custodian (or an admin) can save a count here. You can still export.</span>'}</div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-6">
@@ -4709,7 +4825,7 @@ function pcCcRecordsHtml(f){
     const sh = r.sheet || {}, bal = Math.abs(vNum(r.diff)) < 0.005;
     const link = r.docUrl ? vLink(r.docUrl, 'Open document') : '<span class="text-xs text-slate-400">No document</span>';
     return `<tr class="${vTr}">
-      ${vTd(`<span class="font-semibold">${esc(pcCcDmy(r.date))}</span><div class="text-[11px] text-slate-400">saved ${esc(new Date(r.savedAt).toLocaleString())}${r.savedBy ? ' · ' + esc(r.savedBy) : ''}</div>`, { first:1 })}
+      ${vTd(`<span class="font-semibold">${esc(isoToDmy(r.date))}</span><div class="text-[11px] text-slate-400">saved ${esc(fmtDT(r.savedAt))}${r.savedBy ? ' · ' + esc(r.savedBy) : ''}</div>`, { first:1 })}
       ${vTd(fmtMVR(r.total), { n:1 })}
       ${vTd(r.diff == null ? '—' : bal ? '<span class="text-emerald-600 text-xs font-semibold">Balanced ✓</span>' : vPill('crit', (r.diff > 0 ? 'Short ' : 'Over ') + fmtMVR(Math.abs(r.diff))))}
       ${vTd(`<div class="text-xs">${esc(sh.pName || '—')}</div><div class="text-[11px] text-slate-400">Checked: ${esc(sh.cName || '—')}</div>`)}
@@ -5155,7 +5271,7 @@ function pcCashBoxHtml(loc){
   const rc = pcReconcile(loc), bad = rc.counted && Math.abs(rc.diff) >= 0.005, cell = (l, v, strong) => `<div><div class="text-[11px] text-slate-400">${l}</div><div class="text-sm ${strong ? 'font-bold text-slate-900' : 'text-slate-700'} num">${v}</div></div>`;
   return vPanel('Cash at hand', pcCanCount(loc.id) ? `<button onclick="openPcCashCount('${esc(loc.id)}')" class="text-xs font-semibold text-brand-600 hover:underline">${rc.counted ? 'Update count' : 'Count cash'}</button>` : '', `
     <div class="px-5 sm:px-6 py-4 grid grid-cols-2 sm:grid-cols-5 gap-4 items-center ${bad ? 'border-l-4 border-rose-500' : ''}">${cell('Assigned', fmtMVR(rc.assigned))}${cell('Amount used', fmtMVR(rc.spent))}${cell('Pending replenishment', fmtMVR(rc.pending))}${cell('Cash at hand', rc.counted ? fmtMVR(rc.cash) : '—', 1)}<div><div class="text-[11px] text-slate-400">Unbalanced</div><div class="mt-0.5">${pcDiffHtml(rc)}</div></div></div>
-    <div class="px-5 sm:px-6 pb-3 text-[11.5px] text-slate-400">Cash at hand + pending replenishment = cash balance${rc.counted ? ' (' + fmtMVR(rc.cashBalance) + ')' : ''}, which should equal the assigned balance less the amount used (${fmtMVR(rc.expected)}).${rc.stPending || rc.manual ? ' Pending replenishment includes ' + [rc.manual ? fmtMVR(rc.manual) + ' entered with the count' : '', rc.stPending ? fmtMVR(rc.stPending) + ' on closed statements not yet replenished' : ''].filter(Boolean).join(' and ') + '.' : ''}${rc.counted ? ` Counted ${esc(new Date(rc.at).toLocaleString())}${rc.by ? ' by ' + esc(rc.by) : ''}.` : ' No count yet.'}</div>`);
+    <div class="px-5 sm:px-6 pb-3 text-[11.5px] text-slate-400">Cash at hand + pending replenishment = cash balance${rc.counted ? ' (' + fmtMVR(rc.cashBalance) + ')' : ''}, which should equal the assigned balance less the amount used (${fmtMVR(rc.expected)}).${rc.stPending || rc.manual ? ' Pending replenishment includes ' + [rc.manual ? fmtMVR(rc.manual) + ' entered with the count' : '', rc.stPending ? fmtMVR(rc.stPending) + ' on closed statements not yet replenished' : ''].filter(Boolean).join(' and ') + '.' : ''}${rc.counted ? ` Counted ${esc(fmtDT(rc.at))}${rc.by ? ' by ' + esc(rc.by) : ''}.` : ' No count yet.'}</div>`);
 }
 function viewPcStatementsExcel(){
   const locId = pcStLocation(), loc = pcFund(locId), yy = vToday().slice(2, 4);
@@ -5331,7 +5447,7 @@ function viewLeavePlan(){
       <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto mb-4 select-none" onmouseleave="lvUp()"><table class="w-full text-sm border-collapse table-fixed min-w-[60rem]"><colgroup><col style="width:11rem">${days.map(() => '<col>').join('')}${used.map(() => '<col style="width:1.9rem">').join('')}<col style="width:2.4rem"><col style="width:1.9rem"><col style="width:1.9rem"></colgroup>
         <thead><tr><th class="py-1.5 pl-3 pr-1 text-left text-[10px] uppercase tracking-wide text-slate-400 sticky left-0 bg-white z-[1]">${LV_MONTHS[mode - 1].slice(0, 3)} ${year}</th>${hdr}${used.map((t, k) => `<th class="p-0 text-center ${k === 0 ? 'border-l-2 border-slate-300' : ''}" title="${esc(t.name)}"><span class="px-0.5 rounded text-[9px] font-bold" style="background:${esc(t.color)};color:${lvInk(t.color)}">${esc(t.code)}</span></th>`).join('')}<th class="p-0 text-center text-[9.5px] font-bold uppercase text-slate-500 ${used.length ? '' : 'border-l-2 border-slate-300'}" title="Leave days this month">Total</th>${LV_ATT.map((t, k) => `<th class="p-0 text-center ${k === 0 ? 'border-l-2 border-slate-300' : ''}" title="${t.name}"><span class="px-0.5 rounded text-[9px] font-bold" style="background:${t.color};color:${lvInk(t.color)}">${t.short}</span></th>`).join('')}</tr></thead><tbody>${rows}${foot}</tbody></table></div>
       ${mHols.length ? `<div class="bg-white rounded-xl border border-slate-200 mb-3 overflow-hidden"><div class="px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 border-b border-slate-100">Public holidays this month</div><div class="divide-y divide-slate-100">${mHols.map(h => `<button type="button" onclick="openLvHolidayView('${esc(h.from)}')" class="w-full text-left px-4 py-2.5 flex items-start gap-3 hover:bg-slate-50"><span class="w-4 h-4 rounded border border-slate-300 lv-hol shrink-0 mt-0.5"></span><span class="flex-1 min-w-0"><span class="text-sm font-semibold text-slate-800">${esc(h.name)}</span> <span class="text-xs text-slate-500">· ${vDate(h.from)}${h.to && h.to !== h.from ? ' – ' + vDate(h.to) : ''} · ${esc(h.type || 'Public holiday')}</span>${h.details ? `<span class="block text-xs text-slate-600 mt-0.5">${esc(h.details)}</span>` : ''}</span><span class="text-xs font-semibold text-brand-600 shrink-0">Details ›</span></button>`).join('')}</div></div>` : ''}
-      ${marks.length ? `<div class="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-600 mb-4">${marks.sort((a, b) => a.iso.localeCompare(b.iso)).map(x => `<span>${x.m.icon} <b class="text-slate-700">${+x.iso.slice(8)} ${LV_MONTHS[mode - 1].slice(0, 3)}</b> · ${esc(x.m.text)}</span>`).join('')}</div>` : ''}`;
+      ${marks.length ? `<div class="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-600 mb-4">${marks.sort((a, b) => a.iso.localeCompare(b.iso)).map(x => `<span>${x.m.icon} <b class="text-slate-700">${isoToDmy(x.iso)}</b> · ${esc(x.m.text)}</span>`).join('')}</div>` : ''}`;
   }
   const t0 = vToday(), onLeave = +t0.slice(0, 4) === year ? staff.filter(s => lvIsLeave(((lvDoc(s.key, year) || {}).days || {})[t0.slice(5)])) : [];
   const celebr = +t0.slice(0, 4) === year ? staff.flatMap(s => lvMarks(s.key, s.name, t0)) : [];
@@ -5611,7 +5727,7 @@ function openSdView(key){
         <div class="flex flex-wrap gap-x-4 gap-y-1.5">${sdCanEdit(key) ? `<button onclick="sdPhotoPick('${esc(key)}')" class="text-xs font-semibold text-brand-600 hover:underline">${p.photo ? 'Change photo' : 'Upload photo'}</button>${p.photo ? `<button onclick="sdPhotoRemove('${esc(key)}')" class="text-xs font-semibold text-slate-400 hover:text-rose-600 hover:underline">Remove photo</button>` : ''}` : ''}<button onclick="sdIdPdf('${esc(key)}', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download staff ID card (PDF)</button></div></div></div>
     ` : ''}
     ${vSec('Shift')}<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-2">${item('Usual', esc((sc.short || sc.code) + ' · ' + lvHours(sc)))}${item('Ramadaan', esc((rs.short || rs.code) + ' · ' + lvHours(rs)))}${item('Working days', p.workDays.map(i => LV_DOW[i].slice(0, 3)).join(', '))}</div>
-    ${personal ? vSec('Personal details') + `<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-2">${item('Birthday', p.birthday ? '🎂 ' + (p.birthday.length === 10 ? vDate(p.birthday) : +p.birthday.slice(3) + ' ' + LV_MONTHS[+p.birthday.slice(0, 2) - 1]) : '')}${item('Work anniversary', p.joinDate ? '★ ' + vDate(p.joinDate) + ' · ' + sdYears(p.joinDate) + ' yr' + (sdYears(p.joinDate) === 1 ? '' : 's') : '')}${item('Emergency contact', esc([p.emergencyName, p.emergencyRelation && '(' + p.emergencyRelation + ')', p.emergencyPhone].filter(Boolean).join(' ')))}</div>${p.notes ? `<div class="text-sm text-slate-600 mt-2">${esc(p.notes)}</div>` : ''}` : `<p class="text-xs text-slate-400 mt-3">Personal details are visible to admins and to ${esc(p.name)}.</p>`}
+    ${personal ? vSec('Personal details') + `<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-2">${item('Birthday', p.birthday ? '🎂 ' + (p.birthday.length === 10 ? vDate(p.birthday) : p.birthday.slice(3) + '-' + p.birthday.slice(0, 2)) : '')}${item('Work anniversary', p.joinDate ? '★ ' + vDate(p.joinDate) + ' · ' + sdYears(p.joinDate) + ' yr' + (sdYears(p.joinDate) === 1 ? '' : 's') : '')}${item('Emergency contact', esc([p.emergencyName, p.emergencyRelation && '(' + p.emergencyRelation + ')', p.emergencyPhone].filter(Boolean).join(' ')))}</div>${p.notes ? `<div class="text-sm text-slate-600 mt-2">${esc(p.notes)}</div>` : ''}` : `<p class="text-xs text-slate-400 mt-3">Personal details are visible to admins and to ${esc(p.name)}.</p>`}
     <div class="flex justify-end gap-4 pt-4 mt-4 border-t border-slate-100">${!p.login && admin ? `<button onclick="removeLvPerson('${esc(key)}')" class="text-xs font-semibold text-slate-400 hover:text-rose-600 hover:underline">Remove</button>` : ''}<button onclick="vehUi.lvYear=+vToday().slice(0,4); goTo('leave-plan'); closeModal()" class="text-xs font-semibold text-brand-600 hover:underline">Leave plan</button>${sdCanEdit(key) ? `<button onclick="openSdEdit('${esc(key)}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>` : ''}</div>`, true);
 }
 function openSdEdit(key){
@@ -5960,7 +6076,7 @@ function tkList(){
   if(!list.length) return `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(state.tasks.length ? 'No tasks match.' : 'No tasks yet.' + (canManageInventory() ? ' Use "+ Task" to add one and assign it to staff.' : ''))}</div>`;
   const t0 = vToday();
   const dueNote = t => { if(t.status === 'Completed') return t.completedOn ? `<div class="text-[11px] ${t.due && t.completedOn > t.due ? 'text-amber-600' : 'text-emerald-600'}">Done ${vDate(t.completedOn)}</div>` : ''; if(tkDone(t) || !t.due) return ''; const d = tkDays(t0, t.due); return `<div class="text-[11px] ${d < 0 ? 'text-rose-600 font-semibold' : d <= 3 ? 'text-amber-600' : 'text-slate-400'}">${d < 0 ? -d + ' day' + (d === -1 ? '' : 's') + ' late' : d === 0 ? 'Due today' : 'in ' + d + ' day' + (d === 1 ? '' : 's')}</div>`; };
-  const short = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '';
+  const short = iso => iso ? isoToDmy(iso) : '';
   const dates = t => `<div class="whitespace-nowrap text-slate-700">${short(t.start)}${t.due ? ' – ' + short(t.due) : ''}</div>${t.due || t.status === 'Completed' ? dueNote(t) : '<div class="text-[11px] text-slate-400">No due date</div>'}`;
   const bar = t => { const p = tkProg(t), c = TK_COL[tkState(t)]; return `<div class="flex items-center gap-2 w-28"><div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${p}%;background:${c}"></div></div><span class="text-xs text-slate-500 num w-8 text-right">${p}%</span></div>`; };
   const who = t => { const as = t.assignees || []; if(!as.length) return '<span class="text-xs text-slate-400">—</span>';
@@ -5973,60 +6089,73 @@ function tkList(){
 }
 
 /* ---------- Gantt chart ---------- */
-function tkRange(){
-  const span = { month:1, '3m':3, '6m':6 }[vehUi.tkSpan || '3m'] || 3, sh = +vehUi.tkShift || 0, now = new Date();
-  const first = new Date(Date.UTC(now.getFullYear(), now.getMonth() + sh - (span === 1 ? 0 : 1), 1)), last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + span, 0));
+function tkRange(list){
+  const span = vehUi.tkSpan || 'fit', sh = +vehUi.tkShift || 0, now = new Date(), t0 = vToday();
+  if(span === 'fit'){
+    const recent = (list || []).filter(t => t.start && (!tkDone(t) || tkEnd(t) >= clIsoAdd(t0, -45)));
+    let from = recent.reduce((m, t) => t.start < m ? t.start : m, clIsoAdd(t0, -7)), to = recent.reduce((m, t) => tkEnd(t) > m ? tkEnd(t) : m, clIsoAdd(t0, 14));
+    from = clIsoAdd(from, -((new Date(from + 'T00:00:00Z').getUTCDay() + 6) % 7));                   // start on a Monday
+    if(tkDays(from, to) < 34) to = clIsoAdd(from, 34);
+    to = clIsoAdd(to, 6 - ((new Date(to + 'T00:00:00Z').getUTCDay() + 6) % 7));                        // end on a Sunday
+    return { from, to, span };
+  }
+  const n = span === 'month' ? 1 : 3;
+  const first = new Date(Date.UTC(now.getFullYear(), now.getMonth() + sh * n - (n === 1 ? 0 : 1), 1)), last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + n, 0));
   return { from:first.toISOString().slice(0, 10), to:last.toISOString().slice(0, 10), span };
 }
 function tkShift(n){ vehUi.tkShift = n === 0 ? 0 : (+vehUi.tkShift || 0) + n; rerenderMain(); }
 function tkGantt(){
-  const R = tkRange(), dW = R.span === 1 ? 30 : R.span === 3 ? 13 : 7, LW = 270, RH = 36, nD = tkDays(R.from, R.to) + 1, W = nD * dW, t0 = vToday();
-  const list = tkFiltered().filter(t => t.start && t.start <= R.to && tkEnd(t) >= R.from).sort((a, b) => a.start.localeCompare(b.start) || tkEnd(a).localeCompare(tkEnd(b)));
+  const all = tkFiltered(), R = tkRange(all), nD = tkDays(R.from, R.to) + 1, t0 = vToday();
+  const dW = R.span === 'fit' ? Math.max(6, Math.min(40, Math.floor(980 / nD))) : R.span === 'month' ? 34 : 13, LW = 240, RH = 48, W = nD * dW;
+  const list = all.filter(t => t.start && t.start <= R.to && tkEnd(t) >= R.from).sort((a, b) => a.start.localeCompare(b.start) || tkEnd(a).localeCompare(tkEnd(b)));
   const group = vehUi.tkGroup || 'task';
+  const btn = 'h-9 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50';
   const ctrl = `<div class="flex flex-wrap items-center gap-2 mb-3">
-      ${vTabs([['month', '1 month'], ['3m', '3 months'], ['6m', '6 months']], vehUi.tkSpan || '3m', 'tkSetSpan')}
-      <div class="inline-flex gap-1"><button onclick="tkShift(-1)" class="h-9 w-9 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50" title="Earlier">‹</button><button onclick="tkShift(0)" class="h-9 px-3 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">Today</button><button onclick="tkShift(1)" class="h-9 w-9 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50" title="Later">›</button></div>
+      ${vTabs([['fit', 'Fit tasks'], ['month', 'Month'], ['3m', '3 months']], R.span, 'tkSetSpan')}
+      ${R.span !== 'fit' ? `<div class="inline-flex gap-1"><button onclick="tkShift(-1)" class="${btn} w-9" title="Earlier">‹</button><button onclick="tkShift(0)" class="${btn} px-3 text-sm font-semibold">Today</button><button onclick="tkShift(1)" class="${btn} w-9" title="Later">›</button></div>` : ''}
       ${vTabs([['task', 'By task'], ['staff', 'By staff']], group, 'tkSetGroup')}
       <span class="flex-1"></span>
-      <div class="flex flex-wrap gap-3 text-xs text-slate-600">${['Not started', 'In progress', 'On hold', 'Completed', 'Overdue'].map(s => `<span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-[3px]" style="background:${TK_COL[s]}"></span>${s}</span>`).join('')}</div></div>`;
-  if(!list.length) return ctrl + `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No tasks with start and due dates fall in ' + vDate(R.from) + ' – ' + vDate(R.to) + '.')}</div>`;
-  // rows: [{ kind:'head', label } | { kind:'task', t, label, sub }]
+      <div class="flex flex-wrap gap-3 text-xs text-slate-500">${['Not started', 'In progress', 'On hold', 'Completed', 'Overdue'].map(s => `<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:${TK_COL[s]}"></span>${s}</span>`).join('')}</div></div>`;
+  if(!list.length) return ctrl + `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No tasks with dates in ' + vDate(R.from) + ' – ' + vDate(R.to) + '.')}</div>`;
   let rows = [];
   if(group === 'staff'){
-    const staff = tkStaffList().filter(s => list.some(t => (t.assignees || []).some(a => a.key === s.key)));
-    staff.forEach(s => { const ts = list.filter(t => (t.assignees || []).some(a => a.key === s.key)); rows.push({ kind:'head', label:s.name, sub:ts.length + ' task' + (ts.length === 1 ? '' : 's') }); ts.forEach(t => rows.push({ kind:'task', t, label:t.title, sub:t.no || '' })); });
-    const none = list.filter(t => !(t.assignees || []).length); if(none.length){ rows.push({ kind:'head', label:'Not assigned', sub:none.length + '' }); none.forEach(t => rows.push({ kind:'task', t, label:t.title, sub:t.no || '' })); }
-  } else rows = list.map(t => ({ kind:'task', t, label:t.title, sub:tkWho(t) || 'Not assigned' }));
-  // header: months + days
+    tkStaffList().filter(s => list.some(t => (t.assignees || []).some(a => a.key === s.key))).forEach(s => { const ts = list.filter(t => (t.assignees || []).some(a => a.key === s.key)); rows.push({ kind:'head', label:s.name, sub:ts.length + ' task' + (ts.length === 1 ? '' : 's') }); ts.forEach(t => rows.push({ kind:'task', t })); });
+    const none = list.filter(t => !(t.assignees || []).length); if(none.length){ rows.push({ kind:'head', label:'Not assigned', sub:String(none.length) }); none.forEach(t => rows.push({ kind:'task', t })); }
+  } else rows = list.map(t => ({ kind:'task', t }));
   const months = []; for(let i = 0; i < nD; ){ const d = clIsoAdd(R.from, i), m = d.slice(0, 7); let n = 0; while(i + n < nD && clIsoAdd(R.from, i + n).slice(0, 7) === m) n++; months.push({ d, n, i }); i += n; }
-  const dayCells = []; for(let i = 0; i < nD; i++){ const d = clIsoAdd(R.from, i), wd = new Date(d + 'T00:00:00Z').getUTCDay(); dayCells.push({ d, i, we:wd === 5 || wd === 6, day:+d.slice(8) }); }
-  const weekendBg = dayCells.filter(c => c.we).map(c => `<div class="absolute top-0 bottom-0 bg-slate-50" style="left:${c.i * dW}px;width:${dW}px"></div>`).join('');
-  const monthLines = months.slice(1).map(m => `<div class="absolute top-0 bottom-0 border-l border-slate-200" style="left:${m.i * dW}px"></div>`).join('');
-  const ti = tkDays(R.from, t0), todayLine = ti >= 0 && ti < nD ? `<div class="absolute top-0 bottom-0 pointer-events-none" style="left:${ti * dW + dW / 2 - 1}px;width:2px;background:#e11d48;opacity:.7"></div>` : '';
-  const showDay = d => dW >= 20 || d.day % 7 === 1;
-  const header = `<div class="flex sticky top-0 z-10 bg-white border-b border-slate-200"><div class="shrink-0 sticky left-0 z-20 bg-white border-r border-slate-200 px-4 flex items-end pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400" style="width:${LW}px">${group === 'staff' ? 'Staff / task' : 'Task'}</div>
-      <div class="relative shrink-0" style="width:${W}px;height:46px">${months.map(m => `<div class="absolute top-0 h-6 px-2 flex items-center text-xs font-bold text-slate-700 whitespace-nowrap overflow-hidden ${m.i ? 'border-l border-slate-200' : ''}" style="left:${m.i * dW}px;width:${m.n * dW}px">${new Date(m.d + 'T00:00:00Z').toLocaleString('en-GB', { month:dW * m.n < 70 ? 'short' : 'long', year:'numeric', timeZone:'UTC' })}</div>`).join('')}
-        ${dayCells.map(c => showDay(c) ? `<div class="absolute top-6 h-5 flex items-center justify-center text-[10px] num ${c.d === t0 ? 'font-bold text-rose-600' : c.we ? 'text-slate-400' : 'text-slate-500'}" style="left:${c.i * dW}px;width:${dW >= 20 ? dW : 18}px">${c.day}</div>` : '').join('')}</div></div>`;
+  const days = []; for(let i = 0; i < nD; i++){ const d = clIsoAdd(R.from, i), wd = new Date(d + 'T00:00:00Z').getUTCDay(); days.push({ d, i, we:wd === 5 || wd === 6, mon:wd === 1, day:+d.slice(8) }); }
+  const every = dW >= 26, ti = tkDays(R.from, t0), inToday = ti >= 0 && ti < nD;
+  const weekend = days.filter(c => c.we).map(c => `<div class="absolute top-0 bottom-0" style="left:${c.i * dW}px;width:${dW}px;background:rgba(148,163,184,.07)"></div>`).join('');
+  const weekLines = days.filter(c => c.mon && c.i).map(c => `<div class="absolute top-0 bottom-0 border-l border-slate-100" style="left:${c.i * dW}px"></div>`).join('');
+  const todayLine = inToday ? `<div class="absolute top-0 bottom-0 pointer-events-none" style="left:${ti * dW + dW / 2}px;border-left:1.5px dashed #f43f5e"></div>` : '';
+  const header = `<div class="flex sticky top-0 z-10 bg-white border-b border-slate-200">
+      <div class="shrink-0 sticky left-0 z-20 bg-white border-r border-slate-200 px-4 flex items-end pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400" style="width:${LW}px">${group === 'staff' ? 'Staff / task' : 'Task'}</div>
+      <div class="relative shrink-0" style="width:${W}px;height:52px">
+        ${months.filter(m => m.n * dW >= 56).map(m => `<div class="absolute px-2 text-xs font-semibold text-slate-600 whitespace-nowrap overflow-hidden" style="top:6px;left:${m.i * dW}px;width:${m.n * dW}px">${new Date(m.d + 'T00:00:00Z').toLocaleString('en-GB', { month:dW * m.n < 90 ? 'short' : 'long', year:'numeric', timeZone:'UTC' })}</div>`).join('')}
+        ${days.filter(c => every || (c.mon && (dW >= 9 || c.day <= 7 || (c.day > 14 && c.day <= 21)))).map(c => `<div class="absolute text-[10.5px] num text-center ${c.we ? 'text-slate-300' : 'text-slate-400'}" style="top:30px;left:${c.i * dW}px;width:${every ? dW : 28}px">${c.day}</div>`).join('')}
+        ${inToday ? `<div class="absolute text-[10px] font-semibold text-white rounded px-1" style="top:29px;left:${Math.max(0, ti * dW + dW / 2 - 18)}px;background:#f43f5e">Today</div>` : ''}
+      </div></div>`;
   const body = rows.map(r => {
-    if(r.kind === 'head') return `<div class="flex border-b border-slate-100 bg-slate-50"><div class="shrink-0 sticky left-0 z-[5] bg-slate-50 border-r border-slate-200 px-4 py-2 flex items-center justify-between gap-2" style="width:${LW}px"><span class="text-[13px] font-bold text-slate-900 truncate">${esc(r.label)}</span><span class="text-[11px] text-slate-400 shrink-0">${esc(r.sub)}</span></div><div class="shrink-0" style="width:${W}px"></div></div>`;
-    const t = r.t, s = tkState(t), c = TK_COL[s], a = t.start < R.from ? R.from : t.start, e = tkEnd(t), b = e > R.to ? R.to : e, open = !t.due;
-    const x = tkDays(R.from, a) * dW + 1, w = Math.max(dW - 2, (tkDays(a, b) + 1) * dW - 2), p = tkProg(t);
+    if(r.kind === 'head') return `<div class="flex border-b border-slate-100"><div class="shrink-0 sticky left-0 z-[5] bg-white border-r border-slate-200 px-4 pt-3 pb-1.5 flex items-baseline justify-between gap-2" style="width:${LW}px"><span class="text-[12px] font-bold uppercase tracking-wide text-slate-500 truncate">${esc(r.label)}</span><span class="text-[11px] text-slate-400 shrink-0">${esc(r.sub)}</span></div><div class="shrink-0" style="width:${W}px"></div></div>`;
+    const t = r.t, s = tkState(t), c = TK_COL[s], a = t.start < R.from ? R.from : t.start, e = tkEnd(t), b = e > R.to ? R.to : e, open = !t.due && !tkDone(t);
+    const x = tkDays(R.from, a) * dW + 2, w = Math.max(dW - 4, (tkDays(a, b) + 1) * dW - 4), p = tkProg(t);
     const tip = `${t.title}\n${s} · ${p}% done\n${vDate(t.start)} → ${t.due ? vDate(t.due) + ' (' + (tkDays(t.start, t.due) + 1) + ' days)' : 'no due date'}${tkWho(t) ? '\n' + tkWho(t) : ''}`;
-    const cutL = t.start < R.from, cutR = e > R.to || (open && !tkDone(t));
-    return `<div class="flex border-b border-slate-100 hover:bg-slate-50/60 group" style="height:${RH}px"><div class="shrink-0 sticky left-0 z-[5] bg-white border-r border-slate-200 ${group === 'staff' ? 'pl-7' : 'pl-4'} pr-3 flex flex-col justify-center cursor-pointer" style="width:${LW}px" onclick="openTkView('${t.id}')"><div class="text-[13px] font-semibold text-slate-800 truncate">${esc(r.label)}</div><div class="text-[11px] text-slate-400 truncate">${esc(r.sub)}</div></div>
+    const as = t.assignees || [], ini = as.slice(0, 3).map(z => `<span class="w-5 h-5 rounded-full bg-brand-600 text-white text-[8.5px] font-bold inline-flex items-center justify-center">${esc(tkInitials(z.name))}</span>`).join('') + (as.length > 3 ? `<span class="text-[10px] text-slate-400">+${as.length - 3}</span>` : '');
+    const lblRight = x + w + 44 < W;
+    return `<div class="flex border-b border-slate-100" style="height:${RH}px">
+      <div class="shrink-0 sticky left-0 z-[5] bg-white border-r border-slate-200 ${group === 'staff' ? 'pl-6' : 'pl-4'} pr-3 flex items-center gap-2 cursor-pointer hover:bg-slate-50" style="width:${LW}px" onclick="openTkView('${t.id}')" title="Open task">
+        <span class="w-2 h-2 rounded-full shrink-0" style="background:${c}"></span><span class="flex-1 min-w-0 text-[13px] font-medium text-slate-800 truncate">${esc(t.title)}</span>${group === 'task' ? `<span class="flex gap-0.5 shrink-0">${ini}</span>` : ''}</div>
       <div class="relative shrink-0" style="width:${W}px">
-        <div onclick="openTkView('${t.id}')" title="${esc(tip)}" class="absolute cursor-pointer overflow-hidden flex items-center" style="left:${x}px;width:${w}px;top:8px;height:${RH - 16}px;border-radius:${cutL ? 0 : 4}px ${cutR ? 0 : 4}px ${cutR ? 0 : 4}px ${cutL ? 0 : 4}px;background:${open && !tkDone(t) ? `linear-gradient(90deg, ${c}38 70%, ${c}00)` : c + '38'};box-shadow:inset 0 0 0 1.5px ${c}${open && !tkDone(t) ? ';-webkit-mask-image:linear-gradient(90deg,#000 80%,transparent)' : ''}">
-          <div class="absolute left-0 top-0 bottom-0" style="width:${p}%;background:${c}"></div>
-          ${w > 34 ? `<span class="relative px-1.5 text-[10.5px] font-bold num whitespace-nowrap" style="color:${p >= 45 ? '#fff' : '#0f172a'}">${p}%</span>` : ''}
-        </div>
-        ${w > 34 && w < 150 && x + w + 140 < W ? `<span class="absolute text-[11px] text-slate-500 whitespace-nowrap pointer-events-none" style="left:${x + w + 6}px;top:${RH / 2 - 8}px">${esc(String(t.title).slice(0, 28))}</span>` : ''}
+        <div onclick="openTkView('${t.id}')" title="${esc(tip)}" class="absolute cursor-pointer overflow-hidden" style="left:${x}px;width:${w}px;top:${RH / 2 - 7}px;height:14px;border-radius:${t.start < R.from ? 0 : 7}px ${e > R.to || open ? 0 : 7}px ${e > R.to || open ? 0 : 7}px ${t.start < R.from ? 0 : 7}px;background:${c}33${open ? ';-webkit-mask-image:linear-gradient(90deg,#000 75%,transparent);mask-image:linear-gradient(90deg,#000 75%,transparent)' : ''}">
+          <div class="absolute left-0 top-0 bottom-0" style="width:${p}%;background:${c}"></div></div>
+        <span class="absolute text-[11px] font-semibold num text-slate-500 pointer-events-none" style="${lblRight ? `left:${x + w + 6}px` : `left:${Math.max(0, x - 36)}px`};top:${RH / 2 - 8}px">${p}%</span>
       </div></div>`;
   }).join('');
-  return ctrl + `<div class="bg-white rounded-xl border border-slate-200 overflow-auto mb-6" style="max-height:calc(100vh - 220px)"><div class="relative" style="width:${LW + W}px">
+  return ctrl + `<div class="bg-white rounded-xl border border-slate-200 overflow-auto mb-2" style="max-height:calc(100vh - 220px)"><div class="relative" style="width:${LW + W}px">
       ${header}
-      <div class="relative"><div class="absolute top-0 bottom-0" style="left:${LW}px;width:${W}px">${weekendBg}${monthLines}${todayLine}</div><div class="relative">${body}</div></div>
+      <div class="relative"><div class="absolute top-0 bottom-0" style="left:${LW}px;width:${W}px">${weekend}${weekLines}${todayLine}</div><div class="relative">${body}</div></div>
     </div></div>
-    <p class="text-xs text-slate-400 -mt-3 mb-6">Bars run from the start date to the due date (a task with no due date runs to today and fades out); the solid part is the progress. Fridays and Saturdays are shaded, the red line is today. Click a bar to open the task.</p>`;
+    <p class="text-[11.5px] text-slate-400 mb-6">Solid part = progress · dashed line = today · click a task to open it.</p>`;
 }
 function tkSetSpan(s){ vehUi.tkSpan = s; rerenderMain(); }
 function tkSetGroup(g){ vehUi.tkGroup = g; rerenderMain(); }
@@ -6158,7 +6287,7 @@ function openTkView(id){
       <textarea id="tk-note" rows="2" placeholder="What was done (optional)" class="${VEH_FIELD} text-sm mb-2"></textarea>
       <div class="flex justify-end">${vBtnPrimary('Save update', `tkSaveUpdate('${t.id}')`)}</div></div>` : ''}
     ${vSec('Activity')}
-    <div class="space-y-2">${ups.length ? ups.map(u => `<div class="flex gap-3"><div class="w-1.5 rounded-full shrink-0 mt-1 mb-1" style="background:${TK_COL[u.status] || '#cbd5e1'}"></div><div class="flex-1"><div class="text-sm text-slate-800 whitespace-pre-wrap">${esc(u.text)}</div><div class="text-[11px] text-slate-400">${esc(u.by || '')}${u.at ? ' · ' + new Date(u.at).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : ''}${u.progress != null ? ' · ' + u.progress + '%' : ''}</div></div></div>`).join('') : '<div class="text-sm text-slate-400">No activity yet.</div>'}</div>`, true);
+    <div class="space-y-2">${ups.length ? ups.map(u => `<div class="flex gap-3"><div class="w-1.5 rounded-full shrink-0 mt-1 mb-1" style="background:${TK_COL[u.status] || '#cbd5e1'}"></div><div class="flex-1"><div class="text-sm text-slate-800 whitespace-pre-wrap">${esc(u.text)}</div><div class="text-[11px] text-slate-400">${esc(u.by || '')}${u.at ? ' · ' + fmtDT(u.at) : ''}${u.progress != null ? ' · ' + u.progress + '%' : ''}</div></div></div>`).join('') : '<div class="text-sm text-slate-400">No activity yet.</div>'}</div>`, true);
   window._tkPick = t.status || 'Not started';
 }
 function tkPickStatus(btn, s){
@@ -6218,14 +6347,14 @@ function openCpView(id, editIdx){
     ${vSec('Processing — suggested solutions')}
     <div class="space-y-2 mb-3">${sol.length ? sol.map((s, i) => editIdx === i || editIdx === 'ch' + i ? `<div class="rounded-lg border border-brand-300 px-3.5 py-2.5">${editIdx === i ? `<label class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Suggestion</label><textarea id="cp-edit" rows="${Math.max(3, String(s.text).split('\n').length + 1)}" class="${VEH_FIELD} text-sm mt-1">${esc(s.text)}</textarea>` : `<div class="text-sm text-slate-800 whitespace-pre-wrap mb-2">${esc(s.text)}</div>`}
         <label class="block text-[11px] font-semibold uppercase tracking-wide text-amber-600 mt-2">Challenges / concerns</label><textarea id="cp-edit-ch" rows="${Math.max(2, String(s.challenge || '').split('\n').length + 1)}" placeholder="What could go wrong with this solution, risks, open questions…" class="${VEH_FIELD} text-sm mt-1">${esc(s.challenge || '')}</textarea><div class="flex justify-end gap-3 mt-2"><button onclick="openCpView('${c.id}')" class="text-xs font-semibold text-slate-500 hover:underline">Cancel</button><button onclick="cpSaveSuggestion('${c.id}', ${i}, ${editIdx === i})" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700 !py-1.5">Save</button></div></div>`
-      : `<div class="rounded-lg border ${s.chosen ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200'} px-3.5 py-2.5"><div class="flex items-start justify-between gap-3"><div class="text-sm text-slate-800 whitespace-pre-wrap">${esc(s.text)}</div><div class="flex flex-col items-end gap-1 shrink-0">${!cpDone(c.status) ? `<button onclick="cpUseSuggestion('${c.id}', ${i})" class="text-[11px] font-semibold text-emerald-700 hover:underline whitespace-nowrap">Use as resolution</button>` : ''}<button onclick="openCpView('${c.id}', 'ch${i}')" class="text-[11px] font-semibold text-amber-600 hover:underline whitespace-nowrap">${s.challenge ? 'Edit challenge' : '+ Challenge'}</button>${canEd(s) ? `<span class="flex gap-2.5"><button onclick="openCpView('${c.id}', ${i})" class="text-[11px] font-semibold text-brand-600 hover:underline">Edit</button><button onclick="cpDeleteSuggestion('${c.id}', ${i})" class="text-[11px] font-semibold text-slate-400 hover:text-rose-600 hover:underline">Delete</button></span>` : ''}</div></div>${s.challenge ? `<div class="cp-ch mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2"><div class="text-[10.5px] font-bold uppercase tracking-wide text-amber-700">⚠ Challenges / concerns</div><div class="text-[13px] text-amber-900 whitespace-pre-wrap mt-0.5">${esc(s.challenge)}</div></div>` : ''}<div class="text-[11px] text-slate-400 mt-1">${esc(s.by || '')} · ${new Date(s.at).toLocaleString()}${s.editedAt ? ' · edited ' + new Date(s.editedAt).toLocaleString() + (s.editedBy && s.editedBy !== s.by ? ' by ' + esc(s.editedBy) : '') : ''}${s.note ? ' · ' + esc(s.note) : ''}</div></div>`).join('') : '<div class="text-sm text-slate-400">No suggestions yet.</div>'}</div>
+      : `<div class="rounded-lg border ${s.chosen ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200'} px-3.5 py-2.5"><div class="flex items-start justify-between gap-3"><div class="text-sm text-slate-800 whitespace-pre-wrap">${esc(s.text)}</div><div class="flex flex-col items-end gap-1 shrink-0">${!cpDone(c.status) ? `<button onclick="cpUseSuggestion('${c.id}', ${i})" class="text-[11px] font-semibold text-emerald-700 hover:underline whitespace-nowrap">Use as resolution</button>` : ''}<button onclick="openCpView('${c.id}', 'ch${i}')" class="text-[11px] font-semibold text-amber-600 hover:underline whitespace-nowrap">${s.challenge ? 'Edit challenge' : '+ Challenge'}</button>${canEd(s) ? `<span class="flex gap-2.5"><button onclick="openCpView('${c.id}', ${i})" class="text-[11px] font-semibold text-brand-600 hover:underline">Edit</button><button onclick="cpDeleteSuggestion('${c.id}', ${i})" class="text-[11px] font-semibold text-slate-400 hover:text-rose-600 hover:underline">Delete</button></span>` : ''}</div></div>${s.challenge ? `<div class="cp-ch mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2"><div class="text-[10.5px] font-bold uppercase tracking-wide text-amber-700">⚠ Challenges / concerns</div><div class="text-[13px] text-amber-900 whitespace-pre-wrap mt-0.5">${esc(s.challenge)}</div></div>` : ''}<div class="text-[11px] text-slate-400 mt-1">${esc(s.by || '')} · ${fmtDT(s.at)}${s.editedAt ? ' · edited ' + fmtDT(s.editedAt) + (s.editedBy && s.editedBy !== s.by ? ' by ' + esc(s.editedBy) : '') : ''}${s.note ? ' · ' + esc(s.note) : ''}</div></div>`).join('') : '<div class="text-sm text-slate-400">No suggestions yet.</div>'}</div>
     ${!cpDone(c.status) ? `<div class="flex gap-2 items-start mb-2"><div class="flex-1 space-y-1.5"><textarea id="cp-sug" rows="2" placeholder="Suggest a solution or record what was done…" class="${VEH_FIELD} text-sm"></textarea><textarea id="cp-sug-ch" rows="2" placeholder="Challenges / concerns with this solution (optional)" class="${VEH_FIELD} text-sm border-amber-200"></textarea></div><button onclick="cpAddSuggestion('${c.id}')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 shrink-0">Add</button></div>` : ''}
     ${vSec('Resolution')}
     ${res.text ? (editIdx === 'res' ? `<div class="rounded-lg border border-brand-300 px-3.5 py-2.5"><textarea id="cp-edit" rows="${Math.max(3, String(res.text).split('\n').length + 1)}" class="${VEH_FIELD} text-sm">${esc(res.text)}</textarea><div class="flex justify-end gap-3 mt-2"><button onclick="openCpView('${c.id}')" class="text-xs font-semibold text-slate-500 hover:underline">Cancel</button><button onclick="cpSaveResolution('${c.id}')" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700 !py-1.5">Save</button></div></div>`
-      : `<div class="rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900 whitespace-pre-wrap">${esc(res.text)}<div class="text-[11px] text-emerald-700/70 mt-1">${esc(res.by || '')}${res.date ? ' · ' + vDate(res.date) : ''}${res.editedAt ? ' · edited ' + new Date(res.editedAt).toLocaleString() : ''}</div></div>${c.status === 'Implemented' && c.implemented ? `<div class="mt-2 rounded-lg border border-emerald-300 px-3.5 py-2 text-sm"><span class="font-semibold text-emerald-700">✓ Implemented</span> <span class="text-slate-500">${c.implemented.date ? vDate(c.implemented.date) : ''}${c.implemented.by ? ' · ' + esc(c.implemented.by) : ''}</span>${c.implemented.note ? `<div class="text-slate-700 whitespace-pre-wrap mt-0.5">${esc(c.implemented.note)}</div>` : ''}</div>` : ''}
+      : `<div class="rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900 whitespace-pre-wrap">${esc(res.text)}<div class="text-[11px] text-emerald-700/70 mt-1">${esc(res.by || '')}${res.date ? ' · ' + vDate(res.date) : ''}${res.editedAt ? ' · edited ' + fmtDT(res.editedAt) : ''}</div></div>${c.status === 'Implemented' && c.implemented ? `<div class="mt-2 rounded-lg border border-emerald-300 px-3.5 py-2 text-sm"><span class="font-semibold text-emerald-700">✓ Implemented</span> <span class="text-slate-500">${c.implemented.date ? vDate(c.implemented.date) : ''}${c.implemented.by ? ' · ' + esc(c.implemented.by) : ''}</span>${c.implemented.note ? `<div class="text-slate-700 whitespace-pre-wrap mt-0.5">${esc(c.implemented.note)}</div>` : ''}</div>` : ''}
       <div class="flex gap-4 mt-2">${c.status === 'Implemented' ? (admin ? `<button onclick="cpUndoImplemented('${c.id}')" class="text-xs font-semibold text-slate-500 hover:text-brand-600 hover:underline">Undo implemented</button>` : '') : `<button onclick="cpImplemented('${c.id}')" class="text-xs font-semibold text-emerald-700 hover:underline">Mark as implemented</button>`}${canEd(res) ? `<button onclick="openCpView('${c.id}', 'res')" class="text-xs font-semibold text-brand-600 hover:underline">Edit resolution</button>` : ''}${admin ? `<button onclick="cpReopen('${c.id}')" class="text-xs font-semibold text-slate-500 hover:text-brand-600 hover:underline">Reopen</button>` : ''}</div>`)
       : `<div class="flex gap-2 items-start"><textarea id="cp-res" rows="2" placeholder="The finalised solution" class="${VEH_FIELD} text-sm flex-1"></textarea><button onclick="cpResolve('${c.id}')" class="${VEH_BTN} bg-emerald-600 text-white hover:bg-emerald-700 shrink-0">Resolve</button></div>`}
-    ${(c.history || []).length ? `<div class="text-[11px] text-slate-400 mt-4">${(c.history || []).slice(-6).map(h => esc(h.text) + ' · ' + esc(h.by || '') + ' ' + new Date(h.at).toLocaleDateString()).join(' — ')}</div>` : ''}
+    ${(c.history || []).length ? `<div class="text-[11px] text-slate-400 mt-4">${(c.history || []).slice(-6).map(h => esc(h.text) + ' · ' + esc(h.by || '') + ' ' + fmtD(h.at)).join(' — ')}</div>` : ''}
     <div class="flex justify-end gap-4 pt-3 mt-4 border-t border-slate-100">${admin ? `<button onclick="deleteCp('${c.id}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Delete</button>` : ''}<button onclick="openCpEdit('${c.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit details</button></div>`, true);
 }
 const cpHist = (c, text) => (c.history || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text }]);
@@ -6283,7 +6412,7 @@ function wrAutoTasks(start, end, dept){
   if(mine.length) list = mine;                                                      // the department's own tasks when its staff have any
   return list.sort((a, b) => (a.status === 'Completed') - (b.status === 'Completed') || String(a.due || '9999').localeCompare(String(b.due || '9999'))).map(t => {
     const p = tkProg(t), late = tkOverdue(t) ? tkDays(t.due, end > vToday() ? vToday() : end) : 0;
-    const notes = (t.updates || []).filter(u => u.at >= startAt && u.at < endAt && u.text).map(u => '• ' + new Date(u.at).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) + ': ' + u.text + (u.by ? ' (' + u.by + ')' : ''));
+    const notes = (t.updates || []).filter(u => u.at >= startAt && u.at < endAt && u.text).map(u => '• ' + fmtD(u.at) + ': ' + u.text + (u.by ? ' (' + u.by + ')' : ''));
     return { task:(t.no ? t.no + ' — ' : '') + t.title + (t.category ? '\n' + t.category : ''),
       assigned:(t.assignees || []).map(a => a.name).join('\n'),
       status:WR_TK_STATUS[t.status] || 'Pending',
@@ -7068,7 +7197,7 @@ function openDocView(id){
     ${d.type === 'exco' || d.type === 'memo' ? (fn => `<div class="flex flex-wrap gap-4 mb-4"><button onclick="${fn}('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="${fn}('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>`)(d.type === 'exco' ? 'excoDownload' : 'memoDownload') : d.type === 'tor' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="torDownload('${d.id}', '', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="torDownload('${d.id}', '', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : d.type === 'srf' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="srfDownload('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="srfDownload('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : ''}
     ${smp && !d.link ? '' : `<div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">${d.link ? vLink(d.link, 'Open the file') : '<span class="text-amber-600">No file linked yet — use Edit to add the SharePoint link.</span>'}</div>`}
     <div class="flex flex-wrap gap-2 mb-4 ${smp ? 'hidden' : ''}">${DOC_STATUS.filter(s => s !== (d.status || 'Draft')).slice(0, 8).map(s => `<button onclick="docSetStatus('${d.id}', '${s}')" class="px-2.5 py-1 rounded-md border border-slate-200 text-[11.5px] font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700">${s}</button>`).join('')}</div>
-    ${(d.history || []).length ? `<div class="text-[11px] text-slate-400">${(d.history || []).slice(-5).map(h => esc(h.text) + ' · ' + esc(h.by || '') + ' ' + new Date(h.at).toLocaleDateString()).join(' — ')}</div>` : ''}
+    ${(d.history || []).length ? `<div class="text-[11px] text-slate-400">${(d.history || []).slice(-5).map(h => esc(h.text) + ' · ' + esc(h.by || '') + ' ' + fmtD(h.at)).join(' — ')}</div>` : ''}
     <div class="flex justify-end gap-4 pt-3 mt-4 border-t border-slate-100">${canManageInventory() ? `<button onclick="deleteDoc('${d.id}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Delete</button>` : ''}<button onclick="openDocEdit('${d.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button></div>`, true);
 }
 async function docSetStatus(id, s){ const d = docById(id); if(!d) return; await vehSave('documents', { id, status:s, history:(d.history || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:'Status: ' + s }]) }); rerenderMain(); openDocView(id); toast('Status set to ' + s + '.'); }
@@ -7291,7 +7420,7 @@ function viewWeeklyReport(){
   return vHead('Department Weekly Report', 'Each department\'s weekly report: document entries, dispatch, stock requests, vehicles, tasks, PRs and staff on leave — filled from the app and downloaded as a PDF.', vBtnPrimary('+ Weekly report', 'openWrNew()')) +
     vKpis(statCard('This week', 'Week ' + wrIsoWeek(thisWeek), pcOrdinalDate(clIsoAdd(thisWeek, -5)) + ' – ' + pcOrdinalDate(thisWeek), 'brand') + statCard('Reports this week', fmtNum(mine.length), mine.map(r => r.department).join(', ') || 'None yet', mine.length ? 'emerald' : 'amber') +
       statCard('Open tasks', fmtNum(list[0] ? (list[0].tasks || []).filter(t => t.status !== 'Completed').length : 0), list[0] ? 'In the latest report (' + esc(list[0].department) + ')' : '—', 'slate') + statCard('Staff on leave this week', fmtNum(lvBetween(clIsoAdd(thisWeek, -5), thisWeek).length), 'From the Staff Leave Plan', 'slate')) +
-    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${new Date(r.updatedAt).toLocaleDateString()}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
+    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${fmtD(r.updatedAt)}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No weekly reports yet. Start one with "+ Weekly report" — the tasks of the last report carry over each week.')}</div>`);
 }
 function openWrNew(){
@@ -9003,7 +9132,7 @@ const keyHolderLines = r => KEY_GROUPS.flatMap(([g, qk, hk, label]) => {
   const rest = keyQty(r[qk]) - named.reduce((t, h) => t + h.qty, 0);
   return rest > 0 ? named.concat([{ g, qk, hk, label: g === 'admin' ? 'Administration' : label, i:-1, line:'', name:(g === 'admin' ? 'Admin staff' : g === 'other' ? 'Other department staff' : 'Copy holder') + ' (no name recorded)', qty:rest, unnamed:true }]) : named;
 });
-function keyLastMove(r){ const l = (r.log || [])[ (r.log || []).length - 1 ]; return l ? `${l.action === 'out' ? 'Handed to' : 'Returned by'} ${l.who} · ${new Date(l.at).toLocaleDateString()}` : ''; }
+function keyLastMove(r){ const l = (r.log || [])[ (r.log || []).length - 1 ]; return l ? `${l.action === 'out' ? 'Handed to' : 'Returned by'} ${l.who} · ${fmtD(l.at)}` : ''; }
 // where a hand-out can come from: the key box, or anyone holding the key now (admin staff, another department, a copy holder)
 function keyHandOutSources(r){
   const out = [], box = r.kind === 'AC Remote' ? 0 : keyQty(r.qtyBox);
@@ -9075,7 +9204,7 @@ async function saveKeyReturn(id){
 function openKeyHistory(id){
   const r = state.keyRegistry.find(x => x.id === id); if(!r) return;
   const log = (r.log || []).slice().reverse();
-  openModal('History — ' + r.details, log.length ? `<div class="divide-y divide-slate-100">${log.map(l => `<div class="py-2.5 flex items-start justify-between gap-3"><div><div class="text-sm"><span class="font-semibold ${l.action === 'out' ? 'text-amber-700' : 'text-emerald-700'}">${l.action === 'out' ? 'Handed out' : 'Returned'}</span> · ${esc(l.who)} <span class="text-xs text-slate-400">(${esc(l.group)}${l.qty > 1 ? ', ' + l.qty : ''})</span>${l.action === 'out' && l.from && l.from !== 'Key box' ? `<span class="text-xs text-slate-500"> · from ${esc(l.from)}</span>` : ''}</div>${l.note ? `<div class="text-xs text-slate-500">${esc(l.note)}</div>` : ''}</div><div class="text-[11px] text-slate-400 text-right whitespace-nowrap">${esc(new Date(l.at).toLocaleString())}${l.by ? '<br>by ' + esc(l.by) : ''}</div></div>`).join('')}</div>` : '<div class="text-sm text-slate-500">No hand-outs or returns recorded yet.</div>');
+  openModal('History — ' + r.details, log.length ? `<div class="divide-y divide-slate-100">${log.map(l => `<div class="py-2.5 flex items-start justify-between gap-3"><div><div class="text-sm"><span class="font-semibold ${l.action === 'out' ? 'text-amber-700' : 'text-emerald-700'}">${l.action === 'out' ? 'Handed out' : 'Returned'}</span> · ${esc(l.who)} <span class="text-xs text-slate-400">(${esc(l.group)}${l.qty > 1 ? ', ' + l.qty : ''})</span>${l.action === 'out' && l.from && l.from !== 'Key box' ? `<span class="text-xs text-slate-500"> · from ${esc(l.from)}</span>` : ''}</div>${l.note ? `<div class="text-xs text-slate-500">${esc(l.note)}</div>` : ''}</div><div class="text-[11px] text-slate-400 text-right whitespace-nowrap">${esc(fmtDT(l.at))}${l.by ? '<br>by ' + esc(l.by) : ''}</div></div>`).join('')}</div>` : '<div class="text-sm text-slate-500">No hand-outs or returns recorded yet.</div>');
 }
 // one key record for every vehicle that has none yet
 function openAddVehicleKeys(){
@@ -10831,7 +10960,7 @@ function blockedUsersPanel(){
   if(!list.length) return '';
   const rows = list.map(uid => { const i = blockedUsersCache.info[uid] || {}; return `<tr class="border-b border-slate-100 last:border-0">
     <td class="px-5 sm:px-6 py-3"><div class="font-semibold text-slate-800">${esc(i.name || 'Removed member')}</div><div class="text-[11px] text-slate-400">${esc(i.email || 'email not recorded (removed before this was tracked)')}</div></td>
-    <td class="py-3 text-xs text-slate-500">${i.at ? esc(new Date(i.at).toLocaleString()) + (i.by ? ' by ' + esc(i.by) : '') : '—'}</td>
+    <td class="py-3 text-xs text-slate-500">${i.at ? esc(fmtDT(i.at)) + (i.by ? ' by ' + esc(i.by) : '') : '—'}</td>
     <td class="py-3 text-[11px] text-slate-400 font-mono">${esc(uid)}</td>
     <td class="py-3 pr-5 sm:pr-6 text-right"><button onclick="adminUnblock('${esc(uid)}')" class="text-xs font-semibold text-brand-600 hover:underline">Unblock</button></td></tr>`; }).join('');
   return `<div class="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
@@ -12295,13 +12424,13 @@ function stockRequestCard(r){
       ${r.kind === 'out' ? `<td class="py-2 pr-3 text-slate-500">${esc(l.acquisition || '')}</td>` : ''}
       ${r.status === 'pending' ? `<td class="py-2 text-right num ${short ? 'text-rose-600 font-semibold' : 'text-slate-500'}">${fmtNum(have)}</td>` : ''}</tr>`;
   }).join('');
-  const decided = r.status !== 'pending' && r.decidedAt ? `<div class="text-xs text-slate-500 mt-3">${r.status === 'approved' ? 'Approved' : r.status === 'rejected' ? 'Rejected' : 'Cancelled'} by ${esc(r.decidedByName || '—')} on ${esc(new Date(r.decidedAt).toLocaleString())}${r.decisionNote ? ` — “${esc(r.decisionNote)}”` : ''}</div>` : '';
+  const decided = r.status !== 'pending' && r.decidedAt ? `<div class="text-xs text-slate-500 mt-3">${r.status === 'approved' ? 'Approved' : r.status === 'rejected' ? 'Rejected' : 'Cancelled'} by ${esc(r.decidedByName || '—')} on ${esc(fmtDT(r.decidedAt))}${r.decisionNote ? ` — “${esc(r.decisionNote)}”` : ''}</div>` : '';
   return `
   <div class="bg-white rounded-xl border border-slate-200 p-5 ${r.status === 'pending' ? 'border-l-4 border-l-amber-500' : ''}">
     <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
       <div>
         <div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-extrabold text-slate-900">${esc(r.number || 'Request')}</span>${kindPill}<span class="text-xs font-semibold px-2 py-0.5 rounded-full ${badge} capitalize">${esc(r.status === 'pending' ? 'Awaiting approval' : r.status)}</span></div>
-        <div class="text-xs text-slate-500 mt-1">${fmtDate(r.date)} · requested by <span class="font-semibold text-slate-700">${esc(r.requestedByName || '—')}</span> ${r.requestedAt ? 'on ' + esc(new Date(r.requestedAt).toLocaleString()) : ''}</div>
+        <div class="text-xs text-slate-500 mt-1">${fmtDate(r.date)} · requested by <span class="font-semibold text-slate-700">${esc(r.requestedByName || '—')}</span> ${r.requestedAt ? 'on ' + esc(fmtDT(r.requestedAt)) : ''}</div>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         ${canDecide ? `<button onclick="openRejectStockRequest('${r.id}')" class="px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-rose-600 hover:bg-rose-50">Reject</button>
@@ -14384,7 +14513,7 @@ function hoSignStatusHtml(h, side){
   const sig = side === 'from' ? h.fromSignature : h.toSignature;
   if(sig){
     const mine = authUser && sig.uid === authUser.uid;
-    return `<div class="mt-2.5 flex items-center gap-2 flex-wrap" title="Signed by ${esc(sig.name)} on ${esc(new Date(sig.signedAt).toLocaleString())}">
+    return `<div class="mt-2.5 flex items-center gap-2 flex-wrap" title="Signed by ${esc(sig.name)} on ${esc(fmtDT(sig.signedAt))}">
       <span class="text-xs font-semibold text-emerald-600">✓ Signed ${esc(hoSignedDate(sig))}</span>
 
     </div>`;

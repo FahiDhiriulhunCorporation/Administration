@@ -1,7 +1,7 @@
 {
-  "name": "Admin Database",
-  "short_name": "Admin Database",
-  "description": "Admin Database: stock, assets, vehicles, petty cash, handovers and keys",
+  "name": "Administration",
+  "short_name": "Administration",
+  "description": "Administration: stock, assets, vehicles, petty cash, handovers, keys, tasks and department records",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

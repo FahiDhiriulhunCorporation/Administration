@@ -6321,6 +6321,11 @@ async function tkSaveUpdate(id){
    4. type "monsoon" on the Dashboard → 10 seconds of rain
    5. ↑ ↑ ↓ ↓ ← → ← → B A → retro terminal theme (do it again, or reload, to go back)
    6. hold the mouse on "Administration" in the sidebar for 3 seconds → credits card
+   7. work anniversary (join date) → a star on your initials and a card on the Dashboard, all day
+   8. Independence Day (26 July) and Republic Day (11 November) → a flag on the logo and a greeting
+   9. shake the phone on the Dashboard → refresh with a wobble
+  10. type 42 in a search box → the answer to everything
+  11. type "niyaz" on the Dashboard → a quote
 ===================================================================== */
 const EGG_CALM = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function eggCanvas(z){
@@ -6407,7 +6412,7 @@ document.addEventListener('keydown', e => {
   const k = String(e.key || '').toLowerCase();
   eggKeys = eggKeys.concat(k).slice(-10);
   if(eggKeys.join() === EGG_KONAMI.join()){ eggKeys = []; const on = document.documentElement.classList.toggle('egg-retro'); toast(on ? 'RETRO MODE ENGAGED. Enter the code again (or reload) to return.' : 'Back to normal.'); return; }
-  if(k.length === 1 && /[a-z]/.test(k)){ eggTyped = (eggTyped + k).slice(-7); if(eggTyped === 'monsoon' && ui.tab === 'dashboard'){ eggTyped = ''; eggMonsoon(); } }
+  if(k.length === 1 && /[a-z]/.test(k)){ eggTyped = (eggTyped + k).slice(-12); if(ui.tab === 'dashboard'){ if(eggTyped.endsWith('monsoon')){ eggTyped = ''; eggMonsoon(); } else if(eggTyped.endsWith('niyaz')){ eggTyped = ''; eggQuote(); } } }
 });
 function eggMonsoon(){
   if(EGG_CALM() || document.getElementById('egg-rain')) return;
@@ -6440,6 +6445,103 @@ function eggCredits(el){
   document.body.appendChild(d); requestAnimationFrame(() => { d.style.transform = 'perspective(600px) rotateX(0)'; });
   const close = () => { d.style.transform = 'perspective(600px) rotateX(-90deg)'; setTimeout(() => d.remove(), 400); document.removeEventListener('mousedown', close); };
   setTimeout(() => document.addEventListener('mousedown', close), 50); setTimeout(close, 7000);
+}
+
+/* more eggs: work anniversary, national days, shake to refresh, search "42", type "niyaz" */
+function eggAnniversary(){
+  if(!authUser || !authUser.uid) return 0;
+  let j = ''; try{ j = (lvInfo('u:' + authUser.uid) || {}).joinDate || (sdPerson('u:' + authUser.uid) || {}).joinDate || ''; }catch(e){}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(j)) return 0;
+  const t = vToday(), n = +t.slice(0, 4) - +j.slice(0, 4);
+  return j.slice(5) === t.slice(5) && n >= 1 ? n : 0;
+}
+const EGG_NATIONAL = { '07-26':['Independence Day', 'Happy Independence Day! 🎉', 'Celebrating the Maldives — 26 July'], '11-11':['Republic Day', 'Happy Republic Day!', 'Celebrating the Republic of Maldives — 11 November'] };
+const EGG_MV_FLAG = '<svg viewBox="0 0 30 20" width="18" height="12" style="display:block;border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.35)"><rect width="30" height="20" fill="#d21034"/><rect x="5" y="4" width="20" height="12" fill="#007e3a"/><circle cx="16.2" cy="10" r="3.6" fill="#fff"/><circle cx="17.6" cy="10" r="3.1" fill="#007e3a"/></svg>';
+function eggAfterRender2(){
+  const main = document.getElementById('main-inner'), dash = ui.tab === 'dashboard';
+  // work anniversary — on all day: star on the initials and a card on the Dashboard (no close button)
+  const yrs = eggAnniversary();
+  const av = document.querySelector('#sidebar-foot button > div.rounded-full');
+  if(av && yrs && !av.querySelector('.egg-star')){ av.style.position = 'relative'; av.style.overflow = 'visible'; av.insertAdjacentHTML('beforeend', `<span class="egg-star" title="${yrs} year${yrs === 1 ? '' : 's'} with FDC today" style="position:absolute;right:-6px;top:-7px;font-size:13px;line-height:1">⭐</span>`); }
+  if(yrs && dash && main && !document.getElementById('egg-anniv')){
+    main.insertAdjacentHTML('afterbegin', `<div id="egg-anniv" class="mb-5 rounded-xl px-5 py-4 flex items-center gap-4" style="background:linear-gradient(135deg,#1e3a8a,#4f46e5);color:#fff"><span style="font-size:30px">⭐</span><div><div class="text-lg font-extrabold">${yrs} year${yrs === 1 ? '' : 's'} with FDC today!</div><div class="text-sm opacity-90">Thank you, ${esc(String(authUser.name || '').split(' ')[0])}, for everything you bring to the team.</div></div></div>`);
+    if(!window._eggAnnivParty){ window._eggAnnivParty = 1; setTimeout(() => eggBurst({ stars:true, count:90, colors:['#facc15', '#fde68a', '#a5b4fc', '#ffffff'] }), 500); }
+  }
+  // national days — a flag on the logo and a greeting on the Dashboard
+  const nd = EGG_NATIONAL[vToday().slice(5)];
+  if(nd){
+    document.querySelectorAll('aside img[data-logo], header img[data-logo]').forEach(img => {
+      const p = img.parentElement; if(!p || p.querySelector('.egg-flag')) return;
+      p.style.position = 'relative'; img.insertAdjacentHTML('afterend', `<span class="egg-flag" title="${nd[0]}" style="position:absolute;left:${img.offsetLeft + img.offsetWidth - 12}px;top:${img.offsetTop + img.offsetHeight - 10}px">${EGG_MV_FLAG}</span>`);
+    });
+    if(dash && main && !document.getElementById('egg-national')){
+      main.insertAdjacentHTML('afterbegin', `<div id="egg-national" class="mb-5 rounded-xl px-5 py-4 flex items-center gap-4" style="background:linear-gradient(135deg,#d21034 0%,#d21034 18%,#007e3a 18%,#00a650 100%);color:#fff"><span style="background:#fff;border-radius:6px;padding:4px">${EGG_MV_FLAG.replace('width="18" height="12"', 'width="36" height="24"')}</span><div><div class="text-lg font-extrabold">${nd[1]}</div><div class="text-sm opacity-90">${nd[2]}</div></div></div>`);
+      if(!window._eggNatParty){ window._eggNatParty = 1; setTimeout(() => eggBurst({ count:140, colors:['#d21034', '#007e3a', '#ffffff'] }), 600); }
+    }
+  }
+}
+
+/* shake the phone on the Dashboard → refresh with a wobble */
+let eggShake = { t:[], last:0, px:null }, eggMotionOn = false;
+function eggMotion(e){
+  const a = e.accelerationIncludingGravity || e.acceleration; if(!a || a.x == null) return;
+  const p = eggShake.px; eggShake.px = { x:a.x, y:a.y, z:a.z }; if(!p) return;
+  const d = Math.abs(a.x - p.x) + Math.abs(a.y - p.y) + Math.abs(a.z - p.z), now = Date.now();
+  if(d < 28) return;
+  eggShake.t = eggShake.t.filter(x => now - x < 900).concat(now);
+  if(eggShake.t.length >= 3 && now - eggShake.last > 3000){ eggShake.last = now; eggShake.t = []; eggShakeRefresh(); }
+}
+function eggStartMotion(){ if(eggMotionOn || !window.DeviceMotionEvent) return; eggMotionOn = true; window.addEventListener('devicemotion', eggMotion); }
+if(window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission !== 'function') eggStartMotion();     // Android: works straight away
+document.addEventListener('click', e => {                                                                       // iPhone/iPad: ask once, on the first tap on the star logo
+  if(eggMotionOn || !window.DeviceMotionEvent || typeof DeviceMotionEvent.requestPermission !== 'function') return;
+  if(!(e.target.closest && e.target.closest('img[data-logo]'))) return;
+  DeviceMotionEvent.requestPermission().then(r => { if(r === 'granted') eggStartMotion(); }).catch(() => {});
+});
+function eggShakeRefresh(){
+  if(ui.tab !== 'dashboard') return;
+  try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
+  rerenderMain();
+  const cards = document.querySelectorAll('#main-inner .grid > *');
+  if(!EGG_CALM()) cards.forEach((c, i) => c.animate([{ transform:'rotate(0)' }, { transform:`rotate(${i % 2 ? 2 : -2}deg) translateY(-4px)` }, { transform:`rotate(${i % 2 ? -1.5 : 1.5}deg)` }, { transform:'rotate(0)' }], { duration:600, delay:i * 25, easing:'ease-out' }));
+  toast('Shaken, not stirred — refreshed.');
+}
+
+/* search "42" in any search box */
+document.addEventListener('input', e => {
+  const el = e.target; if(!el || el.tagName !== 'INPUT') return;
+  const isSearch = el.type === 'search' || /search|find/i.test(el.placeholder || '');
+  const old = document.getElementById('egg-42');
+  if(!isSearch || el.value.trim() !== '42'){ if(old && old._for === el) old.remove(); return; }
+  if(old) old.remove();
+  const r = el.getBoundingClientRect(), d = document.createElement('div'); d.id = 'egg-42'; d._for = el;
+  d.style.cssText = `position:fixed;left:${r.left}px;top:${r.bottom + 6}px;width:${Math.max(260, r.width)}px;z-index:9999;padding:12px 14px;border-radius:12px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;box-shadow:0 14px 34px rgba(0,0,0,.35);font-size:13px`;
+  d.innerHTML = '<div style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:4px">1 result</div><div style="display:flex;gap:10px;align-items:flex-start"><span style="font-size:20px">🌌</span><div><b style="color:#fbbf24">42</b> — the answer to life, the universe and everything.<div style="color:#94a3b8;margin-top:2px">But not to the budget.</div></div></div>';
+  document.body.appendChild(d);
+  // the page may redraw the search box: follow the new one, and go away once 42 is no longer there
+  const iv = setInterval(() => {
+    if(!d.isConnected){ clearInterval(iv); return; }
+    let f = d._for; if(!f.isConnected){ const a = document.activeElement; f = a && a.tagName === 'INPUT' ? a : null; }
+    if(!f || f.value.trim() !== '42' || document.activeElement !== f){ d.remove(); clearInterval(iv); return; }
+    d._for = f; const q = f.getBoundingClientRect(); d.style.left = q.left + 'px'; d.style.top = (q.bottom + 6) + 'px';
+  }, 400);
+}, true);
+
+/* type "niyaz" on the Dashboard → a quote */
+function eggQuote(){
+  if(document.getElementById('egg-quote')) return;
+  const d = document.createElement('div'); d.id = 'egg-quote';
+  d.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,.72);backdrop-filter:blur(3px);opacity:0;transition:opacity .5s;cursor:pointer;padding:24px';
+  d.innerHTML = `<div style="max-width:560px;text-align:center;color:#f8fafc;transform:translateY(8px);transition:transform .6s ease">
+      <div style="font-size:64px;line-height:.6;color:#f59e0b;font-family:Georgia,serif">“</div>
+      <div style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:clamp(20px,3.2vw,30px);line-height:1.4">Can voices in the void be heard or they waiting for the opportunity</div>
+      <div style="margin-top:18px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#fbbf24">— Niyaz</div>
+      <div style="margin-top:26px;font-size:11px;color:#64748b">click anywhere to close</div></div>`;
+  document.body.appendChild(d);
+  requestAnimationFrame(() => { d.style.opacity = '1'; d.firstElementChild.style.transform = 'translateY(0)'; });
+  const close = () => { d.style.opacity = '0'; setTimeout(() => d.remove(), 500); document.removeEventListener('keydown', esc1); };
+  const esc1 = e => { if(e.key === 'Escape') close(); };
+  d.addEventListener('click', close); document.addEventListener('keydown', esc1);
 }
 
 function viewComplaints(){
@@ -9626,6 +9728,7 @@ function render(){
   try{ const banner = unsyncedBannerHtml(); if(banner) el.innerHTML = banner + el.innerHTML; }catch(e){}
   try{ vehAfterRender(); }catch(e){ console.error(e); }
   try{ eggAfterRender(); }catch(e){}
+  try{ eggAfterRender2(); }catch(e){}
   if(activeId){
     const newEl = document.getElementById(activeId);
     if(newEl && typeof newEl.focus === 'function'){

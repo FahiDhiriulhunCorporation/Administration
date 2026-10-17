@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.195';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.196';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7338,7 +7338,7 @@ function docNextNo(k){
 function docAlert(d){
   const t0 = vToday(), x = d.extra || {}, done = ['Filed', 'Superseded'].includes(d.status);
   if(d.status === 'Superseded') return null;
-  if(d.type === 'agreement' && x.endDate){ const days = Math.round((Date.parse(x.endDate) - Date.parse(t0)) / 86400000); if(days < 0) return { k:'crit', t:'Expired ' + vDate(x.endDate) }; if(days <= 60) return { k:'warn', t:'Expires in ' + days + ' day' + (days === 1 ? '' : 's') }; }
+  if(d.type === 'agreement'){ const a = agAlert(d); if(a) return a; }
   if(docIsSample(d)) return null;
   if((d.type === 'tor' || d.type === 'sop') && x.reviewDate && x.reviewDate <= t0) return { k:'warn', t:'Review due ' + vDate(x.reviewDate) };
   if(d.type === 'letter' && x.direction === 'Incoming' && x.dueDate && x.dueDate < t0 && !done && d.status !== 'Sent') return { k:'crit', t:'Reply overdue' };
@@ -7356,7 +7356,7 @@ function docSub(d){
     case 'memo': return [x.from && 'From ' + x.from, x.to && 'To ' + x.to].filter(Boolean).join(' · ');
     case 'tor': return [x.torKind === 'service' ? 'Service TOR' : 'Staff TOR', x.torKind === 'service' ? '' : x.reportingTo && 'reports to ' + x.reportingTo, x.version && 'v' + x.version].filter(Boolean).join(' · ');
     case 'sop': return [x.owner, x.version && 'v' + x.version].filter(Boolean).join(' · ');
-    case 'agreement': return [x.party, x.startDate && x.endDate ? vDate(x.startDate) + ' – ' + vDate(x.endDate) : x.endDate ? 'until ' + vDate(x.endDate) : ''].filter(Boolean).join(' · ');
+    case 'agreement': return [x.thirdParty ? 'Third-party' : AG_KINDS[x.kind] ? AG_KINDS[x.kind].label : '', x.party, x.startDate && x.endDate ? vDate(x.startDate) + ' – ' + vDate(x.endDate) : x.endDate ? 'until ' + vDate(x.endDate) : ''].filter(Boolean).join(' · ');
     case 'srf': return [x.division, x.positions && x.positions + ' position' + (+x.positions === 1 ? '' : 's'), x.empType, x.reqType].filter(Boolean).join(' · ');
     case 'letter': return [x.direction, x.party].filter(Boolean).join(' · ');
     case 'minutes': return [x.chair && 'Chair: ' + x.chair, x.venue].filter(Boolean).join(' · ');
@@ -7367,7 +7367,7 @@ function viewDocs(k){
   const t = k ? docType(k) : null; if(k && !t) return vNotFound('Document type', 'docs', 'Documentation');
   const q = String(vehUi.docQ || '').toLowerCase().trim(), st = vehUi.docStatus || '', yr = vehUi.docYear || '', dep = vehUi.docDept || '';
   const all = state.documents.filter(d => !k || d.type === k);
-  const list = all.filter(d => (!st || (d.status || 'Draft') === st) && (!yr || String(d.date || '').slice(0, 4) === yr) && (!dep || d.department === dep) &&
+  const list = all.filter(d => (k !== 'agreement' || !vehUi.agTp || (vehUi.agTp === 'tp') === agIsTp(d)) && (!st || (d.status || 'Draft') === st) && (!yr || String(d.date || '').slice(0, 4) === yr) && (!dep || d.department === dep) &&
       (!q || [d.refNo, d.title, d.summary, d.department, docSub(d), ...Object.values(d.extra || {})].join(' ').toLowerCase().includes(q)))
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || (b.createdAt || 0) - (a.createdAt || 0));
   const years = [...new Set(state.documents.map(d => String(d.date || '').slice(0, 4)).filter(Boolean))].sort().reverse(), depts = [...new Set(all.map(d => d.department).filter(Boolean))].sort();
@@ -7385,12 +7385,372 @@ function viewDocs(k){
       ${noRef ? '' : vTd(smp || !d.date ? '—' : vDate(d.date), { cls:'whitespace-nowrap' })}${vTd(esc(d.department || (d.type === 'tor' ? torDeptOf(d.title) : '') || '—'))}${vTd(docIsSample(d) ? vPill('', 'Sample') : docStatusPill(d.status))}
       ${vTd(d.link ? `<a href="${esc(d.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : '<span class="text-xs text-slate-400">—</span>', { last:1 })}</tr>`; }).join('');
   return vHead(k ? t.plural : 'Documentation', k ? 'The ' + t.label.toLowerCase() + ' register: reference number, date, status, details and the link to the file.' : 'EXCO papers, memos, TORs, SOPs, agreements, staff request forms, letters and meeting minutes in one register.',
-      (k === 'exco' ? vBtnPlain('Blank paper (Word)', "excoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "excoDownload('', 'pdf', this)") : '') + (k === 'memo' ? vBtnPlain('Blank memo (Word)', "memoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "memoDownload('', 'pdf', this)") : '') + (k === 'srf' ? vBtnPlain('Blank form (Word)', "srfDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "srfDownload('', 'pdf', this)") : '') + (k === 'tor' ? vBtnPlain('Blank TOR', 'openTorBlank()') : '') + (canManageInventory() ? vBtnPlain('Numbering', 'openDocPrefixes()') : '') + vBtnPlain('Export CSV', `docExportCsv('${k || ''}')`) + vBtnPrimary('+ ' + (k ? t.label : 'Document'), `openDocEdit('', '${k || ''}')`)) + kpis +
-    `<div class="mb-4">${typeTabs}</div>
+      (k === 'exco' ? vBtnPlain('Blank paper (Word)', "excoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "excoDownload('', 'pdf', this)") : '') + (k === 'memo' ? vBtnPlain('Blank memo (Word)', "memoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "memoDownload('', 'pdf', this)") : '') + (k === 'srf' ? vBtnPlain('Blank form (Word)', "srfDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "srfDownload('', 'pdf', this)") : '') + (k === 'tor' ? vBtnPlain('Blank TOR', 'openTorBlank()') : '') + (k === 'agreement' ? vBtnPlain('+ Third-party agreement', "window._agPrefill = { extra:{ thirdParty:true, remindDays:'60' } }; openDocEdit('', 'agreement')") : '') + (canManageInventory() ? vBtnPlain('Numbering', 'openDocPrefixes()') : '') + vBtnPlain('Export CSV', `docExportCsv('${k || ''}')`) + vBtnPrimary('+ ' + (k ? t.label : 'Document'), `openDocEdit('', '${k || ''}')`)) + kpis +
+    `<div class="mb-4">${typeTabs}</div>${k === 'agreement' ? `<div class="inline-flex rounded-lg bg-slate-100 p-1 gap-1 mb-4">${[['', 'All agreements'], ['fdc', 'FDC agreements (' + all.filter(z => !agIsTp(z)).length + ')'], ['tp', 'Third-party (' + all.filter(agIsTp).length + ')']].map(([v, l]) => `<button onclick="vehUi.agTp='${v}'; rerenderMain()" class="px-3 py-1 rounded-md text-xs font-semibold ${(vehUi.agTp || '') === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${l}</button>`).join('')}</div>` : ''}
     <div class="flex flex-wrap items-center gap-3 mb-4">${vSelect('docStatus', DOC_STATUS, st, 'All statuses')}${vSelect('docYear', years, yr, 'All years')}${vSelect('docDept', depts, dep, 'All departments')}<input type="search" id="doc-q" value="${esc(vehUi.docQ || '')}" oninput="vehUi.docQ = this.value; clearTimeout(window._docQt); window._docQt = setTimeout(() => { rerenderMain(); const i = document.getElementById('doc-q'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 300)" placeholder="Search reference, title, party, staff…" class="${VEH_INPUT} flex-1 min-w-[14rem]"></div>` +
     (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead((noRef ? [] : [{ t:'Reference' }]).concat([{ t:'Title' }], noRef ? [] : [{ t:'Date' }], [{ t:'Department' }, { t:'Status' }, { t:'File' }]))}<tbody>${rows}</tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(all.length ? 'No documents match.' : 'Nothing registered yet. Use "+ ' + (k ? t.label : 'Document') + '" to add the first one.')}</div>`);
 }
+/* =====================================================================
+   AGREEMENTS — the Corporation's own agreements written from the FDC template (cover page, [A] Parties,
+   [B] Recitals, terms, signatures with witnesses) as Word and PDF, and third-party agreements registered and
+   tracked: renewal reminders, payments against the value, obligations, the signed copy and amendments.
+===================================================================== */
+const AG_FDC = { name:'FAHI DHIRIULHUN CORPORATION LIMITED', reg:'C03932019', addr:'2nd floor, H. Fathangumaage’, Sosun Magu, Male’, Republic of Maldives' };
+const AG_FOOT = ['+960 331 3244   |   info@fdc.mv   |   www.fdc.mv', '2nd Floor, H. Fathangumaage, 20037, Sosun Magu, Male’, Republic of Maldives.'];
+const AG_KINDS = {
+  service:{ label:'Service / maintenance', role:'Service Provider', scope:'Services' },
+  lease:{ label:'Lease / rental', role:'Landlord', scope:'Premises / property' },
+  supply:{ label:'Supply / purchase', role:'Supplier', scope:'Goods to be supplied' },
+  consultancy:{ label:'Consultancy', role:'Consultant', scope:'Scope of the assignment' },
+  nda:{ label:'Non-disclosure (NDA)', role:'Recipient', scope:'Purpose of sharing information' },
+  amendment:{ label:'Amendment to an agreement', role:'Service Provider', scope:'' } };
+const AG_PTYPES = ['Private limited company', 'Public limited company', 'Sole proprietorship', 'Partnership', 'Individual', 'Government / state body'];
+const AG_KEYS = ['kind', 'subtitle', 'party', 'partyType', 'partyReg', 'partyAddr', 'partyRole', 'value', 'startDate', 'endDate', 'payment', 'scope', 'location', 'deposit', 'warranty', 'confYears', 'notice', 'remindDays',
+  'amendNo', 'origRef', 'origDate', 'origTitle', 'reason', 'changes', 'incorp', 'clauses', 'fdcSignName', 'fdcSignDesig', 'partySignName', 'partySignDesig', 'wit1Name', 'wit1Id', 'wit2Name', 'wit2Id'];
+const AG_ORD = ['', 'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth'];
+const agX = d => (d && d.extra) || {};
+const agIsTp = d => !!agX(d).thirdParty;
+const agKind = x => AG_KINDS[x.kind] ? x.kind : 'service';
+const agRole = x => String(x.partyRole || '').trim() || AG_KINDS[agKind(x)].role;
+const agNum = v => { const n = parseFloat(String(v || '').replace(/[^0-9.\-]/g, '')); return isNaN(n) ? 0 : n; };
+const agMoney = v => { const s = String(v || '').trim(); if(!s) return ''; return /[a-z]/i.test(s) ? s : 'MVR ' + agNum(s).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }); };
+const agWords = n => { const a = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'], t = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+  n = Math.round(n); if(n <= 20) return a[n] || String(n); if(n < 100) return t[Math.floor(n / 10)] + (n % 10 ? '-' + a[n % 10] : ''); if(n < 1000) return a[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' and ' + agWords(n % 100) : ''); return String(n); };
+const agNw = (n, unit) => n + ' (' + agWords(n) + ') ' + unit + (n === 1 ? '' : 's');
+function agTerm(s, e){
+  if(!s || !e) return '';
+  const a = new Date(s + 'T00:00:00Z'), b = new Date(clIsoAdd(e, 1) + 'T00:00:00Z'); let m = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + b.getUTCMonth() - a.getUTCMonth();
+  if(b.getUTCDate() === a.getUTCDate() && m > 0) return m % 12 === 0 ? agNw(m / 12, 'year') : agNw(m, 'calendar month');
+  const days = Math.round((b - a) / 864e5); return agNw(days, 'day');
+}
+// the paragraphs after [A] PARTIES, in a small mark-up: "# heading", "## sub-heading", "1.1 numbered", "(A) lettered", "> quoted", "^ centred note", "---" new page, **bold**
+function agDefaultClauses(x){
+  const k = agKind(x), R = '{Role}';
+  if(k === 'amendment') return [
+    '# RECITALS', '**WHEREAS;**',
+    '(A) On {OrigDate}, the Corporation and the ' + R + ' entered into the {OrigTitle} (Agreement number: {OrigRef}) (hereinafter referred to as the “**Agreement**”).',
+    '(B) {Reason}',
+    '(C) Hence, the Parties agree to modify the Agreement according to the terms and conditions hereinafter stated by entering into this {Ordinal} Amendment Agreement.',
+    '**NOW, THEREFORE;**', 'In consideration of the mutual covenants and undertakings set out below, the Parties agree as follows.', '---',
+    '# PRELIMINARIES', '## Status of Amendments and Additions',
+    '1. Terms defined or incorporated by reference in this {Ordinal} Amendment Agreement shall have the same meaning as in the Agreement, save where the context otherwise requires.',
+    '2. With effect from the date of this {Ordinal} Amendment Agreement, the terms of the Agreement shall be modified, amended, deleted, and added to as appropriate to reflect the terms of this {Ordinal} Amendment Agreement. In the event of an inconsistency between the terms of the Agreement and this {Ordinal} Amendment Agreement, the terms of this {Ordinal} Amendment Agreement shall supersede and prevail.',
+    '3. Save as is provided for in this {Ordinal} Amendment Agreement, the Agreement shall not be modified in any other way whatsoever, and (without limitation) all other provisions, terms, conditions, undertakings, covenants, representations, and warranties contained therein shall remain valid and in full force.',
+    '4. The Parties shall do all such acts and things necessary or desirable to give effect to the amendments effected or to be effected pursuant to this {Ordinal} Amendment Agreement.',
+    '# AMENDMENTS TO THE AGREEMENT',
+    '1. The Corporation and the ' + R + ' agree that, with effect from the date of this {Ordinal} Amendment Agreement, the relevant terms of the Agreement be amended to give effect to the revised terms stated in the Clauses below.',
+    '{Changes}', '---',
+    '# MISCELLANEOUS', '## Incorporation of Terms',
+    '1. The Parties agree that the provisions of {Incorp} of the Agreement shall be incorporated into this {Ordinal} Amendment Agreement as if set out in full in this {Ordinal} Amendment Agreement and as if references in those Clauses to “Agreement” were references to this {Ordinal} Amendment Agreement.',
+    '## Copies and Counterparts',
+    '2. The Parties agree that this {Ordinal} Amendment Agreement shall be executed in 2 (two) copies, each of which when executed and delivered shall be deemed an original and, furthermore, may be executed in counterparts which, together, shall constitute one and the same instrument and have the same effect as if the signatures on the counterparts were on a single copy of this {Ordinal} Amendment Agreement.',
+    '3. This {Ordinal} Amendment Agreement amends and supersedes the relevant terms of the Agreement to the extent stated in this {Ordinal} Amendment Agreement. All other terms of the Agreement shall continue to be in force.',
+    '^(Signature page to follow)'].join('\n');
+  const rec = { service:['(A) The Corporation requires the services described in this Agreement{AtLocation}.', '(B) The ' + R + ' has represented that it has the necessary experience, qualified personnel, equipment and resources to provide these services to the standard required by the Corporation.'],
+    lease:['(A) The ' + R + ' is the lawful owner of, or is otherwise entitled to let, the premises described in this Agreement{AtLocation} (the “**Premises**”).', '(B) The Corporation wishes to take the Premises on lease, and the ' + R + ' has agreed to let the Premises to the Corporation, on the terms of this Agreement.'],
+    supply:['(A) The Corporation wishes to purchase the goods described in this Agreement (the “**Goods**”).', '(B) The ' + R + ' has agreed to supply and deliver the Goods to the Corporation{AtLocation} on the terms of this Agreement.'],
+    consultancy:['(A) The Corporation wishes to engage a consultant for the assignment described in this Agreement.', '(B) The ' + R + ' has represented that it has the professional qualifications, experience and resources to carry out the assignment, and has agreed to do so on the terms of this Agreement.'],
+    nda:['(A) The Parties wish to share certain confidential information with each other for the purpose described in this Agreement (the “**Purpose**”).', '(B) The Parties wish to set out the terms on which such information will be disclosed, used and protected.'] }[k];
+  const L = ['# RECITALS', '**WHEREAS;**'].concat(rec, ['(C) The Parties wish to record the terms and conditions agreed between them in this Agreement.', '**NOW, THEREFORE;**', 'In consideration of the mutual covenants and undertakings set out below, the Parties agree as follows.', '# TERMS AND CONDITIONS']);
+  let n = 0; const H = t => { n++; L.push('## ' + n + '. ' + t); return n; }, P = (i, s) => L.push(n + '.' + i + ' ' + s);
+  if(k === 'nda'){
+    H('Purpose'); P(1, 'The Parties will disclose information to each other solely for the following purpose: {Scope}');
+    H('Confidential Information'); P(1, '“**Confidential Information**” means all information, in any form, disclosed by one Party (the “Disclosing Party”) to the other (the “Receiving Party”) in connection with the Purpose, including business, financial, technical, personnel and operational information, whether or not marked as confidential.');
+    P(2, 'Confidential Information does not include information which (a) is or becomes public other than through a breach of this Agreement; (b) was lawfully in the Receiving Party’s possession before disclosure; (c) is lawfully received from a third party without restriction; or (d) is required to be disclosed by law or by a competent authority, provided the Disclosing Party is notified promptly.');
+    H('Obligations of the Receiving Party'); P(1, 'The Receiving Party shall keep the Confidential Information strictly confidential, use it only for the Purpose, and not disclose it to any person other than its employees and advisers who need to know it for the Purpose and who are bound by equivalent obligations of confidentiality.');
+    P(2, 'The Receiving Party shall protect the Confidential Information with at least the same degree of care it uses for its own confidential information, and in no case less than reasonable care.');
+    P(3, 'On written request, or when the Purpose ends, the Receiving Party shall promptly return or destroy all Confidential Information and copies of it.');
+    H('Term'); P(1, 'This Agreement shall commence on {Start} and the obligations of confidentiality shall continue for {ConfYears} from the date of the last disclosure of Confidential Information under this Agreement.');
+    H('No Licence'); P(1, 'All Confidential Information remains the property of the Disclosing Party. Nothing in this Agreement grants any licence or right in respect of the Confidential Information other than as expressly set out.');
+  } else {
+    H(k === 'lease' ? 'The Premises' : k === 'supply' ? 'The Goods' : k === 'consultancy' ? 'The Assignment' : 'Scope of Services');
+    P(1, k === 'lease' ? 'The ' + R + ' agrees to let to the Corporation, and the Corporation agrees to take on lease, the following:' : k === 'supply' ? 'The ' + R + ' shall supply and deliver the following Goods to the Corporation:' : k === 'consultancy' ? 'The ' + R + ' shall carry out the following assignment for the Corporation:' : 'The ' + R + ' shall provide the following services to the Corporation{AtLocation}:');
+    L.push('{ScopeList}');
+    P(2, k === 'lease' ? 'The Premises shall be used by the Corporation for office, storage, staff accommodation or any other lawful purpose of the Corporation.' : k === 'supply' ? 'The Goods shall be new, of the quality, specification and quantity stated in this Agreement, and fit for the purpose for which they are required.' : 'The ' + R + ' shall perform its obligations with due care, skill and diligence, in accordance with good industry practice and the reasonable instructions of the Corporation.');
+    H('Term'); P(1, 'The term of this Agreement shall be {Term} commencing on {Start} and shall remain in force until {End}, unless earlier terminated in accordance with the provisions of this Agreement.');
+    P(2, 'The term may be extended or renewed by mutual written agreement of the Parties.');
+    H(k === 'lease' ? 'Rent and Security Deposit' : 'Price and Payment');
+    if(k === 'lease'){ P(1, 'The Corporation shall pay the ' + R + ' a rent of {Value}{Payment}.'); P(2, 'The Corporation shall pay a refundable security deposit of {Deposit}, which shall be returned to the Corporation within 30 (thirty) days of the end of this Agreement, less any amount lawfully due for damage beyond fair wear and tear.'); P(3, 'The ' + R + ' shall issue a receipt or invoice for every payment received.'); }
+    else { P(1, 'In consideration of the ' + (k === 'supply' ? 'Goods supplied' : k === 'consultancy' ? 'assignment carried out' : 'services provided') + ' under this Agreement, the Corporation shall pay the ' + R + ' {Value}, inclusive of all applicable taxes{Payment}.');
+      P(2, 'The ' + R + ' shall submit a valid tax invoice to the Corporation. The Corporation shall pay each correct and undisputed invoice within 30 (thirty) days of receipt.');
+      P(3, 'The Corporation may withhold payment for any part of the ' + (k === 'supply' ? 'Goods' : 'work') + ' not delivered or performed in accordance with this Agreement until it is remedied.'); }
+    if(k === 'supply'){ H('Delivery, Acceptance and Warranty'); P(1, 'The ' + R + ' shall deliver the Goods{AtLocation} at its own cost and risk. Title and risk in the Goods shall pass to the Corporation on acceptance.'); P(2, 'The Corporation may inspect the Goods on delivery and reject any Goods which do not conform to this Agreement. Rejected Goods shall be replaced by the ' + R + ' at its own cost.'); P(3, 'The ' + R + ' warrants the Goods against defects in material and workmanship for {Warranty} from the date of acceptance and shall repair or replace any defective Goods free of charge during that period.'); }
+    if(k === 'consultancy'){ H('Deliverables and Intellectual Property'); P(1, 'The ' + R + ' shall submit the deliverables of the assignment to the Corporation for review and approval.'); P(2, 'All reports, documents and other materials prepared by the ' + R + ' under this Agreement shall become the property of the Corporation upon payment.'); }
+    if(k === 'lease'){ H('Obligations of the Parties'); P(1, 'The ' + R + ' shall keep the structure, roof, plumbing and electrical installations of the Premises in good repair and ensure the Corporation’s quiet enjoyment of the Premises.'); P(2, 'The Corporation shall keep the interior of the Premises in good and clean condition, fair wear and tear excepted, and shall not make structural alterations without the ' + R + '’s written consent.'); P(3, 'Utility charges for the Premises during the term shall be borne by the Corporation unless agreed otherwise in writing.'); }
+    else { H('Obligations of the ' + R); P(1, 'The ' + R + ' shall comply with all applicable laws and regulations of the Republic of Maldives, including those relating to employment, health and safety.'); P(2, 'The ' + R + ' shall use competent and suitably qualified personnel and shall be solely responsible for their wages, benefits, conduct and welfare.'); P(3, 'The ' + R + ' shall be liable for any loss of or damage to the property of the Corporation caused by the ' + R + ' or its personnel.');
+      H('Obligations of the Corporation'); P(1, 'The Corporation shall provide the ' + R + ' with reasonable access and information required to perform this Agreement.'); P(2, 'The Corporation shall make payments in accordance with this Agreement.'); }
+    H('Confidentiality'); P(1, 'Each Party shall keep confidential all information of the other Party obtained under this Agreement and shall not disclose it to any third party without prior written consent, except as required by law.');
+  }
+  H('Termination'); P(1, 'Either Party may terminate this Agreement by giving the other Party {Notice} prior written notice.');
+  P(2, 'Either Party may terminate this Agreement with immediate effect by written notice if the other Party commits a material breach of this Agreement and fails to remedy it within 14 (fourteen) days of being notified in writing.');
+  P(3, 'Termination shall not affect any rights or obligations of the Parties that accrued before the date of termination.');
+  H('Notices'); P(1, 'Any notice under this Agreement shall be in writing and delivered by hand, by post or by email to the address of the receiving Party stated in this Agreement, or to such other address as a Party may notify in writing.');
+  H('Force Majeure'); P(1, 'Neither Party shall be liable for any delay or failure to perform caused by events beyond its reasonable control, including natural disasters, epidemics, acts of government, war or civil unrest, provided it promptly notifies the other Party and takes reasonable steps to minimise the effect.');
+  H('Amendments'); P(1, 'No amendment or variation of this Agreement shall be effective unless made in writing and signed by the authorised representatives of both Parties.');
+  H('Governing Law and Jurisdiction'); P(1, 'This Agreement shall be governed by and construed in accordance with the laws of the Republic of Maldives.'); P(2, 'The Parties shall first attempt to settle any dispute arising out of this Agreement amicably. Any dispute not settled within 30 (thirty) days shall be referred to the competent courts of the Republic of Maldives.');
+  H('Entire Agreement'); P(1, 'This Agreement constitutes the entire agreement between the Parties in relation to its subject matter and supersedes all prior discussions, understandings and agreements.');
+  L.push('# MISCELLANEOUS', '## Copies and Counterparts', '1. This Agreement shall be executed in 2 (two) copies, each of which when executed and delivered shall be deemed an original, and may be executed in counterparts which together shall constitute one and the same instrument.', '^(Signature page to follow)');
+  return L.join('\n');
+}
+// fill the tokens with this agreement's details
+function agFill(x, d, text){
+  const ord = AG_ORD[+x.amendNo] || (x.amendNo ? x.amendNo + 'th' : 'First'), loc = String(x.location || '').trim();
+  const scope = String(x.scope || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const changes = String(x.changes || '').split('\n').map(s => s.trim()).filter(Boolean).map((l, i) => { const m = /^([\d.]+[a-z]?)\s*[|:\-–]\s*(.+)$/i.exec(l); return m ? (i + 2) + '. The Parties agree to amend and restate Clause ' + m[1] + ' of the Agreement as follows.\n> “' + m[1] + ' ' + m[2] + '”' : (i + 2) + '. ' + l; });
+  const pay = String(x.payment || '').trim(), notice = Math.round(agNum(x.notice)) || 30, conf = Math.round(agNum(x.confYears)) || 2;
+  const T = { Role:agRole(x), Party:String(x.party || '').trim() || '[name of the other party]', Start:x.startDate ? pcOrdinalDate(x.startDate) : '[start date]', End:x.endDate ? pcOrdinalDate(x.endDate) : '[end date]',
+    Term:agTerm(x.startDate, x.endDate) || '[term]', Value:agMoney(x.value) || '[amount]', Payment:pay ? ', ' + pay.replace(/^[,;\s]+/, '').replace(/\.$/, '') : '', Deposit:agMoney(x.deposit) || '[deposit]', Warranty:String(x.warranty || '').trim() || '12 (twelve) months',
+    Notice:agNw(notice, 'day'), ConfYears:agNw(conf, 'year'), Scope:scope.join('; ') || '[purpose]', AtLocation:loc ? ' at ' + loc : '', Location:loc, Date:d && d.date ? pcOrdinalDate(d.date) : '[date]',
+    Ordinal:ord, OrigTitle:String(x.origTitle || '').trim() || 'Agreement', OrigRef:String(x.origRef || '').trim() || '[agreement number]', OrigDate:x.origDate ? pcOrdinalDate(x.origDate) : '[date]',
+    Reason:String(x.reason || '').trim() || 'The Parties wish to amend certain terms of the Agreement.', Incorp:String(x.incorp || '').trim() || 'Clause 7 (Notices), Clause 12 (Amendments), and Clause 13 (Governing Law and Jurisdiction)',
+    Changes:changes.join('\n') || '2. [The clause to be amended and its new wording]', ScopeList:scope.map((s, i) => '(' + 'abcdefghijklmnopqrstuvwxyz'[i % 26] + ') ' + s).join('\n') || '(a) [describe]' };
+  return String(text).replace(/\{(\w+)\}/g, (m, k) => T[k] != null ? T[k] : m);
+}
+// the whole document as blocks: cover, parties, the clause text, signatures
+function agBlocks(d){
+  const x = agX(d), role = agRole(x), title = String(d.title || 'Agreement').trim(), up = title.toUpperCase(), isAm = agKind(x) === 'amendment', ord = AG_ORD[+x.amendNo] || 'First';
+  const pt = x.partyType || 'Private limited company', reg = String(x.partyReg || '').trim(), addr = String(x.partyAddr || '').trim();
+  const desc = pt === 'Individual' ? (reg ? 'holder of National Identity Card no. ' + reg : 'an individual') + (addr ? ', of ' + addr : '')
+    : pt === 'Government / state body' ? 'a government body of the Republic of Maldives' + (addr ? ', having its office at ' + addr : '')
+    : 'a ' + pt.toLowerCase().replace('company', 'Company') + ' ' + (pt === 'Sole proprietorship' || pt === 'Partnership' ? 'registered' : 'incorporated') + ' in the Republic of Maldives' + (reg ? ' under registration no. ' + reg : '') + (addr ? ', and having its place of business at ' + addr : '');
+  const B = [];
+  B.push({ t:'cover', title:up, sub:String(x.subtitle || '').trim().toUpperCase(), party:String(x.party || '').trim().toUpperCase() || '[OTHER PARTY]', date:d.date ? pcOrdinalDate(d.date) : '', no:d.refNo || '' });
+  B.push({ t:'title', text:up });
+  B.push({ t:'h1', text:'PARTIES' });
+  B.push({ t:'p', text:'**' + up + '** (the “**' + (isAm ? ord.toUpperCase() + ' Amendment Agreement' : 'Agreement') + '**”) is made on ' + (d.date ? pcOrdinalDate(d.date) : '[date]') + '.' });
+  B.push({ t:'p', text:'**BETWEEN:**' });
+  B.push({ t:'p', text:'**' + AG_FDC.name + '.**, a limited Corporation incorporated in the Republic of Maldives under registration no. ' + AG_FDC.reg + ', and having its place of business at ' + AG_FDC.addr + ' (hereinafter referred to as the “**Corporation**”);' });
+  B.push({ t:'p', text:'**AND**' });
+  B.push({ t:'p', text:'**' + (String(x.party || '').trim().toUpperCase() || '[OTHER PARTY]') + '**, ' + desc + ' (hereinafter referred to as the “**' + role + '**”).' });
+  B.push({ t:'p', text:'The Corporation and the ' + role + ' are hereinafter, collectively referred to as the “**Parties**” and individually referred to as a “**Party**”.' });
+  const body = agFill(x, d, String(x.clauses || '').trim() || agDefaultClauses(x)); let letter = 1;
+  body.split('\n').forEach(raw => { const l = raw.replace(/\s+$/, ''); if(!l.trim()) return; let m;
+    if(l.trim() === '---') B.push({ t:'break' });
+    else if(/^#\s+/.test(l)) B.push({ t:'h1', text:l.replace(/^#\s+/, '').replace(/^\[[A-Z]\]\s*/, ''), letter:true });
+    else if(/^##\s+/.test(l)) B.push({ t:'h2', text:l.replace(/^##\s+/, '') });
+    else if(/^>\s?/.test(l)) B.push({ t:'q', text:l.replace(/^>\s?/, '') });
+    else if(/^\^\s?/.test(l)) B.push({ t:'c', text:l.replace(/^\^\s?/, '') });
+    else if((m = /^(\d+(?:\.\d+)*\.?|\([A-Za-z0-9]{1,3}\))\s+(.+)$/.exec(l.trim()))) B.push({ t:'n', num:m[1], text:m[2], lvl:/^\(/.test(m[1]) && /^[a-z]/.test(m[1].slice(1)) ? 2 : (m[1].match(/\./g) || []).length > 1 || /^\d+\.\d/.test(m[1]) ? 1 : 0 });
+    else B.push({ t:'p', text:l.trim() }); });
+  B.push({ t:'break' }); B.push({ t:'h1', text:'SIGNATURES', letter:true });
+  B.push({ t:'sign', role, fdc:[x.fdcSignName || '', x.fdcSignDesig || ''], other:[x.partySignName || '', x.partySignDesig || ''], wit:[[x.wit1Name || '', x.wit1Id || ''], [x.wit2Name || '', x.wit2Id || '']], date:d.date ? pcOrdinalDate(d.date) : '' });
+  // section letters: [A] Parties, then each "#" heading in order
+  B.filter(b => b.t === 'h1').forEach((b, i) => { b.text = '[' + 'ABCDEFGHIJKLMNOP'[i] + '] ' + b.text; });
+  return B;
+}
+const agRuns = s => exRuns(s);
+
+/* --- PDF (A4, the template's layout: logo strip, Calibri-like type, page X of Y from the first page after the cover) --- */
+async function buildAgreementPdf(d){
+  const B = agBlocks(d), K = [0, 0, 0], X0 = 72, X1 = 523, W = X1 - X0, TOP = 112, BOT = 752, FS = 11.5, LH = 17.2;
+  const F = { r:'cal_regular', b:'cal_bold' }, tw = (s, b, z) => pdfTextWidthK(s, b ? F.b : F.r, z || FS);
+  const pages = []; let pg, y;
+  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP; };
+  const txt = (x, b, s, bold, z, o) => pg.text(x, b, s, Object.assign({ size:z || FS, font:bold ? 'F12' : 'F9' }, o || {}));
+  // wrap runs (bold aware) in the Carlito metrics
+  const wrapRuns = (runs, maxW, z) => {        // words glued across bold/plain runs (e.g. “**Parties**”) never break apart
+    const toks = []; runs.forEach(r => String(r.t).split(/(\s+)/).forEach(tk => { if(tk !== '') toks.push({ t:tk, bold:r.bold }); }));
+    const groups = []; toks.forEach(tk => { const sp = /^\s+$/.test(tk.t), last = groups[groups.length - 1]; if(!sp && last && !last.sp) last.toks.push(tk); else groups.push({ sp, toks:[tk] }); });
+    const gw = g => g.toks.reduce((s, t) => s + tw(t.t, t.bold, z), 0);
+    const lines = []; let cur = [], w = 0; const trim = a => { while(a.length && /^\s+$/.test(a[a.length - 1].t)) a.pop(); return a; };
+    groups.forEach(g => { const ww = gw(g); if(!g.sp && w + ww > maxW && cur.length){ lines.push(trim(cur)); cur = []; w = 0; } if(g.sp && !cur.length) return; cur.push(...g.toks); w += ww; });
+    if(cur.length) lines.push(trim(cur)); return lines.length ? lines : [[]]; };
+  const drawLine = (ln, x, b, z, justify, maxW) => { let extra = 0; if(justify){ const gaps = ln.filter(t => /^\s+$/.test(t.t)).length, used = ln.reduce((s, t) => s + tw(t.t, t.bold, z), 0); if(gaps) extra = (maxW - used) / gaps; }
+    let cx = x; ln.forEach(t => { if(/^\s+$/.test(t.t)){ cx += tw(t.t, false, z) + extra; return; } txt(cx, b, t.t, t.bold, z); cx += tw(t.t, t.bold, z); }); };
+  const para = (s, x, maxW, o) => { o = o || {}; const z = o.size || FS, ls = wrapRuns(agRuns(s), maxW, z), lh = z * 1.5;
+    ls.forEach((ln, i) => { if(y + lh > BOT){ newPage(); } const last = i === ls.length - 1;
+      if(o.center){ const w = ln.reduce((a, t) => a + tw(t.t, t.bold, z), 0); drawLine(ln, x + (maxW - w) / 2, y + z, z); } else drawLine(ln, x, y + z, z, o.justify !== false && !last, maxW);
+      if(o.underline){ const w = ln.reduce((a, t) => a + tw(t.t, t.bold, z), 0), sx = o.center ? x + (maxW - w) / 2 : x; pg.line(sx, y + z + 2.2, sx + w, y + z + 2.2, K, 0.8); }
+      y += lh; }); y += o.after == null ? 8 : o.after; };
+  B.forEach(b => {
+    if(b.t === 'cover'){ newPage(); const c = s => { const w = tw(s, true, 12.5); txt((PCA4_W - w) / 2, y, s, true, 12.5); };
+      y = 300; const dash = '- '.repeat(38).trim(); txt((PCA4_W - tw(dash, false, 9)) / 2, y, dash, false, 9, { color:[0.3, 0.3, 0.3] }); y += 40;
+      wrapRuns([{ t:b.title, bold:true }], W - 40, 12.5).forEach(ln => { c(ln.map(t => t.t).join('')); y += 26; }); if(b.sub){ c('(' + b.sub.replace(/^\(|\)$/g, '') + ')'); y += 26; }
+      y += 6; txt((PCA4_W - tw(dash, false, 9)) / 2, y, dash, false, 9, { color:[0.3, 0.3, 0.3] }); y += 60;
+      const cc = (s, bold) => { const w = tw(s, bold, 12); txt((PCA4_W - w) / 2, y, s, bold, 12); };
+      cc('Entered into and between'); y += 64; cc(AG_FDC.name, true); y += 64; cc('And'); y += 64; wrapRuns([{ t:b.party, bold:true }], W, 12).forEach(ln => { cc(ln.map(t => t.t).join(''), true); y += 20; });
+      y = 742; if(b.date) cc(b.date); y += 30; if(b.no) cc('Agreement Number: ' + b.no); newPage(); return; }
+    if(b.t === 'break'){ if(y > TOP + 4) newPage(); return; }
+    if(b.t === 'title'){ para('**' + b.text + '**', X0, W, { justify:false, after:10 }); return; }
+    if(b.t === 'h1'){ if(y + 60 > BOT) newPage(); y += 4; para('**' + b.text + '**', X0, W, { center:true, underline:true, after:10 }); return; }
+    if(b.t === 'h2'){ if(y + 50 > BOT) newPage(); para('**' + b.text + '**', X0, W, { justify:false, after:6 }); return; }
+    if(b.t === 'q'){ para(b.text, X0 + 36, W - 36, { after:10 }); return; }
+    if(b.t === 'c'){ y += 14; para(b.text, X0, W, { center:true }); return; }
+    if(b.t === 'n'){ const ind = b.lvl === 2 ? 36 : 0, gap = Math.max(26, tw(b.num, false) + 10); if(y + 2 * FS * 1.5 > BOT) newPage(); txt(X0 + ind, y + FS, b.num, false); para(b.text, X0 + ind + gap, W - ind - gap); return; }
+    if(b.t === 'p'){ para(b.text, X0, W); return; }
+    if(b.t === 'sign'){
+      para('**IN WITNESS WHEREOF**, the Parties have executed this Agreement as of the date first above written.', X0, W, { after:18 });
+      const cx = [X0, X0 + W / 2 + 6], top = y; [['For and on behalf of the Corporation', b.fdc], ['For and on behalf of the ' + b.role, b.other]].forEach(([h, s], i) => { y = top; txt(cx[i], y + FS, h, true); y += 70;
+        [['Name: ', String(s[0]).toUpperCase()], ['Designation: ', String(s[1]).toUpperCase()], ['Date: ', b.date], ['Sign:', '']].forEach(([k, v]) => { txt(cx[i], y + FS, k + v, false); y += 30; }); y += 20; txt(cx[i], y + FS, 'Company Seal:', false); });
+      y += 70; para('**IN WITNESS WHEREOF**, we indicate by our signatures that we confirm the execution of the above said Agreement by the concerned Parties to be true and accurate as of what was agreed between the Parties.', X0, W, { after:40 });
+      const t2 = y; b.wit.forEach((w, i) => { y = t2; [['Name: ', w[0]], ['ID card No.: ', w[1]], ['Date: ', b.date], ['Sign:', '']].forEach(([k, v]) => { txt(cx[i], y + FS, k + v, false); y += 30; }); });
+    }
+  });
+  // frame: cover has the full letterhead; other pages the stripes at the top right and the logo in the footer; Page X of Y counts from the page after the cover
+  const hdr = await pdfSignatureImage('data:image/png;base64,' + EXCO_HDR_PNG), hh = hdr ? PCA4_W * hdr.h / hdr.w : 0, total = pages.length - 1, G = [0.35, 0.35, 0.35];
+  const clip = (f, x, yy, w, h, draw) => { f.ops.push(`q ${pdfN(x)} ${pdfN(PCA4_H - yy - h)} ${pdfN(w)} ${pdfN(h)} re W n`); draw(); f.ops.push('Q'); };
+  pages.forEach((p, i) => { const f = new PdfPage(PCA4_H);
+    if(hdr){ if(i === 0) f.image('ExH', 0, 0, PCA4_W, hh); else clip(f, PCA4_W - 70, 0, 70, hh, () => f.image('ExH', 0, 0, PCA4_W, hh));
+      clip(f, 28, 786, 118, 50, () => f.image('ExH', -9, 752, PCA4_W, hh)); }
+    if(i > 0){ const pt = 'Page ' + i + ' of ' + total, w = pdfTextWidthK(pt, 'cal_regular', 10); f.text((PCA4_W - w) / 2, 786, 'Page ', { size:10, font:'F9' }); let px = (PCA4_W - w) / 2 + pdfTextWidthK('Page ', 'cal_regular', 10);
+      [[String(i), 1], [' of ', 0], [String(total), 1]].forEach(([t, bb]) => { f.text(px, 786, t, { size:10, font:bb ? 'F12' : 'F9' }); px += pdfTextWidthK(t, bb ? 'cal_bold' : 'cal_regular', 10); }); }
+    AG_FOOT.forEach((l, k) => f.text((PCA4_W - pdfTextWidthK(l, 'cal_regular', 8.5)) / 2 + 30, 802 + k * 11, l, { size:8.5, color:G, font:'F9' }));
+    p.ops = f.ops.concat(p.ops); });
+  return pcPdfFinish(pages.map(p => ({ ops:p.ops, bare:true })), { title:'', number:'', docTitle:'Agreement ' + (d.refNo || ''), images:hdr ? { ExH:hdr } : {}, cal:true, calB:true });
+}
+
+/* --- Word (Calibri, the FDC letterhead; the cover page has no page number) --- */
+async function buildAgreementDocx(d){
+  const B = agBlocks(d), F = 'Calibri', S = 23, f = o => Object.assign({ font:F, sz:S }, o || {});
+  const runs = (s, o) => agRuns(s).map(r => wR(r.t, f(Object.assign({}, o, r.bold ? { b:true } : {})))).join('');
+  const P = (inner, o) => wP(inner, Object.assign({ after:160, line:300 }, o || {}));
+  const brk = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+  const PH = (inner, o) => `<w:p><w:pPr><w:keepNext/><w:spacing w:before="${(o && o.before) || 0}" w:after="${(o && o.after) || 120}" w:line="300" w:lineRule="auto"/>${o && o.jc ? `<w:jc w:val="${o.jc}"/>` : ''}</w:pPr>${inner}</w:p>`;
+  // the cover is a section of its own (address footer only); numbering starts at 1 on the next page
+  const coverEnd = '<w:p><w:pPr><w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF2"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/></w:sectPr></w:pPr></w:p>';
+  let body = '';
+  B.forEach(b => {
+    if(b.t === 'cover'){ const dash = '-------------------------------------------';
+      body += P('', { before:2400 }) + P(wR(dash, f()), { jc:'center' }) + P(runs('**' + b.title + '**', { sz:25 }), { jc:'center' }) + (b.sub ? P(runs('**(' + b.sub.replace(/^\(|\)$/g, '') + ')**', { sz:25 }), { jc:'center' }) : '') + P(wR(dash, f()), { jc:'center', after:900 }) +
+        P(wR('Entered into and between', f({ sz:24 })), { jc:'center', after:900 }) + P(runs('**' + AG_FDC.name + '**', { sz:24 }), { jc:'center', after:900 }) + P(wR('And', f({ sz:24 })), { jc:'center', after:900 }) + P(runs('**' + b.party + '**', { sz:24 }), { jc:'center', after:1600 }) +
+        (b.date ? P(wR(b.date, f({ sz:24 })), { jc:'center', after:300 }) : '') + (b.no ? P(wR('Agreement Number: ' + b.no, f({ sz:24 })), { jc:'center' }) : '') + coverEnd; return; }
+    if(b.t === 'break'){ body += brk; return; }
+    if(b.t === 'title'){ body += P(runs('**' + b.text + '**'), { after:200 }); return; }
+    if(b.t === 'h1'){ body += PH(wR(b.text, f({ b:true, u:true })), { jc:'center', before:120, after:200 }); return; }
+    if(b.t === 'h2'){ body += PH(runs('**' + b.text + '**'), { after:120 }); return; }
+    if(b.t === 'q'){ body += P(runs(b.text, { i:true }), { ind:'<w:ind w:left="720"/>', jc:'both', line:360 }); return; }
+    if(b.t === 'c'){ body += P(runs(b.text, { i:true }), { jc:'center', before:300 }); return; }
+    if(b.t === 'n'){ const left = b.lvl === 2 ? 1440 : 720; body += P(wR(b.num, f()) + '<w:r><w:tab/></w:r>' + runs(b.text), { ind:`<w:ind w:left="${left}" w:hanging="720"/>`, jc:'both' }); return; }
+    if(b.t === 'p'){ body += P(runs(b.text), { jc:'both' }); return; }
+    if(b.t === 'sign'){
+      body += P(runs('**IN WITNESS WHEREOF**, the Parties have executed this Agreement as of the date first above written.'), { jc:'both', after:300 });
+      const col = (lines) => lines.map(([t, o]) => P(runs(t), Object.assign({ after:220 }, o || {}))).join('');
+      const tc = inner => wTc(4513, inner);
+      const tbl = rows => `<w:tbl><w:tblPr><w:tblW w:w="9026" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="4513"/><w:gridCol w:w="4513"/></w:tblGrid>${rows}</w:tbl>`;
+      const sideS = (h, s) => col([['**' + h + '**', { after:900 }], ['Name: ' + String(s[0]).toUpperCase()], ['Designation: ' + String(s[1]).toUpperCase()], ['Date: ' + b.date], ['Sign:', { after:700 }], ['Company Seal:']]);
+      body += tbl(wTr(tc(sideS('For and on behalf of the Corporation', b.fdc)) + tc(sideS('For and on behalf of the ' + b.role, b.other))));
+      body += P(runs('**IN WITNESS WHEREOF**, we indicate by our signatures that we confirm the execution of the above said Agreement by the concerned Parties to be true and accurate as of what was agreed between the Parties.'), { jc:'both', before:400, after:700 });
+      const sideW = w => col([['Name: ' + w[0]], ['ID card No.: ' + w[1]], ['Date: ' + b.date], ['Sign:']]);
+      body += tbl(wTr(tc(sideW(b.wit[0])) + tc(sideW(b.wit[1]))));
+    }
+  });
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${body}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
+  const blob0 = await lhDocx(doc, LH_NS), z = await JSZip.loadAsync(blob0);
+  // footers: "Page X of Y" in the agreement's own section (after the cover), then the address lines; the cover only has the address
+  let est = ''; try{ const pdf = await buildAgreementPdf(d), m = (await pdf.text()).match(/\/Count (\d+)/); if(m) est = String(+m[1] - 1); }catch(e){}      // shown until Word updates the field
+  const fb = c => `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${c} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${wR(c === 'PAGE' ? '1' : est || '1', { b:true, font:F, sz:20 })}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+  const addr = AG_FOOT.map(l => wP(wR(l, { font:F, color:'595959', sz:17 }), { jc:'center', line:240 })).join('');
+  z.file('word/footer1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${LH_NS}>${wP(wR('Page ', { font:F, sz:20 }) + fb('PAGE') + wR(' of ', { font:F, sz:20 }) + fb('SECTIONPAGES'), { jc:'center', after:60 })}${addr}</w:ftr>`);
+  z.file('word/footer2.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${LH_NS}>${addr}</w:ftr>`);
+  let rels = await z.file('word/_rels/document.xml.rels').async('string'); rels = rels.replace('</Relationships>', '<Relationship Id="rIdF2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/></Relationships>'); z.file('word/_rels/document.xml.rels', rels);
+  let ct = await z.file('[Content_Types].xml').async('string'); if(!/footer2\.xml/.test(ct)) ct = ct.replace('</Types>', '<Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>'); z.file('[Content_Types].xml', ct);
+  return z.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression:'DEFLATE' });
+}
+async function agDownload(id, kind, btn){
+  const d = docById(id); if(!d) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ const name = ('Agreement ' + (d.refNo || '') + ' - ' + (d.title || '')).replace(/[\\\/:*?"<>|]+/g, '-').slice(0, 120);
+    downloadBlob(kind === 'pdf' ? await buildAgreementPdf(d) : await buildAgreementDocx(d), name + (kind === 'pdf' ? '.pdf' : '.docx')); toast('Agreement downloaded.'); }
+  catch(e){ console.error(e); toast('Could not create the agreement: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+
+/* --- the agreement form --- */
+function agEditor(d){
+  const x = Object.assign({ kind:'service', partyType:'Private limited company', notice:'30', remindDays:'60', amendNo:'1' }, agX(d)), tp = !!x.thirdParty;
+  if(!d){ const last = state.documents.filter(z => z.type === 'agreement' && agX(z).fdcSignName).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0]; if(last){ x.fdcSignName = agX(last).fdcSignName; x.fdcSignDesig = agX(last).fdcSignDesig; } }
+  const f = (l, n, o) => vF(l, 'extra.' + n, x[n] || '', (o && o.type) || 'text', o);
+  const sel = (l, n, list, o) => vS(l, 'extra.' + n, list, x[n] || '', null, o);
+  const ta = (l, n, rows, ph, span) => vTa(l, 'extra.' + n, x[n] || '', { rows, ph, span:span || 'sm:col-span-2' });
+  const k = agKind(x), show = (ks) => ks.includes(k) ? '' : 'hidden';
+  return `<label class="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3.5 py-3 mb-3 cursor-pointer"><input type="checkbox" name="extra.thirdParty" value="1" ${tp ? 'checked' : ''} onchange="agTpToggle(this)" class="mt-0.5"><span><span class="block text-sm font-semibold text-slate-800">Third-party agreement</span><span class="block text-[11.5px] text-slate-500">Prepared or issued by the other party — registered and tracked here; the app does not write it.</span></span></label>` +
+    vSec('Other party') + vGrid(2, f('Name of the other party', 'party', { span:'sm:col-span-2', attrs:' placeholder="e.g. ASTONISH CLEANING COMPANY PVT LTD"' }) + sel('Type', 'partyType', AG_PTYPES) + f('Registration / ID card no.', 'partyReg') + f('Address / place of business', 'partyAddr', { span:'sm:col-span-2' }) +
+      f('Referred to as', 'partyRole', { attrs:` placeholder="${esc(AG_KINDS[k].role)}"` }) + `<div class="ag-tp-hide ${tp ? 'hidden' : ''}">${sel('Kind of agreement', 'kind', Object.keys(AG_KINDS).map(z => [z, AG_KINDS[z].label]), { attrs:' onchange="agKindChanged(this)"' })}</div>`) +
+    vSec('Term and value') + vGrid(2, f('Starts', 'startDate', { type:'date' }) + f('Ends / expires', 'endDate', { type:'date' }) + f(k === 'lease' ? 'Rent (MVR)' : 'Value (MVR)', 'value', { attrs:' placeholder="e.g. 9,800 or 9800 per month"' }) + f('Remind me before it ends (days)', 'remindDays', { type:'number' }) +
+      `<div class="ag-tp-hide sm:col-span-2 ${tp ? 'hidden' : ''}">${vGrid(2, f('Payment terms', 'payment', { span:'sm:col-span-2', attrs:' placeholder="e.g. payable monthly in arrears on the 10th of each month"' }) + f('Termination notice (days)', 'notice', { type:'number' }) + `<div class="ag-k ag-k-lease ${show(['lease'])}">${f('Security deposit (MVR)', 'deposit')}</div><div class="ag-k ag-k-supply ${show(['supply'])}">${f('Warranty', 'warranty', { attrs:' placeholder="12 (twelve) months"' })}</div><div class="ag-k ag-k-nda ${show(['nda'])}">${f('Confidentiality period (years)', 'confYears', { type:'number' })}</div>`)}</div>`) +
+    `<div class="ag-tp-hide ${tp ? 'hidden' : ''}">` +
+      `<div class="ag-k ag-k-service ag-k-lease ag-k-supply ag-k-consultancy ag-k-nda ${k === 'amendment' ? 'hidden' : ''}">${vSec('Scope') + vGrid(2, ta('Scope — one item per line', 'scope', 4, 'Daily cleaning of all office areas\nWashroom cleaning and supplies\nWaste collection and disposal') + f('Location / site', 'location', { attrs:' placeholder="e.g. the Corporation’s Male’ office"' }) + f('Sub-title on the cover (optional)', 'subtitle', { attrs:' placeholder="e.g. MALÉ OFFICE"' }))}</div>` +
+      `<div class="ag-k ag-k-amendment ${k === 'amendment' ? '' : 'hidden'}">${vSec('The agreement being amended') + vGrid(2, `<div><label class="${VEH_LBL}">Agreement number</label><input name="extra.origRef" value="${esc(x.origRef || '')}" list="ag-orig" onchange="agOrigPicked(this)" class="${VEH_FIELD}" placeholder="FDC/AGR/2025/09"><datalist id="ag-orig">${state.documents.filter(z => z.type === 'agreement' && (!d || z.id !== d.id)).map(z => `<option value="${esc(z.refNo || '')}">${esc(z.title || '')}</option>`).join('')}</datalist></div>` + f('Dated', 'origDate', { type:'date' }) + f('Title of the agreement', 'origTitle', { span:'sm:col-span-2', attrs:' placeholder="Service Agreement for Janitorial Services"' }) + sel('Amendment no.', 'amendNo', AG_ORD.slice(1).map((o, i) => [String(i + 1), o + ' Amendment'])) + f('Sub-title on the cover (optional)', 'subtitle') +
+        ta('Reason for the amendment (recital B)', 'reason', 2, 'Upon expiry of the Agreement term on 26th June 2025, the Parties wish to extend the term of the Agreement for an additional period of 2 (two) months.') +
+        ta('Clauses amended — one per line as "clause | new wording"', 'changes', 3, '4.1.1 | The term of this Agreement shall be 3 (Three) Calendar months and shall remain in force until 26th August 2025, unless earlier terminated in accordance with the provisions of this Agreement.') +
+        f('Clauses incorporated (Miscellaneous 1)', 'incorp', { span:'sm:col-span-2', attrs:' placeholder="Clause 7 (Notices), Clause 12 (Amendments), and Clause 13 (Governing Law and Jurisdiction)"' }))}</div>` +
+      vSec('Signatures') + vGrid(2, f('Corporation — name', 'fdcSignName', { attrs:' list="doc-people"' }) + f('Corporation — designation', 'fdcSignDesig', { attrs:' list="doc-desigs"' }) + f('Other party — name', 'partySignName') + f('Other party — designation', 'partySignDesig') +
+        f('Witness 1 — name', 'wit1Name') + f('Witness 1 — ID card no.', 'wit1Id') + f('Witness 2 — name', 'wit2Name') + f('Witness 2 — ID card no.', 'wit2Id')) +
+      vSec('Clauses') + `<p class="text-[11.5px] text-slate-400 -mt-1 mb-2">Leave empty to use the standard clauses for the kind chosen. To change the wording, load them here and edit: <b>#</b> section heading, <b>##</b> sub-heading, <b>1.1</b> numbered clause, <b>(a)</b> item, <b>&gt;</b> quoted text, <b>---</b> new page, **bold**. Words in {curly brackets} are filled from the form.</p>
+        <div class="flex gap-4 mb-2"><button type="button" onclick="agLoadClauses()" class="text-xs font-semibold text-brand-600 hover:underline">Load the standard clauses</button><button type="button" onclick="document.querySelector('[name=&quot;extra.clauses&quot;]').value=''" class="text-xs font-semibold text-slate-500 hover:underline">Clear (use standard)</button></div>` +
+      vGrid(2, ta('Clauses', 'clauses', 8, '(standard clauses)')) + `</div>`;
+}
+function agTpToggle(cb){ document.querySelectorAll('#vform .ag-tp-hide').forEach(e => e.classList.toggle('hidden', cb.checked)); }
+function agKindChanged(s){ const k = s.value; document.querySelectorAll('#vform .ag-k').forEach(e => e.classList.toggle('hidden', !e.classList.contains('ag-k-' + k))); const r = document.querySelector('#vform [name="extra.partyRole"]'); if(r) r.placeholder = AG_KINDS[k].role; }
+function agOrigPicked(inp){ const o = state.documents.find(z => z.type === 'agreement' && String(z.refNo || '').trim() === inp.value.trim()); if(!o) return; const f = inp.form, set = (n, v) => { const e = f.querySelector(`[name="extra.${n}"]`); if(e && !e.value) e.value = v || ''; };
+  set('origDate', o.date); set('origTitle', o.title); const ox = agX(o); ['party', 'partyType', 'partyReg', 'partyAddr', 'partyRole'].forEach(n => set(n, ox[n]));
+  const am = state.documents.filter(z => z.type === 'agreement' && agX(z).kind === 'amendment' && agX(z).origRef === o.refNo).length; const an = f.querySelector('[name="extra.amendNo"]'); if(an) an.value = String(Math.min(10, am + 1));
+  const t = f.querySelector('[name="title"]'); if(t && !t.value) t.value = (AG_ORD[am + 1] || 'First') + ' Amendment to the ' + (o.title || 'Agreement'); }
+function agLoadClauses(){ const f = document.getElementById('vform'), o = vehFormObj(f), x = Object.assign({}, o.extra || {}); const ta = f.querySelector('[name="extra.clauses"]'); if(ta.value.trim() && !confirm('Replace the clauses in the box with the standard ones?')) return; ta.value = agDefaultClauses(x); ta.rows = 16; }
+function agRead(o){ const ex = o.extra || {}, out = {}; AG_KEYS.forEach(n => { out[n] = String(ex[n] == null ? '' : ex[n]).replace(/\s+$/, ''); }); out.thirdParty = ex.thirdParty === '1'; return out; }
+
+/* --- tracking (all agreements): renewal reminder, payments, obligations, amendments, signed copy --- */
+const agTrack = d => Object.assign({ payments:[], obligations:[], amendments:[] }, d.track || {});
+function agTotals(d){ const t = agTrack(d), value = agNum(agX(d).value), paid = t.payments.filter(p => p.paid).reduce((s, p) => s + agNum(p.amount), 0), sched = t.payments.reduce((s, p) => s + agNum(p.amount), 0); return { value, paid, sched, left:Math.max(0, (value || sched) - paid) }; }
+function agAlert(d){
+  const x = agX(d), t0 = vToday(), t = agTrack(d), rd = Math.max(1, Math.round(agNum(x.remindDays)) || 60);
+  if(['Superseded', 'Filed'].includes(d.status) && d.status === 'Superseded') return null;
+  if(t.payments.some(p => !p.paid && p.due && p.due < t0)) return { k:'crit', t:'Payment overdue' };
+  if(t.obligations.some(o => o.status !== 'Done' && o.due && o.due < t0)) return { k:'warn', t:'Obligation overdue' };
+  if(x.endDate){ const days = Math.round((Date.parse(x.endDate) - Date.parse(t0)) / 864e5); if(days < 0) return { k:'crit', t:'Expired ' + vDate(x.endDate) }; if(days <= rd) return { k:'warn', t:'Expires in ' + days + ' day' + (days === 1 ? '' : 's') }; }
+  return null;
+}
+function agTrackHtml(d){
+  const t = agTrack(d), T = agTotals(d), ed = !viewerBlock(), id = d.id, t0 = vToday();
+  const sec = (title, add, body) => `<div class="rounded-lg border border-slate-200 mb-4"><div class="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between"><span class="text-sm font-bold text-slate-800">${title}</span>${ed && add ? `<button onclick="${add}" class="text-xs font-semibold text-brand-600 hover:underline">+ Add</button>` : ''}</div>${body}</div>`;
+  const rowsP = t.payments.map((p, i) => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agRowEdit('${id}', 'payments', ${i})"` : ''}><span class="w-24 text-slate-500">${p.due ? vDate(p.due) : '—'}</span><span class="flex-1 min-w-0 truncate">${esc(p.note || 'Payment')}</span><b class="num">${esc(agMoney(p.amount))}</b>${p.paid ? vPill('good', 'Paid ' + (p.paidOn ? vDate(p.paidOn) : '')) : p.due && p.due < t0 ? vPill('crit', 'Overdue') : vPill('warn', 'Due')}</div>`).join('');
+  const rowsO = t.obligations.map((o, i) => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agRowEdit('${id}', 'obligations', ${i})"` : ''}><span class="w-24 text-slate-500">${o.due ? vDate(o.due) : '—'}</span><span class="flex-1 min-w-0"><span class="text-[11px] font-semibold text-slate-400 mr-1">${esc(o.who || '')}</span>${esc(o.text || '')}</span>${o.status === 'Done' ? vPill('good', 'Done') : o.due && o.due < t0 ? vPill('crit', 'Overdue') : vPill('warn', 'Pending')}</div>`).join('');
+  const gen = state.documents.filter(z => z.type === 'agreement' && agX(z).kind === 'amendment' && agX(z).origRef && agX(z).origRef === d.refNo);
+  const rowsA = gen.map(z => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm cursor-pointer hover:bg-slate-50" onclick="openDocView('${z.id}')"><span class="w-24 text-slate-500">${z.date ? vDate(z.date) : '—'}</span><span class="flex-1 min-w-0 truncate">${esc(z.refNo || '')} · ${esc(z.title || '')}</span>${docStatusPill(z.status)}</div>`).join('') +
+    t.amendments.map((a, i) => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agRowEdit('${id}', 'amendments', ${i})"` : ''}><span class="w-24 text-slate-500">${a.date ? vDate(a.date) : '—'}</span><span class="flex-1 min-w-0 truncate">${esc(a.title || 'Amendment')}${a.note ? ' — ' + esc(a.note) : ''}</span>${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : ''}</div>`).join('');
+  return `<div class="grid grid-cols-3 gap-3 mb-4">${[['Value', T.value ? agMoney(T.value) : '—'], ['Paid', agMoney(T.paid) || 'MVR 0.00'], ['Remaining', T.value || T.sched ? agMoney(T.left) : '—']].map(([l, v]) => `<div class="rounded-lg border border-slate-200 px-3 py-2"><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-bold text-slate-800 num">${v}</div></div>`).join('')}</div>` +
+    sec('Payments', `agRowEdit('${id}', 'payments', -1)`, rowsP || '<div class="px-4 py-3 text-sm text-slate-400">No payments scheduled.</div>') +
+    sec('Obligations and deliverables', `agRowEdit('${id}', 'obligations', -1)`, rowsO || '<div class="px-4 py-3 text-sm text-slate-400">No obligations recorded.</div>') +
+    sec('Amendments', `agRowEdit('${id}', 'amendments', -1)`, (rowsA || '<div class="px-4 py-3 text-sm text-slate-400">No amendments.</div>') + (ed && !agIsTp(d) || ed ? `<div class="px-4 py-2 border-t border-slate-100"><button onclick="agNewAmendment('${id}')" class="text-xs font-semibold text-brand-600 hover:underline">Write an amendment from the template…</button></div>` : '')) +
+    sec('Signed copy', '', `<div class="px-4 py-3 text-sm flex items-center gap-3 flex-wrap">${t.fileId ? `<button onclick="agOpenSigned('${id}')" class="font-semibold text-brand-600 hover:underline">📎 ${esc(t.fileName || 'Signed copy')}</button>` : '<span class="text-slate-400">No signed copy attached.</span>'}${ed ? `<label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer ml-auto"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agSignedFile(this, '${id}')">${t.fileId ? 'Replace' : 'Attach the signed copy (PDF or photo)'}</label>` : ''}</div>`);
+}
+const AG_ROW = { payments:{ title:'Payment', fields:[['due', 'Due date', 'date'], ['amount', 'Amount (MVR)', 'number'], ['note', 'Description (e.g. October rent, 1st instalment)'], ['paid', 'Paid', 'check'], ['paidOn', 'Paid on', 'date'], ['ref', 'Voucher / reference']] },
+  obligations:{ title:'Obligation', fields:[['who', 'Whose obligation', 'who'], ['text', 'Obligation / deliverable'], ['due', 'Due date', 'date'], ['status', 'Status', 'status']] },
+  amendments:{ title:'Amendment', fields:[['date', 'Date', 'date'], ['title', 'Title (e.g. Second Amendment)'], ['note', 'What changed'], ['link', 'Link to the signed amendment']] } };
+function agRowEdit(id, key, i){
+  const d = docById(id); if(!d) return; const C = AG_ROW[key], r = i >= 0 ? (agTrack(d)[key][i] || {}) : {};
+  const fld = ([n, l, k]) => k === 'date' ? vF(l, n, r[n] || '', 'date') : k === 'number' ? vF(l, n, r[n] == null ? '' : r[n], 'number', { attrs:' step="0.01"' }) : k === 'check' ? `<label class="flex items-center gap-2 text-sm text-slate-700 pt-6"><input type="checkbox" name="${n}" value="1" ${r[n] ? 'checked' : ''}> ${l}</label>` :
+    k === 'who' ? vS(l, n, ['Corporation', agRole(agX(d)) || 'Other party'], r[n] || agRole(agX(d))) : k === 'status' ? vS(l, n, ['Pending', 'In progress', 'Done'], r[n] || 'Pending') : vF(l, n, r[n] || '', 'text', { span:n === 'note' || n === 'text' || n === 'title' ? 'sm:col-span-2' : '' });
+  openModal((i >= 0 ? 'Edit ' : 'Add ') + C.title.toLowerCase() + ' — ' + (d.refNo || ''), vFormOpen + vGrid(2, C.fields.map(fld).join('')) + vFoot('Save', `agRowSave('${id}', '${key}', ${i})`, i >= 0 ? `agRowDelete('${id}', '${key}', ${i})` : ''));
+}
+async function agRowSave(id, key, i){
+  const d = docById(id); if(!d) return; const o = vehFormObj(document.getElementById('vform')), C = AG_ROW[key], r = {};
+  C.fields.forEach(([n, l, k]) => { r[n] = k === 'check' ? o[n] === '1' : k === 'number' ? agNum(o[n]) : String(o[n] || '').trim(); });
+  if(key === 'payments' && !(r.amount > 0)) return vFail('Enter the amount.'); if(key === 'obligations' && !r.text) return vFail('Enter the obligation.'); if(key === 'amendments' && !r.title) return vFail('Enter the title.');
+  if(r.link){ const l = vSafeUrl(r.link); if(!l) return vFail('The link must start with https://'); r.link = l; }
+  if(key === 'payments' && r.paid && !r.paidOn) r.paidOn = vToday();
+  const t = agTrack(d), list = t[key].slice(); if(i >= 0) list[i] = r; else list.push(r); list.sort((a, b) => String(a.due || a.date || '').localeCompare(String(b.due || b.date || '')));
+  await vehSave('documents', { id, track:Object.assign({}, t, { [key]:list }) }); closeModal(); openDocView(id);
+}
+async function agRowDelete(id, key, i){ const d = docById(id); if(!d) return; const t = agTrack(d); await vehSave('documents', { id, track:Object.assign({}, t, { [key]:t[key].filter((x, k) => k !== i) }) }); closeModal(); openDocView(id); }
+async function agSignedFile(input, id){
+  const files = [...input.files]; input.value = ''; if(!files.length) return; const d = docById(id); if(!d) return; toast('Attaching…');
+  try{ const att = await pcPrepareAttachment(files), fid = uid(); await pcFileSave(fid, { id:fid, voucher:d.refNo || '', name:att.name, pages:att.pages, at:Date.now() });
+    const t = agTrack(d), old = t.fileId; await vehSave('documents', { id, track:Object.assign({}, t, { fileId:fid, fileName:att.name, filePages:att.pages.length }) }); if(old) pcFileDelete(old); toast('Signed copy attached.'); openDocView(id); }
+  catch(e){ toast('Could not attach: ' + (e && e.message ? e.message : e), true); }
+}
+async function agOpenSigned(id){
+  const d = docById(id), t = d && agTrack(d); if(!t || !t.fileId) return; openModal('Signed copy — ' + (d.refNo || ''), '<div class="text-sm text-slate-500">Loading…</div>', true);
+  let data = null; try{ data = await pcFileLoad(t.fileId); }catch(e){}
+  openModal('Signed copy — ' + (d.refNo || ''), data && data.pages ? `<div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div><div class="mt-4"><button onclick="openDocView('${id}')" class="text-xs font-semibold text-brand-600 hover:underline">‹ Back to the agreement</button></div>` : vEmpty('The file could not be loaded.'), true);
+}
+// start an amendment of this agreement from the template, pre-filled
+function agNewAmendment(id){
+  const o = docById(id); if(!o) return; const ox = agX(o), n = state.documents.filter(z => z.type === 'agreement' && agX(z).kind === 'amendment' && agX(z).origRef === o.refNo).length + 1;
+  window._agPrefill = { title:(AG_ORD[n] || 'First') + ' Amendment to the ' + (o.title || 'Agreement'), extra:{ kind:'amendment', amendNo:String(Math.min(10, n)), origRef:o.refNo || '', origDate:o.date || '', origTitle:o.title || '', party:ox.party || '', partyType:ox.partyType || '', partyReg:ox.partyReg || '', partyAddr:ox.partyAddr || '', partyRole:ox.partyRole || '', fdcSignName:ox.fdcSignName || '', fdcSignDesig:ox.fdcSignDesig || '', partySignName:ox.partySignName || '', partySignDesig:ox.partySignDesig || '', remindDays:'60', notice:'30' } };
+  openDocEdit('', 'agreement');
+}
+
 /* ---------- EXCO paper: the form of the Administration's EXCO paper, as a Word file and a PDF (blank or filled) ---------- */
 /* EXCO_HDR_PNG is in assets.json */
 const EXCO_FOOT = ['+960 3313244  |  Info@fdc.mv  |  www.fdc.mv', '2nd Floor, H.Fathangumaage, 20026, Sosun Magu, Male’, Republic of Maldives'];
@@ -8020,16 +8380,17 @@ function openDocEdit(id, k, torK){
   const d = id ? docById(id) : null; if(id && !d) return; k = (d && d.type) || k || '';
   if(k === 'tor' && !d && !torK){ openModal('New TOR — choose the kind', `<div class="grid sm:grid-cols-2 gap-3">${[['staff', 'Staff TOR', 'A post: reporting relationship, gross salary, responsibilities and deliverables, qualification and experience, skills and competencies.'], ['service', 'Service TOR', 'A service or works: objective, items covered (table), scope of work, obligations and pricing, in numbered sections.']].map(([kk, l, h]) => `<button type="button" onclick="openDocEdit('', 'tor', '${kk}')" class="rounded-xl border border-slate-200 px-4 py-4 text-left hover:border-brand-400"><div class="text-sm font-bold text-slate-800">${l}</div><div class="text-xs text-slate-500 mt-1">${h}</div></button>`).join('')}</div>`, true); return; }
   if(k === 'tor') torK = torK || (d ? torKind(d) : 'staff');
-  const t = docType(k), me = authUser || {}, TS = trSettings();
+  const t = docType(k), me = authUser || {}, TS = trSettings(), agPre = !d && k === 'agreement' ? window._agPrefill || null : null; window._agPrefill = null;
   const x = (d && d.extra) || (k === 'memo' ? { from:TS.memoFrom, to:TS.memoTo, cc:TS.memoCc, closing:'Thank you', signOff:'Warm Regards', signName:TS.signName, signDesig:TS.signDesig } : {});
   const pick = !t ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${DOC_TYPES.map(y => `<button type="button" onclick="openDocEdit('', '${y.k}')" class="rounded-lg border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-700 hover:border-brand-400 hover:text-brand-700 text-left">${esc(y.label)}</button>`).join('')}</div>` : '';
   if(!t){ openModal('New document — choose the kind', pick, true); return; }
   openModal((d ? 'Edit ' : 'New ') + t.label, vFormOpen +
     `<datalist id="doc-people">${sdAll().map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist><datalist id="doc-depts">${DEPARTMENTS.map(z => `<option value="${esc(z.name)}"></option>`).join('')}</datalist><datalist id="doc-desigs">${sdDesigs().map(z => `<option value="${esc(z.name)}"></option>`).join('')}</datalist><datalist id="doc-srf">${DOC_SRF.map(z => `<option value="${esc(z)}"></option>`).join('')}</datalist>` +
     vGrid(2, (k === 'tor' ? '' : vF(k === 'exco' ? 'Exco paper no.' : 'Reference number', 'refNo', d ? d.refNo : docNextNo(k), 'text', { req:1 }) + vF('Date', 'date', d ? d.date : vToday(), 'date', { req:1 })) +      // a TOR is a reusable sample: numbered and dated in the register only
-      vF(k === 'minutes' ? 'Meeting' : k === 'srf' ? 'Job title' : k === 'tor' ? (torK === 'staff' ? 'Post' : 'Title (the service, e.g. Corporate Vehicle Servicing – Motorcycles, Vans & Pick-Up)') : 'Title / subject', 'title', d ? d.title : '', 'text', { req:1, span:'sm:col-span-2' }) +
+      vF(k === 'minutes' ? 'Meeting' : k === 'srf' ? 'Job title' : k === 'tor' ? (torK === 'staff' ? 'Post' : 'Title (the service, e.g. Corporate Vehicle Servicing – Motorcycles, Vans & Pick-Up)') : (k === 'agreement' ? 'Title (e.g. Agreement for Janitorial Services)' : 'Title / subject'), 'title', d ? d.title : agPre && agPre.title ? agPre.title : '', 'text', { req:1, span:'sm:col-span-2' }) +
       (k === 'tor' && torK === 'staff' ? `<div class="sm:col-span-2"><label class="${VEH_LBL}">Department</label><input name="department" list="doc-depts" value="${esc(d ? d.department || torDeptOf(d.title) : '')}" placeholder="Filled from the post when left blank" class="${VEH_FIELD}"></div><input type="hidden" name="status" value="Draft">` : `<div><label class="${VEH_LBL}">Department</label><input name="department" list="doc-depts" value="${esc(d ? d.department || '' : me.department || '')}" class="${VEH_FIELD}"></div>` + vS('Status', 'status', DOC_STATUS, d ? d.status || 'Draft' : 'Draft'))) +
-    (k === 'tor' ? torEditor(d, torK) + vSec('File')
+    (k === 'agreement' ? agEditor(d || (agPre ? { extra:agPre.extra } : null)) + vSec('File')
+     : k === 'tor' ? torEditor(d, torK) + vSec('File')
      : k === 'srf' ? srfEditor(d) + vSec('File')
      : k === 'memo' ? vSec('Memo') + vGrid(3, t.fields.slice(0, 3).map(f => docField(f, x)).join('')) +
       vSec('Body') + `<p class="text-[11.5px] text-slate-400 -mt-1 mb-2">The title above is the SUBJECT. One paragraph per line; use **double asterisks** for bold.</p>` + vGrid(2, docField(t.fields[3], x) + '<div></div>' + vTa('Memo text', 'summary', d ? d.summary : '', { span:'sm:col-span-2', rows:7 }) + exTableEditor(x.table, { cols:[{ h:'Description' }, { h:'Amount (MVR)', sum:true }], rows:[['', '']], total:true, off:true }) + docField(t.fields[4], x)) +
@@ -8056,6 +8417,7 @@ async function saveDoc(id, k){
   if(k === 'srf') Object.keys(extra).forEach(n => delete extra[n]), Object.assign(extra, srfRead());
   if(k === 'tor'){ const ex = o.extra || {}; Object.keys(ex).forEach(n => { extra[n] = String(ex[n] || '').replace(/\s+$/, ''); }); extra.torKind = extra.torKind === 'service' ? 'service' : 'staff'; if(extra.torKind === 'staff') extra.designation = String(o.title || '').trim(); Object.assign(extra, torRead(extra.torKind)); }
   t.fields.forEach(([n, l, kind]) => { if(kind === 'check') extra[n] = extra[n] === '1'; });
+  if(k === 'agreement') Object.assign(extra, agRead(o));
   if(k === 'agreement' && extra.startDate && extra.endDate && extra.endDate < extra.startDate) return vFail('The agreement ends before it starts.');
   const old = id ? docById(id) : null;
   if(o.status === 'Approved' && (!old || old.status !== 'Approved') && !apIsApprover()) return vFail('Only the approver (' + apNames() + ') can approve documents. Set it to "Pending approval" instead.');
@@ -8076,6 +8438,7 @@ function openDocView(id){
     ${d.summary ? `<div class="mb-5"><div class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${d.type === 'exco' ? 'Summary and key points' : d.type === 'memo' ? 'Memo text' : 'Summary'}</div><div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(d.summary.replace(/\*\*/g, ''))}</div></div>` : ''}
     ${(d.type === 'exco' || d.type === 'memo') && exTable(x) ? (tb => `<div class="overflow-x-auto mb-5"><table class="text-sm border border-slate-300 mx-auto"><thead><tr>${tb.cols.map(c => `<th class="border border-slate-300 px-2 py-1 text-left">${esc(c.h)}</th>`).join('')}</tr></thead><tbody>${tb.rows.map(r => `<tr>${tb.cols.map((c, i) => `<td class="border border-slate-300 px-2 py-1">${esc(r[i] || '')}</td>`).join('')}</tr>`).join('')}${tb.total ? `<tr class="font-semibold">${exTotals(tb).map(v => `<td class="border border-slate-300 px-2 py-1">${esc(v)}</td>`).join('')}</tr>` : ''}</tbody></table></div>`)(exTable(x)) : ''}
     ${d.type === 'exco' || d.type === 'memo' ? (fn => `<div class="flex flex-wrap gap-4 mb-4"><button onclick="${fn}('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="${fn}('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>`)(d.type === 'exco' ? 'excoDownload' : 'memoDownload') : d.type === 'tor' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="torDownload('${d.id}', '', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="torDownload('${d.id}', '', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : d.type === 'srf' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="srfDownload('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="srfDownload('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : ''}
+    ${d.type === 'agreement' ? `<div class="flex flex-wrap items-center gap-2 mb-4">${agIsTp(d) ? vPill('acc', 'Third-party agreement') : vPill('', esc((AG_KINDS[agKind(x)] || {}).label || '')) + `<button onclick="agDownload('${d.id}', 'docx', this)" class="ml-2 text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="agDownload('${d.id}', 'pdf', this)" class="ml-2 text-xs font-semibold text-brand-600 hover:underline">Download PDF</button>`}</div>` + agTrackHtml(d) : ''}
     ${smp && !d.link ? '' : `<div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">${d.link ? vLink(d.link, 'Open the file') : '<span class="text-amber-600">No file linked yet — use Edit to add the SharePoint link.</span>'}</div>`}
     <div class="flex flex-wrap gap-2 mb-4 ${smp ? 'hidden' : ''}">${DOC_STATUS.filter(s => s !== (d.status || 'Draft')).slice(0, 8).map(s => `<button onclick="docSetStatus('${d.id}', '${s}')" class="px-2.5 py-1 rounded-md border border-slate-200 text-[11.5px] font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700">${s}</button>`).join('')}</div>
     ${(d.history || []).length ? `<div class="text-[11px] text-slate-400">${(d.history || []).slice(-5).map(h => esc(h.text) + ' · ' + esc(h.by || '') + ' ' + fmtD(h.at)).join(' — ')}</div>` : ''}

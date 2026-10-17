@@ -424,6 +424,9 @@ function refreshAppearanceModal(){
     table.pc-cards td:first-child > div, table.pc-cards td:first-child > span{display:block;text-align:left}
   }
   /* sticky notes keep their paper colour in dark mode */
+  .dash-cards .bg-white{ background-color: rgb(255 255 255 / var(--card-a, 1)) !important; }
+  html[data-theme="dark"] .dash-cards .bg-white{ background-color: rgb(var(--s-surface) / var(--card-a, 1)) !important; }
+  .dash-cards.dash-blur .bg-white{ -webkit-backdrop-filter: blur(var(--card-blur, 0px)); backdrop-filter: blur(var(--card-blur, 0px)); }
   textarea.note-ta, html[data-theme="dark"] textarea.note-ta{background:transparent!important;border:0!important;box-shadow:none!important}
   textarea.note-ta::placeholder{color:currentColor!important;opacity:.45}
 </style>
@@ -1622,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.208';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.209';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -6889,10 +6892,10 @@ let myDash = null, dashEdit = false, dashDragId = '';
 const DASH_LS = () => 'fdc_dash_' + (authUser ? authUser.uid : 'local');
 function dashPrefs(){
   if(!myDash){ try{ myDash = JSON.parse(localStorage.getItem(DASH_LS()) || 'null'); }catch(e){} }
-  const d = Object.assign({ bg:'', dim:0.35 }, myDash || {}), cols = Array.isArray(d.cols) && d.cols.length === 2 ? d.cols.map(c => c.slice()) : DASH_DEFAULT.cols.map(c => c.slice());
+  const d = Object.assign({ bg:'', dim:0.35, cardT:0, cardBlur:true }, myDash || {}), cols = Array.isArray(d.cols) && d.cols.length === 2 ? d.cols.map(c => c.slice()) : DASH_DEFAULT.cols.map(c => c.slice());
   const all = ['tasks', 'approvals', 'money', 'leave', 'notes', 'requests'], seen = new Set(cols.flat().concat(d.hidden || []));
   all.filter(k => !seen.has(k)).forEach(k => cols[0].push(k));                                     // panels added later appear on the left
-  return { cols:cols.map(c => c.filter(k => all.includes(k))), hidden:(d.hidden || []).filter(k => all.includes(k)), bg:d.bg || '', dim:d.dim == null ? 0.35 : +d.dim };
+  return { cols:cols.map(c => c.filter(k => all.includes(k))), hidden:(d.hidden || []).filter(k => all.includes(k)), bg:d.bg || '', dim:d.dim == null ? 0.35 : +d.dim, cardT:Math.max(0, Math.min(85, +d.cardT || 0)), cardBlur:d.cardBlur !== false };
 }
 function dashSave(p){
   myDash = p; try{ localStorage.setItem(DASH_LS(), JSON.stringify(p)); }catch(e){}
@@ -6923,6 +6926,9 @@ function openDashBg(){
     <label class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer"><input type="file" accept="image/*" class="hidden" onchange="dashBgFile(this)">${p.bg ? 'Change picture' : 'Choose picture'}</label>
     <span id="dash-bg-st" class="text-xs text-slate-400 ml-2"></span>
     ${p.bg ? `<div class="mt-5"><label class="${VEH_LBL}">Darken the picture <span class="font-normal text-slate-400" id="dash-dim-v">${Math.round(p.dim * 100)}%</span></label><input type="range" min="0" max="80" value="${Math.round(p.dim * 100)}" class="w-full" oninput="document.getElementById('dash-dim-v').textContent=this.value+'%'" onchange="dashDim(this.value)"></div>` : ''}
+    <div class="mt-5"><label class="${VEH_LBL}">Card transparency <span class="font-normal text-slate-400" id="dash-ct-v">${p.cardT}%</span></label><input type="range" min="0" max="85" value="${p.cardT}" class="w-full" oninput="dashCardT(this.value, false)" onchange="dashCardT(this.value, true)">
+      <label class="flex items-center gap-2 text-sm text-slate-600 mt-2"><input type="checkbox" ${p.cardBlur ? 'checked' : ''} onchange="dashCardBlur(this.checked)"> Blur the picture behind the cards (easier to read)</label>
+      <p class="text-[11.5px] text-slate-400 mt-1">0% = solid cards. Higher lets the background show through the tasks, notes and other cards.</p></div>
     <div class="flex justify-between gap-2.5 mt-6">${p.bg ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50" onclick="dashBgRemove()">Remove picture</button>` : '<span></span>'}<button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="closeModal()">Done</button></div>`);
 }
 async function dashBgFile(input){
@@ -6948,6 +6954,10 @@ async function dashBgFile(input){
   try{ rerenderMain(); openDashBg(); }catch(e){}
   toast('Background set.');
 }
+function dashCardT(v, save){ const t = Math.max(0, Math.min(85, Math.round(+v || 0))), el = document.getElementById('dash-ct-v'); if(el) el.textContent = t + '%';
+  const box = document.querySelector('.dash-cards'); if(box){ box.style.setProperty('--card-a', String(1 - t / 100)); box.style.setProperty('--card-blur', t ? '8px' : '0px'); }
+  if(save){ const p = dashPrefs(); p.cardT = t; dashSave(p); } }
+function dashCardBlur(on){ const p = dashPrefs(); p.cardBlur = !!on; dashSave(p); const box = document.querySelector('.dash-cards'); if(box) box.classList.toggle('dash-blur', !!on); }
 function dashDim(v){ const p = dashPrefs(); p.dim = Math.max(0, Math.min(0.8, (+v || 0) / 100)); dashSave(p); rerenderMain(); openDashBg(); }
 function dashBgRemove(){ const p = dashPrefs(); p.bg = ''; dashSave(p); closeModal(); rerenderMain(); }
 function dashApplyBg(){
@@ -7001,8 +7011,9 @@ function viewMyWork(){
       <div class="flex gap-2 flex-wrap">${dashEdit ? vBtnPlain('Reset layout', 'dashReset()') + vBtnPrimary('Done', 'dashEdit=false; rerenderMain()') : vBtnPlain('🖼 Background', 'openDashBg()') + vBtnPlain('✥ Arrange', 'dashEdit=true; rerenderMain()')}</div></div>
     <figure class="mt-3 pl-3 border-l-4 border-brand-400"><blockquote class="text-[14.5px] italic text-slate-700">“${esc(q[0])}”</blockquote><figcaption class="text-xs text-slate-400 mt-0.5">— ${esc(q[1])}</figcaption></figure></div>`;
   const hiddenBar = dashEdit ? `<div class="rounded-xl border border-slate-200 bg-white px-4 py-3 mb-5 text-sm flex items-center gap-2 flex-wrap"><span class="text-slate-500">Drag the panels or use the arrows to move them.</span>${P.hidden.length ? '<span class="text-slate-400 ml-2">Hidden:</span>' + P.hidden.map(id => `<button onclick="dashShow('${id}')" class="px-2.5 py-1 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50">+ ${esc(W[id][0])}</button>`).join('') : ''}</div>` : '';
-  return head + vKpis(statCard('My open tasks', fmtNum(tasks.length), over ? over + ' overdue' : 'None overdue', over ? 'rose' : 'brand') + statCard('Waiting for my approval', fmtNum(apN), apIsApprover() ? 'PRs and documents' : 'You are not an approver', apN ? 'amber' : 'slate') + statCard('Advance & petty cash', fmtNum(bas.length + pcs.length), bas.reduce((s, r) => s + baTotals(r).pending, 0) ? bas.reduce((s, r) => s + baTotals(r).pending, 0) + ' invoice(s) pending' : 'Open business advance and petty cash', bas.length + pcs.length ? 'amber' : 'slate') + statCard('My requests', fmtNum(nReq), 'PRs, stock and travel', 'slate')) +
-    hiddenBar + `<div class="grid grid-cols-1 xl:grid-cols-2 gap-x-5 items-start">${col(0)}${col(1)}</div>`;
+  const wrapOpen = `<div class="dash-cards ${P.cardBlur ? 'dash-blur' : ''}" style="--card-a:${1 - P.cardT / 100};--card-blur:${P.cardT ? 8 : 0}px">`;
+  return wrapOpen + head + vKpis(statCard('My open tasks', fmtNum(tasks.length), over ? over + ' overdue' : 'None overdue', over ? 'rose' : 'brand') + statCard('Waiting for my approval', fmtNum(apN), apIsApprover() ? 'PRs and documents' : 'You are not an approver', apN ? 'amber' : 'slate') + statCard('Advance & petty cash', fmtNum(bas.length + pcs.length), bas.reduce((s, r) => s + baTotals(r).pending, 0) ? bas.reduce((s, r) => s + baTotals(r).pending, 0) + ' invoice(s) pending' : 'Open business advance and petty cash', bas.length + pcs.length ? 'amber' : 'slate') + statCard('My requests', fmtNum(nReq), 'PRs, stock and travel', 'slate')) +
+    hiddenBar + `<div class="grid grid-cols-1 xl:grid-cols-2 gap-x-5 items-start">${col(0)}${col(1)}</div></div>`;
 }
 
 

@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.199';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.202';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7356,7 +7356,8 @@ function docSub(d){
     case 'memo': return [x.from && 'From ' + x.from, x.to && 'To ' + x.to].filter(Boolean).join(' · ');
     case 'tor': return [x.torKind === 'service' ? 'Service TOR' : 'Staff TOR', x.torKind === 'service' ? '' : x.reportingTo && 'reports to ' + x.reportingTo, x.version && 'v' + x.version].filter(Boolean).join(' · ');
     case 'sop': return [x.owner, x.version && 'v' + x.version].filter(Boolean).join(' · ');
-    case 'agreement': return [x.thirdParty ? 'Third-party' : AG_KINDS[x.kind] ? AG_KINDS[x.kind].label : '', x.party, x.startDate && x.endDate ? vDate(x.startDate) + ' – ' + vDate(x.endDate) : x.endDate ? 'until ' + vDate(x.endDate) : ''].filter(Boolean).join(' · ');
+    case 'agreement': if(agEffEnd(d).by) return [x.thirdParty ? 'Third-party' : AG_KINDS[x.kind] ? AG_KINDS[x.kind].label : '', x.party, 'extended to ' + vDate(agEffEnd(d).end)].filter(Boolean).join(' · ');
+      return [x.thirdParty ? 'Third-party' : AG_KINDS[x.kind] ? AG_KINDS[x.kind].label : '', x.party, x.startDate && x.endDate ? vDate(x.startDate) + ' – ' + vDate(x.endDate) : x.endDate ? 'until ' + vDate(x.endDate) : ''].filter(Boolean).join(' · ');
     case 'srf': return [x.division, x.positions && x.positions + ' position' + (+x.positions === 1 ? '' : 's'), x.empType, x.reqType].filter(Boolean).join(' · ');
     case 'letter': return [x.direction, x.party].filter(Boolean).join(' · ');
     case 'minutes': return [x.chair && 'Chair: ' + x.chair, x.venue].filter(Boolean).join(' · ');
@@ -7709,13 +7710,16 @@ function agRead(o){ const ex = o.extra || {}, out = {}; AG_KEYS.forEach(n => { o
 
 /* --- tracking (all agreements): renewal reminder, payments, obligations, amendments, signed copy --- */
 const agTrack = d => Object.assign({ payments:[], obligations:[], amendments:[], docs:[] }, (d && d.track) || {});
-function agTotals(d){ const t = agTrack(d), value = agNum(agX(d).value), paid = t.payments.filter(p => p.paid).reduce((s, p) => s + agNum(p.amount), 0), sched = t.payments.reduce((s, p) => s + agNum(p.amount), 0); return { value, paid, sched, left:Math.max(0, (value || sched) - paid) }; }
+// the latest signed extension / amendment sets the end date and the value in force
+function agEffEnd(d){ const x = agX(d); let e = x.endDate || '', by = null; agTrack(d).amendments.forEach(a => { if(a.newEnd && a.status !== 'Draft' && a.newEnd > e){ e = a.newEnd; by = a; } }); return { end:e, by }; }
+function agEffValue(d){ const am = agTrack(d).amendments.filter(a => a.status !== 'Draft' && String(a.newValue || '').trim()).sort((a, b) => String(a.effective || a.date || '').localeCompare(String(b.effective || b.date || ''))); return am.length ? agNum(am[am.length - 1].newValue) : agNum(agX(d).value); }
+function agTotals(d){ const t = agTrack(d), value = agEffValue(d), paid = t.payments.filter(p => p.paid).reduce((s, p) => s + agNum(p.amount), 0), sched = t.payments.reduce((s, p) => s + agNum(p.amount), 0); return { value, paid, sched, left:Math.max(0, (value || sched) - paid) }; }
 function agAlert(d){
   const x = agX(d), t0 = vToday(), t = agTrack(d), rd = Math.max(1, Math.round(agNum(x.remindDays)) || 60);
   if(['Superseded', 'Filed'].includes(d.status) && d.status === 'Superseded') return null;
   if(t.payments.some(p => !p.paid && p.due && p.due < t0)) return { k:'crit', t:'Payment overdue' };
   if(t.obligations.some(o => o.status !== 'Done' && o.due && o.due < t0)) return { k:'warn', t:'Obligation overdue' };
-  if(x.endDate){ const days = Math.round((Date.parse(x.endDate) - Date.parse(t0)) / 864e5); if(days < 0) return { k:'crit', t:'Expired ' + vDate(x.endDate) }; if(days <= rd) return { k:'warn', t:'Expires in ' + days + ' day' + (days === 1 ? '' : 's') }; }
+  const E = agEffEnd(d).end; if(E){ const days = Math.round((Date.parse(E) - Date.parse(t0)) / 864e5); if(days < 0) return { k:'crit', t:'Expired ' + vDate(E) }; if(days <= rd) return { k:'warn', t:'Expires in ' + days + ' day' + (days === 1 ? '' : 's') }; }
   return null;
 }
 function agTrackHtml(d){
@@ -7725,11 +7729,15 @@ function agTrackHtml(d){
   const rowsO = t.obligations.map((o, i) => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agRowEdit('${id}', 'obligations', ${i})"` : ''}><span class="w-24 text-slate-500">${o.due ? vDate(o.due) : '—'}</span><span class="flex-1 min-w-0"><span class="text-[11px] font-semibold text-slate-400 mr-1">${esc(o.who || '')}</span>${esc(o.text || '')}</span>${o.status === 'Done' ? vPill('good', 'Done') : o.due && o.due < t0 ? vPill('crit', 'Overdue') : vPill('warn', 'Pending')}</div>`).join('');
   const gen = state.documents.filter(z => z.type === 'agreement' && agX(z).kind === 'amendment' && agX(z).origRef && agX(z).origRef === d.refNo);
   const rowsA = gen.map(z => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm cursor-pointer hover:bg-slate-50" onclick="openDocView('${z.id}')"><span class="w-24 text-slate-500">${z.date ? vDate(z.date) : '—'}</span><span class="flex-1 min-w-0 truncate">${esc(z.refNo || '')} · ${esc(z.title || '')}</span>${docStatusPill(z.status)}</div>`).join('') +
-    t.amendments.map((a, i) => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agRowEdit('${id}', 'amendments', ${i})"` : ''}><span class="w-24 text-slate-500">${a.date ? vDate(a.date) : '—'}</span><span class="flex-1 min-w-0 truncate">${esc(a.title || 'Amendment')}${a.note ? ' — ' + esc(a.note) : ''}</span>${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : ''}</div>`).join('');
-  return `<div class="grid grid-cols-3 gap-3 mb-4">${[['Value', T.value ? agMoney(T.value) : '—'], ['Paid', agMoney(T.paid) || 'MVR 0.00'], ['Remaining', T.value || T.sched ? agMoney(T.left) : '—']].map(([l, v]) => `<div class="rounded-lg border border-slate-200 px-3 py-2"><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-bold text-slate-800 num">${v}</div></div>`).join('')}</div>` +
+    t.amendments.map((a, i) => `<div class="px-4 py-2.5 border-b border-slate-100 last:border-0 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agAmendEdit('${id}', ${i})"` : ''}><div class="flex items-center gap-3 flex-wrap"><span class="w-24 text-slate-500">${a.date ? vDate(a.date) : '—'}</span><span class="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">${esc(a.type || 'Amendment')}</span><span class="flex-1 min-w-0 font-semibold text-slate-800 truncate">${esc(a.title || a.type || 'Amendment')}${a.ref ? ' <span class="font-normal text-slate-400">· ' + esc(a.ref) + '</span>' : ''}</span>${a.status === 'Draft' ? vPill('', 'Draft') : vPill('good', esc(a.status || 'Signed'))}
+      ${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open link</a>` : ''}${a.fileId ? `<button onclick="event.stopPropagation(); agOpenFile('${a.fileId}', '${esc((a.title || 'Amendment').replace(/'/g, ''))}', '${id}')" class="text-xs font-semibold text-brand-600 hover:underline">📎 View file</button>` : ed ? `<label onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agAmQuickFile(this, '${id}', ${i})">📎 Attach PDF</label>` : ''}${!a.link && ed ? `<button onclick="event.stopPropagation(); agAmQuickLink('${id}', ${i})" class="text-xs font-semibold text-brand-600 hover:underline">🔗 Add link</button>` : ''}</div>
+      ${[a.effective && 'Effective ' + vDate(a.effective), a.newStart && 'New start ' + vDate(a.newStart), a.newEnd && 'Extended to ' + vDate(a.newEnd), String(a.newValue || '').trim() && 'Value ' + agMoney(a.newValue), a.clauses && 'Clauses ' + a.clauses].filter(Boolean).length ? `<div class="text-[12px] text-slate-500 mt-1 ml-[6.75rem]">${esc([a.effective && 'Effective ' + vDate(a.effective), a.newStart && 'New start ' + vDate(a.newStart), a.newEnd && 'Extended to ' + vDate(a.newEnd), String(a.newValue || '').trim() && 'Value ' + agMoney(a.newValue), a.clauses && 'Clauses ' + a.clauses].filter(Boolean).join(' · '))}</div>` : ''}
+      ${a.note ? `<div class="text-[12.5px] text-slate-600 mt-1 ml-[6.75rem] whitespace-pre-line">${esc(a.note)}</div>` : ''}</div>`).join('');
+  const EE = agEffEnd(d);
+  return (EE.by ? `<div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 mb-4 text-sm text-emerald-800">Extended to <b>${vDate(EE.end)}</b> by ${esc(EE.by.title || EE.by.type || 'amendment')}${EE.by.date ? ' (' + vDate(EE.by.date) + ')' : ''}.</div>` : '') + `<div class="grid grid-cols-3 gap-3 mb-4">${[['Value', T.value ? agMoney(T.value) : '—'], ['Paid', agMoney(T.paid) || 'MVR 0.00'], ['Remaining', T.value || T.sched ? agMoney(T.left) : '—']].map(([l, v]) => `<div class="rounded-lg border border-slate-200 px-3 py-2"><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-bold text-slate-800 num">${v}</div></div>`).join('')}</div>` +
     sec('Payments', `agRowEdit('${id}', 'payments', -1)`, rowsP || '<div class="px-4 py-3 text-sm text-slate-400">No payments scheduled.</div>') +
     sec('Obligations and deliverables', `agRowEdit('${id}', 'obligations', -1)`, rowsO || '<div class="px-4 py-3 text-sm text-slate-400">No obligations recorded.</div>') +
-    sec('Amendments', `agRowEdit('${id}', 'amendments', -1)`, (rowsA || '<div class="px-4 py-3 text-sm text-slate-400">No amendments.</div>') + (ed && !agIsTp(d) || ed ? `<div class="px-4 py-2 border-t border-slate-100"><button onclick="agNewAmendment('${id}')" class="text-xs font-semibold text-brand-600 hover:underline">Write an amendment from the template…</button></div>` : '')) +
+    sec('Amendments and extensions', `agAmendEdit('${id}', -1)`, (rowsA || '<div class="px-4 py-3 text-sm text-slate-400">No amendments.</div>') + (ed && !agIsTp(d) || ed ? `<div class="px-4 py-2 border-t border-slate-100"><button onclick="agNewAmendment('${id}')" class="text-xs font-semibold text-brand-600 hover:underline">Write an amendment from the template…</button></div>` : '')) +
     sec('Agreement document', '', `<div class="px-4 py-3 text-sm space-y-2"><div class="flex items-center gap-3 flex-wrap">${d.link ? vLink(d.link, '🔗 Open the linked file') : '<span class="text-slate-400">No link.</span>'}${ed ? `<button onclick="closeModal(); openDocEdit('${id}')" class="text-xs font-semibold text-brand-600 hover:underline ml-auto">${d.link ? 'Change link' : 'Add a link'}</button>` : ''}</div>
       <div class="flex items-center gap-3 flex-wrap">${t.fileId ? `<button onclick="agOpenSigned('${id}')" class="font-semibold text-brand-600 hover:underline">📎 ${esc(t.fileName || 'Agreement file')}</button>` : '<span class="text-slate-400">No file attached.</span>'}${ed ? `<label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer ml-auto"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agSignedFile(this, '${id}')">${t.fileId ? 'Replace file' : 'Attach the signed agreement (PDF)'}</label>` : ''}</div></div>`) +
     sec('Additional documents', `agDocEdit('${id}', -1)`, (t.docs || []).length ? (t.docs || []).map((x, i) => { const ho = x.handoverId ? (state.handovers || []).find(h => h.id === x.handoverId) : null;
@@ -7749,17 +7757,35 @@ async function agPrepare(files){
 }
 const agSizeText = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 const agAttText = a => a.pdf ? a.name + ' · PDF, ' + agSizeText(a.size) : a.name + ' · ' + a.pages.length + ' page' + (a.pages.length === 1 ? '' : 's');
-async function agStore(att, voucher){
-  const fid = uid();
+async function agStore(att, voucher, onProgress){
+  const fid = uid(), prog = f => { try{ if(onProgress) onProgress(f); }catch(e){} };
   if(att.pdf){
     let bin = ''; for(let i = 0; i < att.bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, att.bytes.subarray(i, i + 0x8000));
-    const b64 = btoa(bin), n = Math.ceil(b64.length / AG_CHUNK);
-    for(let i = 0; i < n; i++) await pcFileSave(fid + '_c' + i, { id:fid + '_c' + i, part:i, data:b64.slice(i * AG_CHUNK, (i + 1) * AG_CHUNK) });
+    const b64 = btoa(bin), n = Math.ceil(b64.length / AG_CHUNK); let done = 0, next = 0; prog(0);
+    const worker = async () => { while(next < n){ const i = next++; await pcFileSave(fid + '_c' + i, { id:fid + '_c' + i, part:i, data:b64.slice(i * AG_CHUNK, (i + 1) * AG_CHUNK) }); if(firestoreDb) delete pcFileCache[fid + '_c' + i]; prog(++done / n); } };
+    await Promise.all([worker(), worker(), worker(), worker()]);                     // four parts at a time
     await pcFileSave(fid, { id:fid, voucher, name:att.name, kind:'pdf', chunks:n, size:att.size, at:Date.now() });
     return { fileId:fid, fileName:att.name, filePages:0, fileKind:'pdf', fileSize:att.size };
   }
-  await pcFileSave(fid, { id:fid, voucher, name:att.name, pages:att.pages, at:Date.now() });
+  await pcFileSave(fid, { id:fid, voucher, name:att.name, pages:att.pages, at:Date.now() }); prog(1);
   return { fileId:fid, fileName:att.name, filePages:att.pages.length, fileKind:'img' };
+}
+// large files upload in the background: the agreement is saved at once and the file is added when it arrives
+const agUploads = {};
+function agUploadBar(){
+  let el = document.getElementById('ag-upbar'); const list = Object.values(agUploads);
+  if(!list.length){ if(el) el.remove(); window.onbeforeunload = null; return; }
+  if(!el){ el = document.createElement('div'); el.id = 'ag-upbar'; el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:80;min-width:280px;max-width:92vw;background:#0f172a;color:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.3);font-size:13px'; document.body.appendChild(el); }
+  el.innerHTML = list.map(u => `<div style="margin:2px 0"><div style="display:flex;justify-content:space-between;gap:12px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Uploading ${esc(u.name)}</span><b>${Math.round(u.f * 100)}%</b></div><div style="height:4px;background:#334155;border-radius:4px;margin-top:5px"><div style="height:4px;width:${Math.round(u.f * 100)}%;background:#22c55e;border-radius:4px;transition:width .3s"></div></div></div>`).join('');
+  window.onbeforeunload = e => { e.preventDefault(); e.returnValue = 'A file is still uploading.'; return e.returnValue; };
+}
+async function agBgUpload(docId, att, voucher, apply){
+  const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar();
+  try{ const st = await agStore(att, voucher, f => { agUploads[key].f = f; agUploadBar(); });
+    const d = docById(docId); if(d) await vehSave('documents', { id:docId, track:apply(agTrack(d), st) }); toast(att.name + ' attached to ' + (voucher || 'the agreement') + '.');
+    if(document.getElementById('modal-title') && !document.getElementById('modal-overlay').classList.contains('hidden') && /Agreement/.test(document.getElementById('modal-title').textContent)) openDocView(docId); }
+  catch(e){ toast('The file ' + att.name + ' could not be uploaded: ' + (e && e.message ? e.message : e) + '. Attach it again from the agreement.', true); }
+  finally{ delete agUploads[key]; agUploadBar(); }
 }
 async function agFileDel(fid){ if(!fid) return; try{ const m = await pcFileLoad(fid); if(m && m.kind === 'pdf') for(let i = 0; i < (m.chunks || 0); i++) pcFileDelete(fid + '_c' + i); }catch(e){} pcFileDelete(fid); }
 async function agOpenFile(fid, title, backId){
@@ -7808,7 +7834,7 @@ async function agDocSave(id, i){
   const x = Object.assign(i >= 0 ? docs[i] : { uid:uid() }, { kind:o.kind || 'Other', date:o.date || '', title:String(o.title || '').trim(), link, handoverId:o.kind === 'Handover' ? (o.handoverId || '') : '' });
   if(!x.title && !x.handoverId && !x.link && !x.fileId && !agDocAtt) return vFail('Add a title, a link, a file or a handover.');
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
-  try{ if(agDocAtt){ const st = await agStore(agDocAtt, d.refNo || ''); if(x.fileId) agFileDel(x.fileId); Object.assign(x, st); agDocAtt = null; } }
+  try{ if(agDocAtt){ const st = await agStore(agDocAtt, d.refNo || '', f => { if(btn) btn.textContent = 'Uploading ' + Math.round(f * 100) + '%'; }); if(x.fileId) agFileDel(x.fileId); Object.assign(x, st); agDocAtt = null; } }
   catch(e){ if(btn) btn.disabled = false; return vFail('The file could not be saved: ' + (e && e.message ? e.message : e)); }
   if(i < 0) docs.push(x); await vehSave('documents', { id, track:Object.assign({}, t, { docs }) }); closeModal(); openDocView(id);
 }
@@ -7823,6 +7849,54 @@ function agRowEdit(id, key, i){
     k === 'who' ? vS(l, n, ['Corporation', agRole(agX(d)) || 'Other party'], r[n] || agRole(agX(d))) : k === 'status' ? vS(l, n, ['Pending', 'In progress', 'Done'], r[n] || 'Pending') : vF(l, n, r[n] || '', 'text', { span:n === 'note' || n === 'text' || n === 'title' ? 'sm:col-span-2' : '' });
   openModal((i >= 0 ? 'Edit ' : 'Add ') + C.title.toLowerCase() + ' — ' + (d.refNo || ''), vFormOpen + vGrid(2, C.fields.map(fld).join('')) + vFoot('Save', `agRowSave('${id}', '${key}', ${i})`, i >= 0 ? `agRowDelete('${id}', '${key}', ${i})` : ''));
 }
+const AG_AM_TYPES = ['Amendment', 'Extension', 'Renewal', 'Addendum', 'Variation', 'Termination', 'Novation / assignment'];
+let agAmAtt = null;
+function agAmendEdit(id, i){
+  const d = docById(id); if(!d) return; const t = agTrack(d), n = t.amendments.length + 1, a = i >= 0 ? (t.amendments[i] || {}) : { type:'Extension', status:'Signed', date:vToday(), title:(AG_ORD[n] || n + 'th') + ' Amendment' }; agAmAtt = null;
+  const E = agEffEnd(d).end;
+  openModal((i >= 0 ? 'Edit' : 'Add') + ' amendment / extension — ' + (d.refNo || ''), vFormOpen +
+    vGrid(2, vS('Type', 'type', AG_AM_TYPES, a.type || 'Amendment') + vS('Status', 'status', ['Signed', 'Draft', 'Sent for signature'], a.status || 'Signed') +
+      vF('Title', 'title', a.title || '', 'text', { span:'sm:col-span-2', attrs:' placeholder="e.g. First Amendment to the Commercial Lease Agreement"' }) +
+      vF('Reference / agreement no.', 'ref', a.ref || '', 'text', { attrs:' placeholder="e.g. ADMHR-MPL/AGR/2023/05"' }) + vF('Date signed', 'date', a.date || '', 'date') + vF('Effective from', 'effective', a.effective || '', 'date') +
+      vF('Clauses amended', 'clauses', a.clauses || '', 'text', { attrs:' placeholder="e.g. 4.1.1, 5.2"' })) +
+    vSec('What it changes') + `<p class="text-[11.5px] text-slate-400 -mt-1 mb-2">Fill in only what changes. A new end date or value from a signed amendment becomes the agreement's current term / value${E ? ' (now ends ' + vDate(E) + ')' : ''}.</p>` +
+    vGrid(2, vF('New start date', 'newStart', a.newStart || '', 'date') + vF('New end date (extended to)', 'newEnd', a.newEnd || '', 'date') + vF('New value / rent (MVR)', 'newValue', a.newValue || '', 'text', { attrs:' placeholder="e.g. 90,000 or 7,500 per month"' }) + vF('Notice / other period', 'period', a.period || '', 'text', { attrs:' placeholder="e.g. 2 (two) months"' }) +
+      vTa('Summary of the changes', 'note', a.note || '', { span:'sm:col-span-2', rows:4, ph:'e.g. Term extended by 2 years until 31st July 2025; rent revised to MVR 7,500 per month from 1st August 2023; all other terms unchanged.' }) +
+      vTa('Other details / remarks', 'remarks', a.remarks || '', { span:'sm:col-span-2', rows:2 })) +
+    vSec('Document') + vGrid(2, vF('Link to the signed amendment (SharePoint / OneDrive)', 'link', a.link || '', 'url', { span:'sm:col-span-2' })) +
+    `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agAmFile(this)"><span id="aga-act">${a.fileId ? 'Replace file' : '📎 Attach the amendment (PDF)'}</span></label><span id="aga-info" class="text-xs text-slate-500">${a.fileId ? '📎 ' + esc(a.fileName || 'File') + ' kept' : ''}</span></div>` +
+    vFoot('Save', `agAmendSave('${id}', ${i})`, i >= 0 ? `agAmendDelete('${id}', ${i})` : ''), true);
+}
+async function agAmFile(input){ const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('aga-info'); info.textContent = 'Preparing…';
+  try{ agAmAtt = await agPrepare(files); info.textContent = '📎 ' + agAttText(agAmAtt); document.getElementById('aga-act').textContent = 'Replace file'; }catch(e){ agAmAtt = null; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
+async function agAmendSave(id, i){
+  const d = docById(id); if(!d) return; const o = vehFormObj(document.getElementById('vform')), t = agTrack(d), list = t.amendments.map(z => Object.assign({}, z));
+  const link = o.link ? vSafeUrl(o.link) : ''; if(o.link && !link) return vFail('The link must start with https://');
+  const a = Object.assign(i >= 0 ? list[i] : { uid:uid() }, { type:o.type || 'Amendment', status:o.status || 'Signed', title:String(o.title || '').trim(), ref:String(o.ref || '').trim(), date:o.date || '', effective:o.effective || '', clauses:String(o.clauses || '').trim(),
+    newStart:o.newStart || '', newEnd:o.newEnd || '', newValue:String(o.newValue || '').trim(), period:String(o.period || '').trim(), note:String(o.note || '').trim(), remarks:String(o.remarks || '').trim(), link });
+  if(!a.title) return vFail('Enter the title.'); if(a.newStart && a.newEnd && a.newEnd < a.newStart) return vFail('The new end date is before the new start date.');
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  try{ if(agAmAtt){ const st = await agStore(agAmAtt, a.ref || d.refNo || '', f => { if(btn) btn.textContent = 'Uploading ' + Math.round(f * 100) + '%'; }); if(a.fileId) agFileDel(a.fileId); Object.assign(a, st); agAmAtt = null; } }
+  catch(e){ if(btn){ btn.disabled = false; btn.textContent = 'Save'; } return vFail('The file could not be saved: ' + (e && e.message ? e.message : e)); }
+  if(i < 0) list.push(a); list.sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
+  await vehSave('documents', { id, track:Object.assign({}, t, { amendments:list }), history:(d.history || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:(i < 0 ? 'Added ' : 'Edited ') + (a.type || 'amendment').toLowerCase() + ': ' + a.title }]) });
+  closeModal(); toast(a.newEnd && a.status !== 'Draft' ? 'Saved — the agreement now runs until ' + vDate(agEffEnd(docById(id)).end) + '.' : 'Saved.'); openDocView(id);
+}
+// quick: attach the signed PDF or add the link straight from the list
+async function agAmQuickFile(input, id, i){
+  const files = [...input.files]; input.value = ''; if(!files.length) return; const d = docById(id); if(!d) return; const a = agTrack(d).amendments[i]; if(!a) return;
+  try{ const att = await agPrepare(files); agBgUpload(id, att, a.ref || d.refNo || '', (t, st) => { const list = t.amendments.map(z => Object.assign({}, z)), k = list.findIndex(z => (z.uid && z.uid === a.uid) || (z.title === a.title && z.date === a.date)); if(k < 0) return t; if(list[k].fileId) agFileDel(list[k].fileId); Object.assign(list[k], st); return Object.assign({}, t, { amendments:list }); }); }
+  catch(e){ toast('Could not attach: ' + (e && e.message ? e.message : e), true); }
+}
+function agAmQuickLink(id, i){
+  const d = docById(id), a = d && agTrack(d).amendments[i]; if(!a) return;
+  openModal('Link — ' + (a.title || 'Amendment'), vFormOpen + vGrid(2, vF('Link to the signed amendment (SharePoint / OneDrive)', 'link', a.link || '', 'url', { span:'sm:col-span-2', req:1 })) + vFoot('Save', `agAmQuickLinkSave('${id}', ${i})`));
+}
+async function agAmQuickLinkSave(id, i){
+  const d = docById(id); if(!d) return; const o = vehFormObj(document.getElementById('vform')), link = vSafeUrl(o.link || ''); if(!link) return vFail('Enter a link starting with https://');
+  const t = agTrack(d), list = t.amendments.map(z => Object.assign({}, z)); if(!list[i]) return; list[i].link = link; await vehSave('documents', { id, track:Object.assign({}, t, { amendments:list }) }); closeModal(); openDocView(id); toast('Link saved.');
+}
+async function agAmendDelete(id, i){ const d = docById(id); if(!d) return; const t = agTrack(d), a = t.amendments[i]; confirmAction('Remove ' + ((a && a.title) || 'this amendment') + '?', async () => { await vehSave('documents', { id, track:Object.assign({}, t, { amendments:t.amendments.filter((z, k) => k !== i) }) }); if(a && a.fileId) agFileDel(a.fileId); openDocView(id); }); }
 async function agRowSave(id, key, i){
   const d = docById(id); if(!d) return; const o = vehFormObj(document.getElementById('vform')), C = AG_ROW[key], r = {};
   C.fields.forEach(([n, l, k]) => { r[n] = k === 'check' ? o[n] === '1' : k === 'number' ? agNum(o[n]) : String(o[n] || '').trim(); });
@@ -7835,8 +7909,7 @@ async function agRowSave(id, key, i){
 async function agRowDelete(id, key, i){ const d = docById(id); if(!d) return; const t = agTrack(d); await vehSave('documents', { id, track:Object.assign({}, t, { [key]:t[key].filter((x, k) => k !== i) }) }); closeModal(); openDocView(id); }
 async function agSignedFile(input, id){
   const files = [...input.files]; input.value = ''; if(!files.length) return; const d = docById(id); if(!d) return; toast('Attaching…');
-  try{ const att = await agPrepare(files), st = await agStore(att, d.refNo || '');
-    const t = agTrack(d), old = t.fileId; await vehSave('documents', { id, track:Object.assign({}, t, st) }); if(old) agFileDel(old); toast('Agreement file attached.'); openDocView(id); }
+  try{ const att = await agPrepare(files); agBgUpload(id, att, d.refNo || '', (t, st) => { if(t.fileId) agFileDel(t.fileId); return Object.assign({}, t, st); }); return; toast('Agreement file attached.'); openDocView(id); }
   catch(e){ toast('Could not attach: ' + (e && e.message ? e.message : e), true); }
 }
 async function agOpenSigned(id){ const d = docById(id), t = d && agTrack(d); if(!t || !t.fileId) return; agOpenFile(t.fileId, 'Agreement file — ' + (d.refNo || ''), id); }
@@ -8521,8 +8594,9 @@ async function saveDoc(id, k){
   const rec = { id:id || undefined, type:k, refNo, title:o.title.trim(), date:o.date, department:String(o.department || '').trim(), status:DOC_STATUS.includes(o.status) ? o.status : 'Draft', summary:String(o.summary || '').trim(), link, extra,
     history:((old && old.history) || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:!old ? 'Registered' : old.status !== o.status ? 'Status: ' + o.status : 'Edited' }]) };
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
-  if(k === 'agreement' && agFormAtt){ try{ const st = await agStore(agFormAtt, refNo), t = agTrack(old || {}); if(t.fileId) agFileDel(t.fileId); rec.track = Object.assign({}, t, st); agFormAtt = null; }catch(e){ if(btn) btn.disabled = false; return vFail('The file could not be saved: ' + (e && e.message ? e.message : e)); } }
+  const upl = k === 'agreement' ? agFormAtt : null; agFormAtt = null;
   const nid = await vehSave('documents', rec); closeModal(); rerenderMain(); toast(id ? 'Saved.' : refNo + ' registered.'); openDocView(id || nid);
+  if(upl) agBgUpload(id || nid, upl, refNo, (t, st) => { if(t.fileId) agFileDel(t.fileId); return Object.assign({}, t, st); });
 }
 function openDocView(id){
   const d = docById(id); if(!d) return; const t = docType(d.type) || { label:d.type, fields:[] }, x = d.extra || {}, a = docAlert(d);

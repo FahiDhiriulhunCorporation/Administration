@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.180';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.183';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -1660,13 +1660,16 @@ function assetsLoadSync(){
   if(__ASSETS) return __ASSETS;
   if(window.__APP_ASSETS){ __ASSETS = window.__APP_ASSETS; return __ASSETS; }
   try{ const x = new XMLHttpRequest(); x.open('GET', 'assets.json?v=' + ASSETS_VER, false); x.send(); if(x.responseText && x.status < 400) window.__APP_ASSETS = JSON.parse(x.responseText); }catch(e){}
+  if(!window.__APP_ASSETS){ try{ const x = new XMLHttpRequest(); x.open('GET', 'assets.js?v=' + ASSETS_VER, false); x.send(); if(x.responseText && x.status < 400) (0, eval)(x.responseText); }catch(e){} }   // the earlier assets.js works too
   __ASSETS = window.__APP_ASSETS || null;
-  if(!__ASSETS){ toast('The file assets.json is missing — upload it to GitHub next to index.html (it holds the PDF fonts and templates).', true); throw new Error('assets.json missing'); }
+  if(!__ASSETS){ toast('The file assets.json (or assets.js) is missing — upload it to GitHub next to index.html (it holds the PDF fonts and templates).', true); throw new Error('assets file missing'); }
   return __ASSETS;
 }
 function assetsPreload(){
   if(__ASSETS || __assetsLoading) return __assetsLoading;
-  __assetsLoading = fetch('assets.json?v=' + ASSETS_VER).then(r => r.ok ? r.json() : Promise.reject(r.status)).then(j => { if(!__ASSETS){ window.__APP_ASSETS = j; __ASSETS = j; } }).catch(() => { __assetsLoading = null; });
+  __assetsLoading = fetch('assets.json?v=' + ASSETS_VER).then(r => r.ok ? r.json() : Promise.reject(r.status)).then(j => { if(!__ASSETS){ window.__APP_ASSETS = j; __ASSETS = j; } })
+    .catch(() => fetch('assets.js?v=' + ASSETS_VER).then(r => r.ok ? r.text() : Promise.reject(r.status)).then(t => { if(!__ASSETS){ (0, eval)(t); __ASSETS = window.__APP_ASSETS || null; } }))
+    .catch(() => { __assetsLoading = null; });
   return __assetsLoading;
 }
 ["PDF_FONTS", "PETTYCASH_TEMPLATE_B64", "PCPDF_IMAGES", "HANDOVER_TEMPLATE_B64", "PDF_IMAGES", "PC_REPL_TEMPLATE_B64", "PC_STATEMENT_TEMPLATE_B64", "BC_BACK_SVG", "EXCO_HDR_PNG", "ID_SVG", "BC_FRONT_SVG"].forEach(n => Object.defineProperty(window, n, { configurable:true, get(){ return assetsLoadSync()[n]; } }));
@@ -8190,7 +8193,7 @@ function viewWeeklyReport(){
   return vHead('Department Weekly Report', 'Each department\'s weekly report: document entries, dispatch, stock requests, vehicles, tasks, PRs and staff on leave — filled from the app and downloaded as a PDF.', vBtnPrimary('+ Weekly report', 'openWrNew()')) +
     vKpis(statCard('This week', 'Week ' + wrIsoWeek(thisWeek), pcOrdinalDate(clIsoAdd(thisWeek, -5)) + ' – ' + pcOrdinalDate(thisWeek), 'brand') + statCard('Reports this week', fmtNum(mine.length), mine.map(r => r.department).join(', ') || 'None yet', mine.length ? 'emerald' : 'amber') +
       statCard('Open tasks', fmtNum(list[0] ? (list[0].tasks || []).filter(t => t.status !== 'Completed').length : 0), list[0] ? 'In the latest report (' + esc(list[0].department) + ')' : '—', 'slate') + statCard('Staff on leave this week', fmtNum(lvBetween(clIsoAdd(thisWeek, -5), thisWeek).length), 'From the Staff Leave Plan', 'slate')) +
-    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${fmtD(r.updatedAt)}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
+    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${fmtD(r.updatedAt)}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><button onclick="event.stopPropagation(); wrMailOpen('${r.id}')" title="Email draft with the PDF attached" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✉ Mail</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No weekly reports yet. Start one with "+ Weekly report" — the tasks of the last report carry over each week.')}</div>`);
 }
 function openWrNew(){
@@ -8257,11 +8260,11 @@ function wrEditor(r){
   const entries = vPanel('Document Entry', `<button onclick="wrAddEntryDept()" class="text-xs font-semibold text-brand-600 hover:underline">+ Department</button>`, `<div class="overflow-x-auto"><table id="wr-entries" class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="px-3 py-2 w-48">Department</th><th class="px-2 py-2">Number of entries · type of entry</th></tr></thead><tbody>${ent.map(e => wrEntryRow(e)).join('')}</tbody></table></div>`);
   const leaveHtml = vPanel('Staff on Leave', `<button onclick="goTo('leave-plan')" class="text-xs font-semibold text-brand-600 hover:underline">Staff Leave Plan →</button>`, leave.length ? `<div class="divide-y divide-slate-100">${leave.map(x => `<div class="px-5 sm:px-6 py-2.5 flex justify-between gap-3 text-sm"><span><b class="text-slate-800">${esc(x.name)}</b> <span class="text-xs text-slate-400">${esc(x.department || '')}</span></span><span class="text-slate-600 text-right">${x.items.map(i => `<span class="px-1 rounded font-bold text-[11px]" style="background:${esc(lvType(i.code).color)};color:${lvInk(lvType(i.code).color)}">${esc(i.code)}</span> ${pcOrdinalDate(i.from).replace(/ \d{4}$/, '')}${i.to !== i.from ? ' – ' + pcOrdinalDate(i.to).replace(/ \d{4}$/, '') : ''}`).join(' · ')}</span></div>`).join('')}</div>` : vEmpty('Nobody is on leave this week, according to the Staff Leave Plan.'));
   return `<div class="flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.wrId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All weekly reports</button><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Weekly Report — ${esc(r.department)}</h1><p class="text-sm text-slate-500 mt-0.5">Week ${r.weekNo} · ${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}${r.preparedBy ? ' · prepared by ' + esc(r.preparedBy) : ''}</p></div>
-      <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
+      <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
     <datalist id="wr-depts">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist><datalist id="wr-etypes">${['Invoice', 'Statement', 'Letter', 'Memo', 'Contract', 'Agreement', 'Quotation', 'Purchase Order', 'Payment Voucher'].map(t => `<option value="${t}"></option>`).join('')}</datalist><datalist id="wr-people">${state.profiles.map(p => `<option value="${esc(p.name || '')}"></option>`).join('')}</datalist>
     <div id="wr-form">${entries}${sec('dispatch')}${sec('stock')}${sec('vehicles')}${sec('tasks')}${sec('prs')}${sec('complaints')}${leaveHtml}
     ${vPanel('Notes', '', `<div class="p-4"><textarea id="wr-notes" rows="3" class="${VEH_FIELD}" placeholder="Anything else for this week">${esc(r.notes || '')}</textarea></div>`)}</div>
-    <div class="flex justify-end gap-2.5 mb-8">${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div>`;
+    <div class="flex justify-end gap-2.5 mb-8">${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div>`;
 }
 function wrEntryRow(e){ return `<tr class="wr-erow align-top border-t border-slate-100"><td class="px-1 py-1"><input type="text" value="${esc(e.department || '')}" list="wr-depts" class="wr-edept ${VEH_FIELD} !px-2 !py-1.5 text-[13px] font-semibold"></td><td class="px-1 py-1"><div class="wr-elines space-y-1">${(e.lines && e.lines.length ? e.lines : [{}]).map(wrEntryLine).join('')}</div><button type="button" onclick="this.previousElementSibling.insertAdjacentHTML('beforeend', wrEntryLine({}))" class="text-[11px] font-semibold text-brand-600 hover:underline mt-1">+ type</button></td></tr>`; }
 function wrEntryLine(l){ return `<div class="wr-eline grid grid-cols-[5rem_1fr_auto] gap-1.5"><input type="number" min="0" value="${esc(l.count || '')}" placeholder="No." class="wr-ecount ${VEH_FIELD} !px-2 !py-1.5 text-[13px]"><input type="text" value="${esc(l.type || '')}" placeholder="Type of entry, e.g. Invoice" list="wr-etypes" class="wr-etype ${VEH_FIELD} !px-2 !py-1.5 text-[13px]"><button type="button" onclick="this.closest('.wr-eline').remove()" class="text-slate-300 hover:text-rose-600 px-1">×</button></div>`; }
@@ -8318,6 +8321,73 @@ async function buildWeeklyReportPdf(r){
   table('Staff on Leave', [['Staff', 2], ['Department', 1.6], ['Leave', 2.4]], lv.map(x => [x.name, x.department || '', x.items.map(i => lvType(i.code).name + ': ' + pcOrdinalDate(i.from) + (i.to !== i.from ? ' – ' + pcOrdinalDate(i.to) : '')).join('\n')]));
   if(r.notes){ if(y + 40 > PC_BOTTOM) newPage(); pg.text(L, y, 'Notes', { bold:true, size:11 }); y += 14; pdfWrap(r.notes, false, 9, R - L).forEach(ln => { if(y > PC_BOTTOM){ newPage(); } pg.text(L, y, ln, { size:9 }); y += 12; }); }
   return pcPdfFinish(pages.map(p => ({ ops:p.ops })), { title:'', number:'', docTitle:'Weekly Report ' + r.department + ' Week ' + r.weekNo, pageNumbers:true });
+}
+
+/* ---------- weekly report → email draft (nothing is sent: the staff member reviews and sends it from Outlook) ---------- */
+const WR_MAIL_TO = () => vehSettings.wrMailTo || 'bureau@fdc.mv', WR_MAIL_CC = () => vehSettings.wrMailCc || 'administration@fdc.mv';
+const wrFileName = r => ('Week ' + r.weekNo + ' - ' + pcOrdinalDate(r.weekStart).replace(/ \d{4}$/, '') + ' - ' + pcOrdinalDate(r.weekEnd).replace(/ \d{4}$/, '') + ' - ' + r.department).replace(/[^A-Za-z0-9 -]+/g, '') + '.pdf';
+function wrMailText(r){
+  const me = authUser ? authUser.name : '', p = authUser ? sdPerson('u:' + authUser.uid) : {};
+  return { subject:'Department Weekly Report (Week ' + r.weekNo + ')',
+    body:['Dear Team,', '', 'Please find attached the ' + (r.department || 'Administration') + ' department weekly report.', '', 'Week: ' + r.weekNo, 'Date: ' + pcOrdinalDate(r.weekStart) + ' - ' + pcOrdinalDate(r.weekEnd), '', '', 'Best regards,', me, (p && p.designation) || ''].join('\n').replace(/\n+$/, '\n') };
+}
+async function wrMailOpen(id){
+  const r = wrById(id); if(!r) return;
+  if(document.getElementById('wr-form') && vehUi.wrId === id){ try{ await vehSave('weeklyReports', Object.assign({ id }, wrCollect())); }catch(e){} }   // save edits only when the report is open
+  const m = wrMailText(wrById(id) || r), inp = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm';
+  openModal('Email draft — weekly report', `<p class="text-xs text-slate-500 mb-3">Nothing is sent from here. Review the draft, then open it in Outlook (with the PDF attached) and press Send there.</p>
+    <div class="grid grid-cols-[3.5rem_1fr] gap-x-3 gap-y-2 items-center text-sm mb-3">
+      <label class="text-xs font-semibold text-slate-500">To</label><input id="wm-to" value="${esc(WR_MAIL_TO())}" class="${inp}">
+      <label class="text-xs font-semibold text-slate-500">CC</label><input id="wm-cc" value="${esc(WR_MAIL_CC())}" class="${inp}">
+      <label class="text-xs font-semibold text-slate-500">Subject</label><input id="wm-subject" value="${esc(m.subject)}" class="${inp}">
+    </div>
+    <textarea id="wm-body" rows="11" class="${inp} font-[inherit] leading-relaxed">${esc(m.body)}</textarea>
+    <div class="flex items-center gap-2 mt-2 text-xs text-slate-600"><span>📎</span><span>${esc(wrFileName(r))}</span></div>
+    <div class="flex flex-wrap justify-end gap-2.5 mt-5">
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="closeModal()">Close</button>
+      ${navigator.canShare ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="wrMailShare('${id}', this)">Share (phone)…</button>` : ''}
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="wrMailDraft('${id}', this)">Open draft in Outlook</button>
+    </div>
+    <p class="text-[11px] text-slate-400 mt-3">"Open draft in Outlook" downloads the email as a draft file — open it and Outlook shows it ready to review and send, with the PDF attached.${canManageInventory() ? ' The To/CC addresses you use become the default for next time.' : ''}</p>`, true);
+}
+const wmVal = id => ((document.getElementById(id) || {}).value || '').trim();
+const b64utf8 = t => btoa(unescape(encodeURIComponent(t)));
+const wrap76 = b => b.replace(/.{1,76}/g, '$&\r\n');
+async function wrPdfBytes(r){ const b = await buildWeeklyReportPdf(r); return new Uint8Array(await (b.arrayBuffer ? b.arrayBuffer() : new Blob([b]).arrayBuffer())); }
+async function wrMailDraft(id, btn){
+  const r = wrById(id); if(!r) return;
+  const to = wmVal('wm-to'), cc = wmVal('wm-cc'), subject = wmVal('wm-subject'), body = (document.getElementById('wm-body') || {}).value || '';
+  if(!to) return toast('Enter the To address.', true);
+  const label = btn.textContent; btn.disabled = true; btn.textContent = 'Preparing…';
+  try{
+    const pdf = await wrPdfBytes(r); let bin = ''; for(let i = 0; i < pdf.length; i += 0x8000) bin += String.fromCharCode.apply(null, pdf.subarray(i, i + 0x8000));
+    const name = wrFileName(r), B = 'adm-' + Date.now().toString(36);
+    const html = '<html><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt">' + esc(body).replace(/\n/g, '<br>') + '</body></html>';
+    const eml = ['X-Unsent: 1', 'To: ' + to, cc ? 'Cc: ' + cc : '', 'Subject: =?UTF-8?B?' + b64utf8(subject) + '?=', 'MIME-Version: 1.0', 'Content-Type: multipart/mixed; boundary="' + B + '"', '',
+      '--' + B, 'Content-Type: multipart/alternative; boundary="' + B + 'a"', '',
+      '--' + B + 'a', 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', wrap76(b64utf8(body)),
+      '--' + B + 'a', 'Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', wrap76(b64utf8(html)),
+      '--' + B + 'a--', '',
+      '--' + B, 'Content-Type: application/pdf; name="' + name + '"', 'Content-Disposition: attachment; filename="' + name + '"', 'Content-Transfer-Encoding: base64', '', wrap76(btoa(bin)),
+      '--' + B + '--', ''].filter((l, i) => l !== '' || i > 3).join('\r\n');
+    downloadBlob(new Blob([eml], { type:'message/rfc822' }), 'Weekly report email - Week ' + r.weekNo + '.eml');
+    if(canManageInventory() && (to !== WR_MAIL_TO() || cc !== WR_MAIL_CC())){ vehSettings.wrMailTo = to; vehSettings.wrMailCc = cc; persistVehSettings(); }
+    await vehSave('weeklyReports', { id, mailDraftAt:Date.now(), mailDraftBy:authUser ? authUser.name : '' });
+    toast('Draft downloaded — open it to review and send from Outlook.');
+  }catch(e){ console.error(e); toast('Could not prepare the email: ' + (e.message || e), true); }
+  finally{ if(btn.isConnected){ btn.disabled = false; btn.textContent = label; } }
+}
+async function wrMailShare(id, btn){
+  const r = wrById(id); if(!r) return;
+  try{
+    btn.disabled = true;
+    const file = new File([await wrPdfBytes(r)], wrFileName(r), { type:'application/pdf' }), subject = wmVal('wm-subject'), body = (document.getElementById('wm-body') || {}).value || '';
+    if(!navigator.canShare({ files:[file] })) throw new Error('this device cannot share files');
+    try{ await navigator.clipboard.writeText('To: ' + wmVal('wm-to') + '\nCC: ' + wmVal('wm-cc')); }catch(e){}
+    await navigator.share({ files:[file], title:subject, text:body });
+    toast('Pick Outlook (or Mail), then add To: ' + wmVal('wm-to') + ' and CC: ' + wmVal('wm-cc') + ' — they were copied for you.');
+  }catch(e){ if(e && e.name !== 'AbortError') toast('Could not share: ' + (e.message || e), true); }
+  finally{ if(btn.isConnected) btn.disabled = false; }
 }
 async function wrPdf(id, btn){
   const r = wrById(id); if(!r) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }

@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.185';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.186';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -8207,9 +8207,8 @@ async function saveWrNew(){
   const dup = state.weeklyReports.find(r => r.weekEnd === end && String(r.department).toLowerCase() === o.department.toLowerCase()); if(dup){ closeModal(); vehUi.wrId = dup.id; rerenderMain(); toast('That report already exists — opened it.'); return; }
   const prev = state.weeklyReports.filter(r => String(r.department).toLowerCase() === o.department.toLowerCase() && r.weekEnd < end).sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)))[0];
   const rec = { department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '',
-    entries:WR_ENTRY_DEPTS.map(d => ({ department:d, lines:[] })), dispatch:[], stock:wrAutoStock(start, end), vehicles:wrAutoVehicles(start, end),
-    tasks:(tk => tk.length ? tk : prev ? (prev.tasks || []).filter(t => t.status !== 'Completed').map(t => Object.assign({}, t)) : [])(wrAutoTasks(start, end, o.department)), prs:wrAutoPrs(end), complaints:wrAutoComplaints(start, end), notes:'' };
-  closeModal(); vehUi.wrId = await vehSave('weeklyReports', rec); rerenderMain(); const fromTk = wrAutoTasks(start, end, o.department).length; toast('Weekly report started' + (fromTk ? ' — ' + fromTk + ' task' + (fromTk === 1 ? '' : 's') + ' filled from Tasks' : prev ? ' — ' + rec.tasks.length + ' open task' + (rec.tasks.length === 1 ? '' : 's') + ' carried over' : '') + '.');
+    entries:WR_ENTRY_DEPTS.map(d => ({ department:d, lines:[] })), dispatch:[], stock:[], vehicles:[], tasks:[], prs:[], complaints:[], edited:{}, notes:'' };   // the app-fed sections stay live
+  closeModal(); vehUi.wrId = await vehSave('weeklyReports', rec); rerenderMain(); toast('Weekly report started — stock, vehicles, tasks, PRs, complaints and leave fill in from the app.');
 }
 // from the app's records
 function wrAutoStock(start, end){
@@ -8221,7 +8220,7 @@ function wrAutoStock(start, end){
   return depts.map(d => ({ department:d, pending:by[d] && by[d].p ? String(by[d].p) : '', completed:by[d] && by[d].c ? String(by[d].c) : '' }));
 }
 function wrAutoVehicles(start, end){
-  const from = clIsoAdd(start, -14);                                                 // fueling of the last few weeks, as in the report
+  const from = start;                                                               // fueling and servicing within the report's week
   return vSorted().filter(v => (v.status || 'Active') === 'Active').map(v => {
     const fu = state.fuelRecords.filter(r => r.vehicleId === v.id && r.date >= from && r.date <= end).sort((a, b) => a.date.localeCompare(b.date)).map(r => (r.fuelType || 'Fuel') + ' ' + fmtNum(vNum(r.litres)) + 'Lt, ' + pcOrdinalDate(r.date));
     const sv = state.serviceRecords.filter(r => r.vehicleId === v.id && r.date >= from && r.date <= end).map(r => [r.kind === 'incident' ? (r.issue || 'Issue') + (r.status ? ' (' + r.status + ')' : '') : (r.serviceType || r.type || 'Service'), pcOrdinalDate(r.date)].join(' '));
@@ -8229,11 +8228,20 @@ function wrAutoVehicles(start, end){
     return { vehicle:[vName(v), v.plate].filter(Boolean).join('\n'), fueling:fu.join('\n') || '-', service:sv.join('\n') || '-', comment:open.join('\n') };
   });
 }
-function wrAutoPrs(end){
-  const st = id => (PR_STATUSES.find(s => s.id === (id || 'open')) || {}).label || id;
-  return state.purchaseRequisitions.filter(p => (p.status || 'open') !== 'closed').sort((a, b) => prNumberCollator.compare(b.prNumber || '', a.prNumber || ''))
-    .map(p => ({ number:p.prNumber || '', request:prFirstItem(p) || p.title || '', date:p.requisitionDate ? pcOrdinalDate(p.requisitionDate) : '', status:(p.status || 'open') === 'pending_approval' ? 'Pending Approval' : (p.status || 'open') === 'released' ? 'Released' : 'Pending', details:'' }));
+function wrAutoPrs(end, start){
+  const rd = p => prRequisitionDate(p) || '';                                         // open PRs raised by the end of the week, plus any raised during the week
+  return state.purchaseRequisitions.filter(p => rd(p) <= end && ((p.status || 'open') !== 'closed' || (start && rd(p) >= start))).sort((a, b) => prNumberCollator.compare(b.prNumber || '', a.prNumber || ''))
+    .map(p => ({ number:p.prNumber || '', request:prFirstItem(p) || p.title || '', date:p.requisitionDate ? pcOrdinalDate(p.requisitionDate) : '', status:(p.status || 'open') === 'pending_approval' ? 'Pending Approval' : (p.status || 'open') === 'released' ? 'Released' : (p.status || 'open') === 'closed' ? 'Closed' : 'Pending', details:'' }));
 }
+// sections that follow the app: they show live data for the report's week unless someone edited them in the report
+const WR_LIVE = ['stock', 'vehicles', 'tasks', 'prs', 'complaints'];
+function wrLive(r, key){
+  return key === 'stock' ? wrAutoStock(r.weekStart, r.weekEnd) : key === 'vehicles' ? wrAutoVehicles(r.weekStart, r.weekEnd) : key === 'tasks' ? wrAutoTasks(r.weekStart, r.weekEnd, r.department)
+    : key === 'prs' ? wrAutoPrs(r.weekEnd, r.weekStart) : key === 'complaints' ? wrAutoComplaints(r.weekStart, r.weekEnd) : (r[key] || []);
+}
+const wrEdited = (r, key) => !!(r.edited && r.edited[key] && (r[key] || []).length);
+const wrRows = (r, key) => WR_LIVE.includes(key) && !wrEdited(r, key) ? wrLive(r, key) : (r[key] || []);
+const wrNorm = (key, rows) => JSON.stringify((rows || []).map(x => { const o = {}; WR_SECTIONS[key].cols.forEach(c => { o[c[0]] = String(x[c[0]] == null ? '' : x[c[0]]).trim(); }); return o; }).filter(o => Object.values(o).some(v => v && v !== 'Pending')));
 // the editor: one page, each section an editable table
 const WR_SECTIONS = {
   dispatch:{ title:'Dispatch', cols:[['department', 'Department', 'dept'], ['item', 'Dispatch item'], ['by', 'Dispatched by', 'person'], ['date', 'Dispatch date', 'date']] },
@@ -8251,14 +8259,13 @@ function wrCell(sec, c, v){
 function wrRow(sec, r){ const S = WR_SECTIONS[sec]; return `<tr class="wr-row align-top border-t border-slate-100">${S.cols.map(c => `<td class="p-1">${wrCell(sec, c, r[c[0]])}</td>`).join('')}<td class="p-1 text-center whitespace-nowrap"><button type="button" onclick="const t=this.closest('tr'); if(t.previousElementSibling) t.previousElementSibling.before(t)" class="text-slate-300 hover:text-brand-600 px-0.5" title="Up">▲</button><button type="button" onclick="this.closest('tr').remove()" class="text-slate-400 hover:text-rose-600 px-1 text-lg leading-none" title="Remove">×</button></td></tr>`; }
 function wrAddRow(sec){ const tb = document.querySelector('#wr-' + sec + ' tbody'); tb.insertAdjacentHTML('beforeend', wrRow(sec, {})); tb.lastElementChild.querySelector('.wr-in').focus(); }
 function wrEditor(r){
-  const sec = key => { const S = WR_SECTIONS[key]; let rows = r[key] || [];
-    if(key === 'complaints' && !rows.length) rows = wrAutoComplaints(r.weekStart, r.weekEnd);          // filled from Admin Complaints until the report has its own rows
-    if(key === 'tasks' && !rows.length) rows = wrAutoTasks(r.weekStart, r.weekEnd, r.department);        // filled from Tasks until the report has its own rows
-    return vPanel(S.title, `${S.auto ? `<button onclick="wrAuto('${key}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">${S.auto}</button>` : ''}<button onclick="wrAddRow('${key}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Row</button>`,
+  const sec = key => { const S = WR_SECTIONS[key], rows = wrRows(r, key), live = WR_LIVE.includes(key) && !wrEdited(r, key);
+    const tag = WR_LIVE.includes(key) ? (live ? `<span class="text-[11px] font-semibold text-emerald-600 mr-3" title="Shows the app's data for this week — updates by itself">● Live</span>` : `<span class="text-[11px] font-semibold text-amber-600 mr-3" title="Edited in this report — no longer updates by itself. Use the fill button to go back to live data.">● Edited</span>`) : '';
+    return vPanel(S.title, `${tag}${S.auto ? `<button onclick="wrAuto('${key}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">${S.auto}</button>` : ''}<button onclick="wrAddRow('${key}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Row</button>`,
       `<div class="overflow-x-auto"><table id="wr-${key}" class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400">${S.cols.map(c => `<th class="px-2 py-2">${c[1]}</th>`).join('')}<th class="w-12"></th></tr></thead><tbody>${rows.map(x => wrRow(key, x)).join('')}</tbody></table></div>`); };
   const ent = r.entries || [], leave = lvBetween(r.weekStart, r.weekEnd);
   const entries = vPanel('Document Entry', `<button onclick="wrAddEntryDept()" class="text-xs font-semibold text-brand-600 hover:underline">+ Department</button>`, `<div class="overflow-x-auto"><table id="wr-entries" class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="px-3 py-2 w-48">Department</th><th class="px-2 py-2">Number of entries · type of entry</th></tr></thead><tbody>${ent.map(e => wrEntryRow(e)).join('')}</tbody></table></div>`);
-  const leaveHtml = vPanel('Staff on Leave', `<button onclick="goTo('leave-plan')" class="text-xs font-semibold text-brand-600 hover:underline">Staff Leave Plan →</button>`, leave.length ? `<div class="divide-y divide-slate-100">${leave.map(x => `<div class="px-5 sm:px-6 py-2.5 flex justify-between gap-3 text-sm"><span><b class="text-slate-800">${esc(x.name)}</b> <span class="text-xs text-slate-400">${esc(x.department || '')}</span></span><span class="text-slate-600 text-right">${x.items.map(i => `<span class="px-1 rounded font-bold text-[11px]" style="background:${esc(lvType(i.code).color)};color:${lvInk(lvType(i.code).color)}">${esc(i.code)}</span> ${pcOrdinalDate(i.from).replace(/ \d{4}$/, '')}${i.to !== i.from ? ' – ' + pcOrdinalDate(i.to).replace(/ \d{4}$/, '') : ''}`).join(' · ')}</span></div>`).join('')}</div>` : vEmpty('Nobody is on leave this week, according to the Staff Leave Plan.'));
+  const leaveHtml = vPanel('Staff Leaves', `<button onclick="goTo('leave-plan')" class="text-xs font-semibold text-brand-600 hover:underline">Staff Leave Plan →</button>`, leave.length ? `<div class="divide-y divide-slate-100">${leave.map(x => `<div class="px-5 sm:px-6 py-2.5 flex justify-between gap-3 text-sm"><span><b class="text-slate-800">${esc(x.name)}</b> <span class="text-xs text-slate-400">${esc(x.department || '')}</span></span><span class="text-slate-600 text-right">${x.items.map(i => `<span class="px-1 rounded font-bold text-[11px]" style="background:${esc(lvType(i.code).color)};color:${lvInk(lvType(i.code).color)}">${esc(i.code)}</span> ${pcOrdinalDate(i.from).replace(/ \d{4}$/, '')}${i.to !== i.from ? ' – ' + pcOrdinalDate(i.to).replace(/ \d{4}$/, '') : ''}`).join(' · ')}</span></div>`).join('')}</div>` : vEmpty('Nobody is on leave this week, according to the Staff Leave Plan.'));
   return `<div class="flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.wrId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All weekly reports</button><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Weekly Report — ${esc(r.department)}</h1><p class="text-sm text-slate-500 mt-0.5">Week ${r.weekNo} · ${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}${r.preparedBy ? ' · prepared by ' + esc(r.preparedBy) : ''}</p></div>
       <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
     <datalist id="wr-depts">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist><datalist id="wr-etypes">${['Invoice', 'Statement', 'Letter', 'Memo', 'Contract', 'Agreement', 'Quotation', 'Purchase Order', 'Payment Voucher'].map(t => `<option value="${t}"></option>`).join('')}</datalist><datalist id="wr-people">${state.profiles.map(p => `<option value="${esc(p.name || '')}"></option>`).join('')}</datalist>
@@ -8275,12 +8282,16 @@ function wrCollect(){
     dispatch:rows('dispatch'), stock:rows('stock'), vehicles:rows('vehicles'), tasks:rows('tasks'), prs:rows('prs'), complaints:rows('complaints'), notes:(document.getElementById('wr-notes') || {}).value || '' };
 }
 function wrAuto(key){
-  const r = wrById(vehUi.wrId); if(!r) return; const data = key === 'tasks' ? wrAutoTasks(r.weekStart, r.weekEnd, r.department) : key === 'stock' ? wrAutoStock(r.weekStart, r.weekEnd) : key === 'vehicles' ? wrAutoVehicles(r.weekStart, r.weekEnd) : key === 'complaints' ? wrAutoComplaints(r.weekStart, r.weekEnd) : wrAutoPrs(r.weekEnd);
+  const r = wrById(vehUi.wrId); if(!r) return; const data = wrLive(r, key);
   const tb = document.querySelector('#wr-' + key + ' tbody'); if(tb.children.length && !confirm('Replace the rows of ' + WR_SECTIONS[key].title + ' with what the app has?')) return;
   tb.innerHTML = data.map(x => wrRow(key, x)).join(''); toast(WR_SECTIONS[key].title + ' filled — ' + data.length + ' row' + (data.length === 1 ? '' : 's') + '. Save to keep it.');
 }
+function wrLiveMark(r, data){                                                       // a section left as the app filled it stays live (saved empty); a changed one is kept as typed
+  data.edited = {}; WR_LIVE.forEach(k => { if(wrNorm(k, data[k]) === wrNorm(k, wrLive(r, k))) data[k] = []; else data.edited[k] = true; });
+  return data;
+}
 async function wrSave(id, pdf, btn){
-  const r = wrById(id); if(!r) return; const data = wrCollect();
+  const r = wrById(id); if(!r) return; const data = wrLiveMark(r, wrCollect());
   if(btn) btn.disabled = true;
   try{ await vehSave('weeklyReports', Object.assign({ id }, data)); if(pdf) await wrPdf(id); else toast('Weekly report saved.'); }
   finally{ if(btn && btn.isConnected) btn.disabled = false; }
@@ -8288,38 +8299,91 @@ async function wrSave(id, pdf, btn){
 function deleteWr(id){ if(!vehRequireAdmin('delete weekly reports')) return; const r = wrById(id); if(!r) return; confirmAction('Delete the weekly report of ' + r.department + ', week ' + r.weekNo + '?', async () => { await vehDelete('weeklyReports', id); vehUi.wrId = ''; rerenderMain(); toast('Deleted.'); }); }
 // the PDF: letterhead, title block, then each section as a table that runs over pages
 async function buildWeeklyReportPdf(r){
-  const K = [0, 0, 0], HEAD = [0.85, 0.89, 0.73], GRID = [0.45, 0.45, 0.45], L = 48, R = 547, FS = 8.5, LH = 10.6;
+  const K = [0, 0, 0], HEAD = [0.85, 0.89, 0.73], GRID = [0.45, 0.45, 0.45], SOFT = [0.75, 0.75, 0.75], L = 48, R = 547, FS = 8.5, LH = 10.6;
+  const TOP = PC_TOP + 10, ROOM = PC_BOTTOM - TOP;                                  // usable height of a fresh page
   const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = PC_TOP + 14;
-  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = PC_TOP + 10; };
+  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP; };
+  // keep a block together: move it to the next page when it does not fit here but would fit on a fresh page
+  const keep = h => { if(y + h > PC_BOTTOM && (h <= ROOM || y > TOP + 40)) newPage(); };
   const center = (x0, x1, b, t, o) => { o = Object.assign({ size:FS }, o || {}); pg.text(x0 + (x1 - x0 - pdfTextWidth(t, !!o.bold, o.size)) / 2, b, t, o); };
   center(L, R, y, 'WEEKLY REPORT', { bold:true, size:15 }); y += 20; center(L, R, y, r.department, { bold:true, size:11 }); y += 18;
   pdfRuns(pg, L, y, [{ t:'Week: ', bold:true, size:10 }, { t:String(r.weekNo), size:10 }]); y += 15;
   const dp = s => { const d = pcReplDateParts(s); return [{ t:d.d.padStart(2, '0'), size:10 }, { t:d.suf, size:6, rise:3.6 }, { t:' ' + PC_MONTH_NAMES[+s.slice(5, 7) - 1], size:10 }]; };
-  pdfRuns(pg, L, y, [{ t:'Date: ', bold:true, size:10 }].concat(dp(r.weekStart), [{ t:' – ', size:10 }], dp(r.weekEnd))); y += 22;
+  pdfRuns(pg, L, y, [{ t:'Date: ', bold:true, size:10 }].concat(dp(r.weekStart), [{ t:' – ', size:10 }], dp(r.weekEnd))); y += 26;
+  const TITLE_H = 8;                                                                  // the sub heading sits above the table
   const table = (title, cols, rows) => {                                             // cols: [label, width share]; rows: arrays of strings
     const tw = R - L, tot = cols.reduce((t, c) => t + c[1], 0), xs = [L]; cols.forEach(c => xs.push(xs[xs.length - 1] + tw * c[1] / tot));
-    if(y + 60 > PC_BOTTOM) newPage();
-    pg.text(L, y, title, { bold:true, size:11 }); y += 8;
-    const head = () => { const wr = cols.map((c, i) => pdfWrap(c[0], true, FS, xs[i + 1] - xs[i] - 8)), h = Math.max(...wr.map(w => w.length)) * LH + 8; pg.fill(L, y, tw, h, HEAD); wr.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 11 + k * LH, ln, { bold:true, size:FS }))); xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.5)); pg.line(L, y, R, y, GRID, 0.5); y += h; pg.line(L, y, R, y, GRID, 0.5); };
-    head();
-    (rows.length ? rows : [cols.map(() => '')]).forEach(row => {
-      const wr = row.map((t, i) => pdfWrap(String(t || ''), false, FS, xs[i + 1] - xs[i] - 8)), h = Math.max(16, Math.max(...wr.map(w => w.length)) * LH + 6);
-      if(y + h > PC_BOTTOM){ newPage(); head(); }
-      wr.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 11 + k * LH, ln, { size:FS })));
-      xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.5)); y += h; pg.line(L, y, R, y, GRID, 0.5);
+    const hw = cols.map((c, i) => pdfWrap(c[0], true, FS, xs[i + 1] - xs[i] - 8)), headH = Math.max(...hw.map(w => w.length)) * LH + 8;
+    const body = (rows.length ? rows : [cols.map(() => '')]).map(row => { const wr = row.map((t, i) => pdfWrap(String(t || ''), false, FS, xs[i + 1] - xs[i] - 8)); return { wr, h:Math.max(16, Math.max(...wr.map(w => w.length)) * LH + 6) }; });
+    keep(TITLE_H + headH + body.reduce((t, b) => t + b.h, 0));                        // heading + whole table together when it can fit on one page
+    if(y + TITLE_H + headH + body[0].h > PC_BOTTOM) newPage();
+    const heading = t => { pg.text(L, y, t, { bold:true, size:11 }); y += TITLE_H; };
+    const head = () => { pg.fill(L, y, tw, headH, HEAD); hw.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 11 + k * LH, ln, { bold:true, size:FS }))); xs.forEach(x => pg.line(x, y, x, y + headH, GRID, 0.5)); pg.line(L, y, R, y, GRID, 0.5); y += headH; pg.line(L, y, R, y, GRID, 0.5); };
+    heading(title); head();
+    body.forEach(b => {
+      if(y + b.h > PC_BOTTOM){ newPage(); y += 4; heading(title + ' (continued)'); head(); }
+      b.wr.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 11 + k * LH, ln, { size:FS })));
+      xs.forEach(x => pg.line(x, y, x, y + b.h, GRID, 0.5)); y += b.h; pg.line(L, y, R, y, GRID, 0.5);
     });
-    y += 20;
+    y += 24;
   };
+  // Admin Complaints in point form: a numbered heading per complaint, then short labelled points
+  const points = (title, list) => {
+    const IND = 14, LBL = 92, W = R - L - IND;
+    const blocks = list.map((x, n) => {
+      const cl = String(x.complaint || '').split('\n').map(s => s.trim()).filter(Boolean), out = [];
+      const st = String(x.status || 'Open'), stW = pdfTextWidth(st, true, FS) + 10;
+      out.push({ kind:'title', lines:pdfWrap((n + 1) + '.  ' + (cl[0] || 'Complaint'), true, 9.5, R - L - stW - 12), status:st });
+      const add = (label, text) => { text = String(text || '').trim(); if(!text) return; out.push({ kind:'pt', label, lines:pdfWrap(text, false, FS, W - LBL) }); };
+      add('Raised by', String(x.raised || '').split('\n').map(s => s.trim()).filter(Boolean).join(' · '));
+      const loc = cl.find(s => /^Location:/i.test(s)); if(loc) add('Location', loc.replace(/^Location:\s*/i, ''));
+      add('Details', cl.slice(1).filter(s => s !== loc).join(' '));
+      let sec = '', buf = [];
+      const flush = () => { if(buf.length) add(sec || 'Progress', buf.join('\n')); buf = []; };
+      String(x.processing || '').split('\n').map(s => s.trim()).filter(Boolean).forEach(s => {
+        let m;
+        if(/^Suggested solutions:?$/i.test(s)){ flush(); sec = 'Suggestions'; }
+        else if((m = /^(Resolution(?: \([^)]*\))?|Implemented[^:]*):\s*(.*)$/i.exec(s))){ flush(); add(m[1].replace(/^Resolution/, 'Resolution'), m[2]); sec = 'Progress'; }
+        else if(/^No suggestions yet\.?$/i.test(s)){ flush(); add('Suggestions', 'None yet'); }
+        else if(/^Challenge:/i.test(s)) buf.push('   – ' + s);
+        else buf.push(s.replace(/^(\d+)\.\s*/, '$1) '));
+      }); flush();
+      const h = out.reduce((t, o) => t + o.lines.length * (o.kind === 'title' ? 12 : LH) + (o.kind === 'title' ? 4 : 2), 0) + 10;
+      return { out, h };
+    });
+    const first = blocks.length ? blocks[0].h : 20;
+    keep(TITLE_H + 8 + blocks.reduce((t, b) => t + b.h, 0));
+    if(y + TITLE_H + 8 + first > PC_BOTTOM) newPage();
+    pg.text(L, y, title, { bold:true, size:11 }); y += TITLE_H + 4; pg.line(L, y, R, y, GRID, 0.6); y += 6;
+    if(!blocks.length){ pg.text(L, y + 8, 'No complaints for this period.', { size:FS }); y += 34; return; }
+    blocks.forEach((b, i) => {
+      if(y + b.h > PC_BOTTOM){ newPage(); pg.text(L, y, title + ' (continued)', { bold:true, size:11 }); y += TITLE_H + 4; pg.line(L, y, R, y, GRID, 0.6); y += 6; }
+      b.out.forEach(o => {
+        if(o.kind === 'title'){
+          o.lines.forEach((ln, k) => { pg.text(L, y + 10 + k * 12, ln, { bold:true, size:9.5 }); });
+          const sw = pdfTextWidth(o.status, true, FS); pg.text(R - sw, y + 10, o.status, { bold:true, size:FS });
+          y += o.lines.length * 12 + 4;
+        } else {
+          pg.text(L + IND - 8, y + 9, '•', { size:FS }); pg.text(L + IND, y + 9, o.label + ':', { bold:true, size:FS });
+          o.lines.forEach((ln, k) => pg.text(L + IND + LBL, y + 9 + k * LH, ln, { size:FS }));
+          y += o.lines.length * LH + 2;
+        }
+      });
+      y += 4; if(i < blocks.length - 1) pg.line(L, y, R, y, SOFT, 0.4); y += 6;
+    });
+    y += 18;
+  };
+  // 1 Document Entry · 2 Dispatch · 3 Stock Request · 4 Vehicle Management · 5 Tasks · 6 Purchase Requisition · 7 Admin Complaints · 8 Staff Leaves
   table('Document Entry', [['Department', 2], ['Number of Entries', 1.2], ['Type of Entry', 3]], (r.entries || []).map(e => [e.department, (e.lines || []).map(l => l.count ? String(l.count).padStart(2, '0') : '').join('\n'), (e.lines || []).map(l => l.type || '').join('\n')]));
   table('Dispatch', [['Department', 1.4], ['Dispatch Item', 2], ['Dispatched By', 1.3], ['Dispatch Date', 1.2]], (r.dispatch || []).map(x => [x.department, x.item, x.by, x.date ? (pcFindDates(x.date)[0] ? pcOrdinalDate(pcFindDates(x.date)[0]) : x.date) : '']));
-  table('Stock Request', [['Department', 2], ['Pending', 1.5], ['Completed', 1.5]], (r.stock || []).map(x => [x.department, x.pending, x.completed]));
-  table('Vehicle Management', [['', 1.1], ['Fueling', 1.6], ['Service', 1.4], ['Comment', 2.4]], (r.vehicles || []).map(x => [x.vehicle, x.fueling, x.service, x.comment]));
-  table('Tasks', [['Task', 2.2], ['Assigned To', 1.2], ['Status', 1], ['Progress', 2.4]], ((r.tasks && r.tasks.length) ? r.tasks : wrAutoTasks(r.weekStart, r.weekEnd, r.department)).map(x => [x.task, x.assigned, x.status, x.progress]));
-  table('Purchase Requisition Request', [['PR Number', 1.5], ['PR Request', 2], ['Requested Date', 1.2], ['Status', 1], ['Details', 1.5]], (r.prs || []).map(x => [x.number, x.request, x.date, x.status, x.details]));
-  table('Admin Complaints', [['Complaint', 2], ['Raised By', 1.3], ['Status', 0.9], ['Processing / Resolution', 2.6]], ((r.complaints && r.complaints.length) ? r.complaints : wrAutoComplaints(r.weekStart, r.weekEnd)).map(x => [x.complaint, x.raised, x.status, x.processing]));
+  table('Stock Request', [['Department', 2], ['Pending', 1.5], ['Completed', 1.5]], wrRows(r, 'stock').map(x => [x.department, x.pending, x.completed]));
+  table('Vehicle Management', [['', 1.1], ['Fueling', 1.6], ['Service', 1.4], ['Comment', 2.4]], wrRows(r, 'vehicles').map(x => [x.vehicle, x.fueling, x.service, x.comment]));
+  table('Tasks', [['Task', 2.2], ['Assigned To', 1.2], ['Status', 1], ['Progress', 2.4]], wrRows(r, 'tasks').map(x => [x.task, x.assigned, x.status, x.progress]));
+  table('Purchase Requisition Request', [['PR Number', 1.5], ['PR Request', 2], ['Requested Date', 1.2], ['Status', 1], ['Details', 1.5]], wrRows(r, 'prs').map(x => [x.number, x.request, x.date, x.status, x.details]));
+  points('Admin Complaints', wrRows(r, 'complaints'));
   const lv = lvBetween(r.weekStart, r.weekEnd);
-  table('Staff on Leave', [['Staff', 2], ['Department', 1.6], ['Leave', 2.4]], lv.map(x => [x.name, x.department || '', x.items.map(i => lvType(i.code).name + ': ' + pcOrdinalDate(i.from) + (i.to !== i.from ? ' – ' + pcOrdinalDate(i.to) : '')).join('\n')]));
-  if(r.notes){ if(y + 40 > PC_BOTTOM) newPage(); pg.text(L, y, 'Notes', { bold:true, size:11 }); y += 14; pdfWrap(r.notes, false, 9, R - L).forEach(ln => { if(y > PC_BOTTOM){ newPage(); } pg.text(L, y, ln, { size:9 }); y += 12; }); }
+  table('Staff Leaves', [['Staff', 2], ['Department', 1.6], ['Leave', 2.4]], lv.map(x => [x.name, x.department || '', x.items.map(i => lvType(i.code).name + ': ' + pcOrdinalDate(i.from) + (i.to !== i.from ? ' – ' + pcOrdinalDate(i.to) : '')).join('\n')]));
+  if(r.notes){ const nl = pdfWrap(r.notes, false, 9, R - L); keep(14 + nl.length * 12); pg.text(L, y, 'Notes', { bold:true, size:11 }); y += 14; nl.forEach(ln => { if(y > PC_BOTTOM){ newPage(); } pg.text(L, y, ln, { size:9 }); y += 12; }); }
   return pcPdfFinish(pages.map(p => ({ ops:p.ops })), { title:'', number:'', docTitle:'Weekly Report ' + r.department + ' Week ' + r.weekNo, pageNumbers:true });
 }
 
@@ -8377,7 +8441,7 @@ function wrMailText(r){
 }
 async function wrMailOpen(id){
   const r = wrById(id); if(!r) return;
-  if(document.getElementById('wr-form') && vehUi.wrId === id){ try{ await vehSave('weeklyReports', Object.assign({ id }, wrCollect())); }catch(e){} }   // save edits only when the report is open
+  if(document.getElementById('wr-form') && vehUi.wrId === id){ try{ await vehSave('weeklyReports', Object.assign({ id }, wrLiveMark(r, wrCollect()))); }catch(e){} }   // save edits only when the report is open
   const m = wrMailText(wrById(id) || r), inp = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm';
   openModal('Email draft — weekly report', `<p class="text-xs text-slate-500 mb-3">Nothing is sent from here. Review the draft, then open it in Outlook (with the PDF attached) and press Send there.</p>
     <div class="grid grid-cols-[3.5rem_1fr] gap-x-3 gap-y-2 items-center text-sm mb-3">

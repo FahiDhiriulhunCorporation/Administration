@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.192';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.194';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -1829,6 +1829,7 @@ const ICONS = {
   trash:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 5.5h13M8 5.5V3.8h4v1.7M5 5.5l.9 11h8.2l.9-11M8.5 8.5v5.5M11.5 8.5v5.5"/></svg>',
   drop:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 2.5s-5.5 6-5.5 9.6a5.5 5.5 0 0 0 11 0C15.5 8.5 10 2.5 10 2.5z"/></svg>',
   bolt:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M11 2 4.5 11H10l-1 7 6.5-9H10z"/></svg>',
+  wallet:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 6.5h13a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1.5 1.5 0 0 1 1.5-1.5H14v3"/><path d="M17 10h-3.5a1.5 1.5 0 0 0 0 3H17"/></svg>',
   coins:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="8" cy="5.5" rx="5" ry="2.2"/><path d="M3 5.5v3c0 1.2 2.2 2.2 5 2.2s5-1 5-2.2v-3M3 8.5v3c0 1.2 2.2 2.2 5 2.2"/><ellipse cx="13" cy="13" rx="4.5" ry="2"/><path d="M8.5 13v2.5c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V13"/></svg>',
   cash:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/><path d="M5 8.2v3.6M15 8.2v3.6"/></svg>',
   statement:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 2.5h7l3.5 3.5V17a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z"/><path d="M12 2.5V6h3.5"/><path d="M7 10h6M7 13h6"/></svg>',
@@ -1916,6 +1917,7 @@ function currentNav(){
     { id:'petty-cash', label:'Petty Cash Requests', icon:'cash', badge:pcAwaiting, tone:'warn' },
     { id:'petty-statement', label:'Statements', icon:'statement', badge:nRepl, tone:'warn', hint:'Closed statements pending replenishment' },
     { id:'petty-count', label:'Cash Count', icon:'coins', badge:nUnbal, tone:'crit', hint:'Funds whose cash count does not balance' },
+    { id:'business-advance', label:'Business Advance', icon:'wallet', badge:cntOf(baPendingAll), tone:'warn', hint:'Payments from business advances still without an invoice' },
   ];
   if(canManageInventory() || (authUser && authUser.role==='admin')) nav.push({ section:'Settings' });
   if(canManageInventory()) nav.push({ id:'locations', label:'Locations', icon:'locations' });
@@ -2080,6 +2082,7 @@ const VEH_COLS = {
   cleaningSheets:   { collection:'fdc_inventory_cleaning_sheets',       label:'weekly cleaning checklists', one:'weekly cleaning checklist' },
   leavePlans:       { collection:'fdc_inventory_leave_plans',           label:'leave plans', one:'leave plan' },
   weeklyReports:    { collection:'fdc_inventory_weekly_reports',        label:'weekly reports', one:'weekly report' },
+  businessAdvances: { collection:'fdc_inventory_business_advances',     label:'business advances', one:'business advance' },
   staffDir:         { collection:'fdc_inventory_staff_directory',       label:'staff records', one:'staff record' },
   complaints:       { collection:'fdc_inventory_complaints',            label:'complaints', one:'complaint' },
   tasks:            { collection:'fdc_inventory_tasks',                 label:'tasks', one:'task' },
@@ -4242,7 +4245,7 @@ async function pcPdfFinish(pages, o){
     const pageTitle = p.title || o.title; frame.text(553.5 - pdfTextWidth(pageTitle, true, 17), 90.3, pageTitle, { bold: true, size: 17 });
     if(o.pageNumbers && total > 0){ frame.text(36, 818, 'Page ', { helv: true, size: 9 }); frame.text(36 + 21.8, 818, String(i + 1), { helv: true, bold: true, size: 9 }); const w = 21.8 + String(i + 1).length * 5; frame.text(36 + w + 2, 818, ' of ', { helv: true, size: 9 }); frame.text(36 + w + 16, 818, String(total), { helv: true, bold: true, size: 9 }); }
     const content = f.add({ entries: '', data: enc.encode((p.bare ? p.ops : frame.ops.concat(p.ops)).join('\n')) });      // a bare page (an invoice image) has no letterhead
-    kids.push(f.add(`<< /Type /Page /Parent ${pagesNode} 0 R /MediaBox [0 0 ${PCA4_W} ${PCA4_H}] /Resources ${resources} 0 R /Contents ${content} 0 R >>`));
+    kids.push(f.add(`<< /Type /Page /Parent ${pagesNode} 0 R /MediaBox [0 0 ${p.mw || PCA4_W} ${p.mh || PCA4_H}] /Resources ${resources} 0 R /Contents ${content} 0 R >>`));     // a page may set its own size (landscape)
   });
   f.put(pagesNode, `<< /Type /Pages /Kids [${kids.map(k => k + ' 0 R').join(' ')}] /Count ${total} >>`);
   f.put(catalog, `<< /Type /Catalog /Pages ${pagesNode} 0 R >>`);
@@ -8580,6 +8583,245 @@ async function wrPdf(id, btn){
 }
 
 /* =====================================================================
+   BUSINESS ADVANCE — money advanced to a staff member for an immediate function (e.g. a room renovation):
+   what was received, what was paid out to whom, and the invoice for each payment. Same sums as the
+   finance sheet: Net = −Amount when Transferred, +Amount when Received; Current Balance = Σ Net;
+   Total Spent = Σ Transferred; Total Received = Σ Received; Pending Invoice = count of "Pending".
+===================================================================== */
+const BA_TYPES = ['Transferred', 'Received'], BA_INV = ['Pending', 'Received'];
+const baById = id => (state.businessAdvances || []).find(r => r.id === id) || null;
+const baEntries = r => (r.entries || []).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.at || 0) - (b.at || 0));
+const baNet = e => e.type === 'Transferred' ? -vNum(e.amount) : vNum(e.amount);
+function baTotals(r){
+  const es = r.entries || [];
+  return { balance:pcRound(es.reduce((s, e) => s + baNet(e), 0)), spent:pcRound(es.filter(e => e.type === 'Transferred').reduce((s, e) => s + vNum(e.amount), 0)),
+    received:pcRound(es.filter(e => e.type === 'Received').reduce((s, e) => s + vNum(e.amount), 0)), pending:es.filter(e => e.invoice === 'Pending').length };
+}
+const baCanEdit = r => !viewerBlock() && (canManageInventory() || !r || (authUser && (r.createdByUid === authUser.uid || r.holder === authUser.name)));
+const baPendingAll = () => (state.businessAdvances || []).filter(r => r.status !== 'Settled').reduce((s, r) => s + baTotals(r).pending, 0);
+const baDate = d => d ? pcOrdinalDate(d) : '';
+const baFile = r => (r.no ? r.no + ' - ' : '') + String(r.title || 'Business Advance').replace(/[^A-Za-z0-9 &()-]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+function viewBusinessAdvance(){
+  if(vehUi.baId && baById(vehUi.baId)) return baDetail(baById(vehUi.baId));
+  const list = (state.businessAdvances || []).slice().sort((a, b) => (a.status === 'Settled') - (b.status === 'Settled') || String(b.date || '').localeCompare(String(a.date || '')));
+  const open = list.filter(r => r.status !== 'Settled'), T = list.map(baTotals), sum = (arr, f) => arr.reduce((s, r) => s + baTotals(r)[f], 0);
+  const head = vHead('Business Advance', 'Advances given for immediate functions: the money received, every payment made from it and its invoice.', baCanEdit() ? vBtnPrimary('+ Business advance', 'openBaForm()') : '');
+  const kpis = vKpis(statCard('Open advances', fmtNum(open.length), list.length - open.length ? (list.length - open.length) + ' settled' : 'None settled yet', 'brand') + statCard('Balance held', fmtMVR(sum(open, 'balance')), 'Not spent yet, open advances', 'emerald') +
+    statCard('Total spent', fmtMVR(sum(list, 'spent')), 'Transferred from all advances', 'slate') + statCard('Pending invoices', fmtNum(sum(open, 'pending')), 'Payments still without an invoice', sum(open, 'pending') ? 'amber' : 'slate'));
+  if(!list.length) return head + kpis + `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No business advances yet. Click <b>+ Business advance</b> to record one — then add each payment and its invoice.')}</div>`;
+  return head + kpis + vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Advance' }, { t:'Held by' }, { t:'Issued' }, { t:'Received', n:1 }, { t:'Spent', n:1 }, { t:'Balance', n:1 }, { t:'Invoices' }, { t:'' }])}<tbody>${list.map((r, i) => { const t = baTotals(r);
+    return `<tr class="${vTr} cursor-pointer" onclick="vehUi.baId='${r.id}'; rerenderMain()">${vTd(`<div class="font-semibold text-slate-800">${esc(r.title || '—')}</div><div class="text-[11.5px] text-slate-400">${esc(r.no || '')}</div>`, { first:1 })}${vTd(`${esc(r.holder || '—')}<div class="text-[11.5px] text-slate-400">${esc(r.department || '')}</div>`)}${vTd(vDate(r.date))}
+      ${vTd(vMoney(t.received), { n:1 })}${vTd(vMoney(t.spent), { n:1 })}${vTd(`<b class="${t.balance < 0 ? 'text-rose-600' : ''}">${vMoney(t.balance)}</b>`, { n:1 })}${vTd(t.pending ? vPill('warn', t.pending + ' pending') : vPill('good', 'All in'))}${vTd(vPill(r.status === 'Settled' ? '' : 'acc', esc(r.status || 'Open')), { last:1 })}</tr>`; }).join('')}</tbody></table>`);
+}
+function baDetail(r){
+  const t = baTotals(r), ed = baCanEdit(r), es = baEntries(r);
+  const card = (l, v, cls) => `<div class="bg-white rounded-xl border border-slate-200 px-5 py-4"><div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">${l}</div><div class="text-xl font-extrabold mt-1 num ${cls || 'text-slate-900'}">${v}</div></div>`;
+  const rows = es.map(e => { const k = (r.entries || []).indexOf(e);
+    return `<tr class="${vTr} align-top ${ed ? 'cursor-pointer' : ''}" ${ed ? `onclick="openBaEntry('${r.id}', '${e.uid}')"` : ''}>${vTd(`<span class="whitespace-nowrap">${esc(baDate(e.date))}</span>`, { first:1 })}${vTd(esc(e.party || ''))}${vTd(vPill(e.type === 'Received' ? 'good' : '', esc(e.type)))}${vTd(vMoney(e.amount), { n:1 })}
+      ${vTd(`<div class="whitespace-pre-line text-[13px] min-w-[12rem]">${esc(e.details || '')}</div>`)}${vTd((e.invoice ? vPill(e.invoice === 'Pending' ? 'warn' : 'good', esc(e.invoice)) : '<span class="text-slate-300">—</span>') + (e.fileId ? `<div><button onclick="event.stopPropagation(); openBaInvoice('${r.id}', '${e.uid}')" class="text-[11.5px] font-semibold text-brand-600 hover:underline mt-1">📎 View</button></div>` : '') + (e.link ? `<div>${vLink(e.link, 'Link')}</div>` : ''))}
+      ${vTd(`<span class="${baNet(e) < 0 ? 'text-rose-600' : 'text-emerald-700'} font-semibold">${vMoney(baNet(e))}</span>`, { n:1 })}${vTd(`<span class="text-[12.5px]">${esc(e.remarks || '')}</span>`, { last:1 })}</tr>`; }).join('');
+  return `<div class="flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.baId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All business advances</button>
+      <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${esc(r.title || 'Business Advance')} ${vPill(r.status === 'Settled' ? '' : 'acc', esc(r.status || 'Open'), 'align-middle')}</h1>
+      <p class="text-sm text-slate-500 mt-0.5">${esc([r.no, r.holder && 'held by ' + r.holder + (r.department ? ' (' + r.department + ')' : ''), r.date && 'issued ' + vDate(r.date), r.ref && 'ref. ' + r.ref].filter(Boolean).join(' · '))}</p>${r.notes ? `<p class="text-sm text-slate-600 mt-1 whitespace-pre-line">${esc(r.notes)}</p>` : ''}</div>
+    <div class="flex gap-2.5 flex-wrap">${vBtnPlain('Excel', `baXlsxDownload('${r.id}', this)`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">${card('Current Balance', vMoney(t.balance), t.balance < 0 ? 'text-rose-600' : 'text-emerald-700')}${card('Total Spent', vMoney(t.spent))}${card('Total Received', vMoney(t.received))}${card('Pending Invoice', fmtNum(t.pending), t.pending ? 'text-amber-600' : 'text-slate-900')}</div>
+    ${vPanel('Entries', ed ? `<button onclick="openBaEntry('${r.id}', '', 'Received')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">+ Money received</button><button onclick="openBaEntry('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Payment (transferred)</button>` : '',
+      es.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Staff Name / Department' }, { t:'Type' }, { t:'Amount', n:1 }, { t:'Details' }, { t:'Invoice' }, { t:'Net', n:1 }, { t:'Remarks' }])}<tbody>${rows}</tbody></table></div>` : vEmpty('No entries yet. Add the money received, then each payment with its invoice.'))}
+    ${ed ? `<div class="flex justify-end gap-4 mb-8 text-xs font-semibold">${r.status === 'Settled' ? `<button onclick="baSetStatus('${r.id}', 'Open')" class="text-brand-600 hover:underline">Reopen</button>` : `<button onclick="baSetStatus('${r.id}', 'Settled')" class="text-brand-600 hover:underline">Mark as settled</button>`}${canManageInventory() ? `<button onclick="deleteBa('${r.id}')" class="text-rose-600 hover:underline">Delete</button>` : ''}</div>` : ''}`;
+}
+function baNextNo(date){ const y = String(date || vToday()).slice(0, 4), n = (state.businessAdvances || []).filter(r => String(r.no || '').startsWith('BA-' + y + '-')).length + 1; return 'BA-' + y + '-' + String(n).padStart(3, '0'); }
+function openBaForm(id){
+  const r = id ? baById(id) : null; if(r && !baCanEdit(r)) return; if(viewerBlock()) return;
+  const d = r || { date:vToday(), holder:authUser ? authUser.name : '', department:(authUser && authUser.department) || 'Administration' };
+  openModal(r ? 'Edit business advance' : 'New business advance', vFormOpen +
+    `<datalist id="ba-staff">${sdAll().map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist><datalist id="ba-depts">${DEPARTMENTS.map(x => `<option value="${esc(x.name)}"></option>`).join('')}</datalist>` +
+    vGrid(2, vF('Function / purpose', 'title', d.title || '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="e.g. MD Room Renovation"' }) +
+      `<div><label class="${VEH_LBL}">Advance held by${vReqStar}</label><input name="holder" list="ba-staff" value="${esc(d.holder || '')}" class="${VEH_FIELD}"></div>` + `<div><label class="${VEH_LBL}">Department</label><input name="department" list="ba-depts" value="${esc(d.department || '')}" class="${VEH_FIELD}"></div>` +
+      vF('Date issued', 'date', d.date || vToday(), 'date', { req:1 }) + vF('Reference (cheque / transfer no.)', 'ref', d.ref || '', 'text') +
+      (r ? '' : vF('Amount received (MVR)', 'amount', '', 'number', { attrs:' step="0.01" min="0" placeholder="Adds the first Received entry"' })) + vTa('Notes', 'notes', d.notes || '', { rows:2, span:'sm:col-span-2' })) +
+    vFoot(r ? 'Save' : 'Create', `saveBaForm('${id || ''}')`), true);
+}
+async function saveBaForm(id){
+  const o = vehFormObj(document.getElementById('vform')); if(!String(o.title || '').trim()) return vFail('Enter the function or purpose.'); if(!String(o.holder || '').trim()) return vFail('Enter who holds the advance.'); if(!o.date) return vFail('Enter the date.');
+  const rec = { id:id || undefined, title:o.title.trim(), holder:o.holder.trim(), department:String(o.department || '').trim(), date:o.date, ref:String(o.ref || '').trim(), notes:String(o.notes || '').trim() };
+  if(!id){ rec.no = baNextNo(o.date); rec.status = 'Open'; rec.createdByUid = authUser ? authUser.uid : ''; rec.entries = vNum(o.amount) > 0 ? [{ uid:uid(), at:Date.now(), date:o.date, party:rec.holder + (rec.department ? ' / ' + rec.department : ''), type:'Received', amount:vNum(o.amount), details:'Received Business Advance', invoice:'', remarks:rec.ref }] : []; }
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  const nid = await vehSave('businessAdvances', rec); closeModal(); vehUi.baId = nid; rerenderMain(); toast(id ? 'Saved.' : rec.no + ' created — add each payment with its invoice.');
+}
+async function baSetStatus(id, st){ const r = baById(id); if(!r || !baCanEdit(r)) return; await vehSave('businessAdvances', { id, status:st }); toast(st === 'Settled' ? 'Marked as settled.' : 'Reopened.'); }
+function deleteBa(id){ const r = baById(id); if(!r || !canManageInventory()) return; confirmAction('Delete business advance ' + (r.no || '') + ' (' + (r.title || '') + ') and its entries?', async () => { const f = (r.entries || []).map(e => e.fileId).filter(Boolean); await vehDelete('businessAdvances', id); f.forEach(x => pcFileDelete(x)); vehUi.baId = ''; rerenderMain(); toast('Deleted.'); }); }
+
+/* ---------- an entry: a payment (Transferred) or money received, with its invoice ---------- */
+let baAtt = null;
+function openBaEntry(id, euid, type){
+  const r = baById(id); if(!r || !baCanEdit(r)) return; baAtt = null;
+  const e = euid ? (r.entries || []).find(x => x.uid === euid) : null, d = e || { date:vToday(), type:type || 'Transferred', invoice:(type || 'Transferred') === 'Transferred' ? 'Pending' : '' };
+  const parties = [...new Set((state.businessAdvances || []).flatMap(x => (x.entries || []).map(y => y.party)).filter(Boolean))];
+  openModal(e ? 'Edit entry' : (d.type === 'Received' ? 'Money received' : 'Payment'), vFormOpen + `<datalist id="ba-parties">${parties.concat(sdAll().map(p => p.name + (p.department ? ' / ' + p.department : ''))).map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist>` +
+    vGrid(2, vS('Type', 'type', [['Transferred', 'Transferred — paid out'], ['Received', 'Received — money in']], d.type, null, { attrs:' onchange="baTypeChanged(this)"' }) + vF('Date', 'date', d.date || vToday(), 'date', { req:1 }) +
+      `<div class="sm:col-span-2"><label class="${VEH_LBL}">Staff name / department (or supplier paid)${vReqStar}</label><input name="party" list="ba-parties" value="${esc(d.party || '')}" class="${VEH_FIELD}" placeholder="e.g. Sonee Hardware"></div>` +
+      vF('Amount (MVR)', 'amount', d.amount == null ? '' : d.amount, 'number', { req:1, attrs:' step="0.01" min="0"' }) + vS('Invoice status', 'invoice', [['', '— Not needed'], ['Pending', 'Pending'], ['Received', 'Received']], d.invoice || '') +
+      vTa('Details', 'details', d.details || '', { rows:3, span:'sm:col-span-2', ph:'Items bought — one per line' }) + vF('Remarks (invoice no.)', 'remarks', d.remarks || '', 'text') + vF('Invoice link (optional)', 'link', d.link || '', 'text', { attrs:' placeholder="https://…"' })) +
+    `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm"><div class="flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baFileChosen(this, '${id}', '${euid || ''}')"><span id="ba-att-act">${e && e.fileId ? 'Replace invoice file' : '📎 Attach the invoice (PDF or photo)'}</span></label>
+      <span id="ba-att-info" class="text-slate-500 text-xs">${e && e.fileId ? '📎 ' + esc(e.fileName || 'Invoice') + ' · ' + (e.filePages || 1) + ' page' + ((e.filePages || 1) === 1 ? '' : 's') + ' kept' : ''}</span>${e && e.fileId ? `<button type="button" id="ba-att-rm" onclick="baAttRemove()" class="text-xs text-slate-400 hover:text-rose-600">Remove file</button>` : ''}</div>
+      <div id="ba-att-status" class="text-[11.5px] text-slate-400 mt-1">Attaching marks the invoice as received and fills the empty boxes from it.</div></div>` +
+    vFoot(e ? 'Save' : 'Add entry', `saveBaEntry('${id}', '${euid || ''}')`, e ? `deleteBaEntry('${id}', '${euid}')` : ''), true);
+}
+function baTypeChanged(sel){ const f = sel.form; if(sel.value === 'Received' && f.invoice.value === 'Pending') f.invoice.value = ''; else if(sel.value === 'Transferred' && !f.invoice.value) f.invoice.value = 'Pending'; }
+function baAttRemove(){ baAtt = { remove:true }; document.getElementById('ba-att-info').textContent = 'The file will be removed when you save.'; }
+async function baFileChosen(input, id, euid){
+  const files = [...input.files]; input.value = ''; if(!files.length) return; const st = document.getElementById('ba-att-status'), f = document.getElementById('vform');
+  st.textContent = 'Reading the invoice file…';
+  try{ const att = await pcPrepareAttachment(files); baAtt = att; document.getElementById('ba-att-info').textContent = '📎 ' + att.name + ' · ' + att.pages.length + ' page' + (att.pages.length === 1 ? '' : 's') + ' (saved with the entry)'; document.getElementById('ba-att-act').textContent = 'Replace invoice file'; }
+  catch(e){ st.textContent = 'Could not attach that file: ' + (e && e.message ? e.message : e); return; }
+  if(f.invoice.value !== 'Received') f.invoice.value = 'Received';
+  try{ const got = pcParseInvoiceText(await pcReadInvoiceFile(files[0], m => { st.textContent = m; })); let n = 0;
+    [['party', got.supplier], ['remarks', got.number], ['date', got.date], ['amount', got.amount], ['details', got.description]].forEach(([k, v]) => { const el = f[k]; if(el && v && !String(el.value).trim()){ el.value = v; el.dispatchEvent(new Event('input')); n++; } });
+    st.textContent = 'File attached.' + (n ? ' ' + n + ' empty box' + (n === 1 ? ' was' : 'es were') + ' filled from it — please check.' : ' Type the details in.'); }
+  catch(e){ st.textContent = 'File attached. Type the details in.'; }
+}
+async function saveBaEntry(id, euid){
+  const r = baById(id); if(!r) return; const o = vehFormObj(document.getElementById('vform'));
+  if(!o.date) return vFail('Enter the date.'); if(!String(o.party || '').trim()) return vFail('Enter the staff name / department or supplier.'); if(!(vNum(o.amount) > 0)) return vFail('Enter the amount.');
+  const link = o.link ? vSafeUrl(o.link) : ''; if(o.link && !link) return vFail('The invoice link must be a web address starting with https://');
+  const entries = (r.entries || []).map(x => Object.assign({}, x)), old = euid ? entries.find(x => x.uid === euid) : null;
+  const e = Object.assign(old || { uid:uid(), at:Date.now() }, { date:o.date, type:BA_TYPES.includes(o.type) ? o.type : 'Transferred', party:o.party.trim(), amount:vNum(o.amount), details:String(o.details || '').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), invoice:o.invoice || '', remarks:String(o.remarks || '').trim(), link });
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  const drop = [];
+  try{
+    if(baAtt && baAtt.pages){ const fid = uid(); await pcFileSave(fid, { id:fid, voucher:r.no || '', name:baAtt.name, pages:baAtt.pages, at:Date.now() }); if(e.fileId) drop.push(e.fileId); e.fileId = fid; e.filePages = baAtt.pages.length; e.fileName = baAtt.name; }
+    else if(baAtt && baAtt.remove && e.fileId){ drop.push(e.fileId); delete e.fileId; delete e.filePages; delete e.fileName; }
+  }catch(err){ if(btn) btn.disabled = false; return vFail('The invoice file could not be saved: ' + (err && err.message ? err.message : err)); }
+  if(!old) entries.push(e);
+  await vehSave('businessAdvances', { id, entries }); drop.forEach(f => pcFileDelete(f)); baAtt = null;
+  closeModal(); toast(old ? 'Entry saved.' : 'Entry added.');
+}
+function deleteBaEntry(id, euid){
+  const r = baById(id); if(!r) return; const e = (r.entries || []).find(x => x.uid === euid); if(!e) return;
+  confirmAction('Delete this entry (' + (e.party || '') + ', ' + fmtMVR(e.amount) + ')?', async () => { await vehSave('businessAdvances', { id, entries:(r.entries || []).filter(x => x.uid !== euid) }); if(e.fileId) pcFileDelete(e.fileId); closeModal(); toast('Entry deleted.'); });
+}
+async function openBaInvoice(id, euid){
+  const r = baById(id), e = r && (r.entries || []).find(x => x.uid === euid); if(!e || !e.fileId) return;
+  openModal('Invoice — ' + (e.party || ''), '<div class="text-sm text-slate-500">Loading the invoice file…</div>', true);
+  let data = null; try{ data = await pcFileLoad(e.fileId); }catch(err){}
+  openModal('Invoice — ' + (e.party || ''), data && data.pages ? `<div class="text-xs text-slate-500 mb-3">${esc([e.remarks, fmtMVR(e.amount), baDate(e.date)].filter(Boolean).join(' · '))}</div><div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Invoice page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div>` : vEmpty('The invoice file could not be loaded.'), true);
+}
+
+/* ---------- Excel: the same sheet as finance uses, with its formulas ---------- */
+async function baXlsxDownload(id, btn){
+  const r = baById(id); if(!r) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ downloadBlob(await buildBaXlsx(r), 'Business Advance - ' + baFile(r) + '.xlsx'); }
+  catch(e){ console.error(e); toast('Could not create the Excel file: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+async function buildBaXlsx(r){
+  try{ await loadScriptOnce(JSZIP_URL); }catch(e){ throw new Error('The document builder could not be loaded. Check your internet connection and try again.'); }
+  const es = baEntries(r), t = baTotals(r), X = s => xmlEsc(String(s == null ? '' : s));
+  const MVR = '[$MVR]\\ #,##0.00;\\-[$MVR]\\ #,##0.00';
+  // styles: 0 normal · 1 title · 2 header · 3 summary money · 4 summary count · 5 text · 6 money · 7 details (left, wrapped) · 8 net
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="${X(MVR)}"/></numFmts>
+<fonts count="4"><font><sz val="10"/><name val="Poppins"/></font><font><b/><sz val="10"/><name val="Poppins"/></font><font><b/><sz val="12"/><color rgb="FFFFFF00"/><name val="Poppins"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Poppins"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF595959"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF808080"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="9">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="164" fontId="1" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const str = (ref, v, s) => `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${X(v)}</t></is></c>`, num = (ref, v, s) => `<c r="${ref}" s="${s}"><v>${vNum(v)}</v></c>`;
+  const fml = (ref, f, v, s) => `<c r="${ref}" s="${s}"><f>${X(f)}</f><v>${v}</v></c>`;
+  const rows = [], last = Math.max(7, 6 + es.length);
+  rows.push(`<row r="1" ht="30" customHeight="1">${str('A1', 'Business Advance' + (r.title ? ' — ' + r.title : ''), 1)}${'BCDEFGH'.split('').map(L => `<c r="${L}1" s="1"/>`).join('')}</row>`);
+  rows.push(`<row r="2" ht="20" customHeight="1">${str('A2', [r.no, r.holder && 'Held by ' + r.holder + (r.department ? ' / ' + r.department : ''), r.date && 'Issued ' + baDate(r.date), r.ref && 'Ref. ' + r.ref].filter(Boolean).join('   ·   '), 0)}</row>`);
+  rows.push(`<row r="3" ht="24" customHeight="1">${str('B3', 'Current Balance', 2)}${str('C3', 'Total Spent', 2)}${str('D3', 'Total Received', 2)}${str('E3', 'Pending Invoice', 2)}</row>`);
+  rows.push(`<row r="4" ht="24" customHeight="1">${fml('B4', 'SUM(G7:G1048576)', t.balance, 3)}${fml('C4', 'SUMIF(C7:C1048576,"Transferred",D7:D1048576)', t.spent, 3)}${fml('D4', 'SUMIF(C7:C1048576,"Received",D7:D1048576)', t.received, 3)}${fml('E4', 'COUNTIF(F7:F1048576,"Pending")', t.pending, 4)}</row>`);
+  rows.push(`<row r="6" ht="24" customHeight="1">${['Date', 'Staff Name / Department', 'Type', 'Amount', 'Details', 'Invoice Status', 'Net', 'Remarks'].map((h, i) => str('ABCDEFGH'[i] + '6', h, 2)).join('')}</row>`);
+  es.forEach((e, i) => { const n = 7 + i, lines = Math.max(String(e.details || '').split('\n').length, Math.ceil(String(e.details || '').length / 48), Math.ceil(String(e.party || '').length / 26), 1);
+    rows.push(`<row r="${n}" ht="${Math.max(24, lines * 15 + 9)}" customHeight="1">${str('A' + n, baDate(e.date), 5)}${str('B' + n, e.party, 5)}${str('C' + n, e.type, 5)}${num('D' + n, e.amount, 6)}${str('E' + n, e.details, 7)}${str('F' + n, e.invoice, 5)}${fml('G' + n, 'IF(C' + n + '="Transferred",-D' + n + ',D' + n + ')', baNet(e), 8)}${str('H' + n, e.remarks, 5)}</row>`); });
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:H${last}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="24" customHeight="1"/>
+<cols><col min="1" max="1" width="20.86" customWidth="1"/><col min="2" max="2" width="28.43" customWidth="1"/><col min="3" max="3" width="16.71" customWidth="1"/><col min="4" max="4" width="17.71" customWidth="1"/><col min="5" max="5" width="47.71" customWidth="1"/><col min="6" max="6" width="17.29" customWidth="1"/><col min="7" max="7" width="16" customWidth="1"/><col min="8" max="8" width="27.14" customWidth="1"/></cols>
+<sheetData>${rows.join('')}</sheetData><autoFilter ref="A6:H${last}"/><mergeCells count="2"><mergeCell ref="A1:H1"/><mergeCell ref="A2:H2"/></mergeCells>
+<dataValidations count="2"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C7:C1048576"><formula1>"Transferred,Received"</formula1></dataValidation><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="F7:F1048576"><formula1>"Pending,Received"</formula1></dataValidation></dataValidations>
+<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToHeight="0"/></worksheet>`;
+  const name = String(r.title || 'Business Advance').replace(/[\\\/?*\[\]:]/g, '-').slice(0, 31) || 'Business Advance';
+  const z = new JSZip();
+  z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+  z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  z.file('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${X(name)}" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${X(name.replace(/'/g, "''"))}'!$A$6:$H$${last}</definedName></definedNames><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`);
+  z.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  z.file('xl/styles.xml', styles); z.file('xl/worksheets/sheet1.xml', sheet);
+  return z.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE' });
+}
+
+/* ---------- PDF: letterhead, the four totals, the entries, sign-off, then the invoices ---------- */
+function baPdfAsk(id){
+  const r = baById(id); if(!r) return; const nf = (r.entries || []).filter(e => e.fileId).length;
+  if(!nf) return baPdfDownload(id, false);
+  openModal('Download PDF', `<p class="text-sm text-slate-600 mb-4">${nf} invoice file${nf === 1 ? ' is' : 's are'} attached to this advance. Add ${nf === 1 ? 'it' : 'them'} after the statement?</p>
+    <div class="flex justify-end gap-2.5"><button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="closeModal(); baPdfDownload('${id}', false)">Statement only</button><button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="baPdfDownload('${id}', true, this)">With invoices</button></div>`);
+}
+async function baPdfDownload(id, inv, btn){
+  const r = baById(id); if(!r) return; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; } else toast('Preparing the PDF…');
+  try{ downloadBlob(await buildBaPdf(r, inv), 'Business Advance - ' + baFile(r) + '.pdf'); closeModal(); }
+  catch(e){ console.error(e); toast('Could not create the PDF: ' + (e && e.message ? e.message : e), true); if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = 'With invoices'; } }
+}
+async function buildBaPdf(r, withInv){
+  // landscape A4, laid out like the finance sheet: grey title bar, the four totals, then the entries table
+  const W = PCA4_H, H = PCA4_W, L = 30, R = W - 30, TOP = 30, BOT = H - 34, FS = 8, LH = 10.4;
+  const DARK = [0.35, 0.35, 0.35], HEAD = [0.5, 0.5, 0.5], LINE = [0.75, 0.75, 0.75], WH = [1, 1, 1], YEL = [1, 1, 0], RED = [0.75, 0.1, 0.1], K = [0, 0, 0], STRIPE = [0.96, 0.96, 0.96];
+  const t = baTotals(r), es = baEntries(r), pages = []; let pg, y;
+  const center = (x0, x1, b, s, o) => pg.text(x0 + (x1 - x0 - pdfTextWidth(s, !!(o && o.bold), (o && o.size) || FS)) / 2, b, s, Object.assign({ size:FS }, o || {}));
+  const box = (x, yy, w, h) => { pg.line(x, yy, x + w, yy, LINE, 0.5); pg.line(x, yy + h, x + w, yy + h, LINE, 0.5); pg.line(x, yy, x, yy + h, LINE, 0.5); pg.line(x + w, yy, x + w, yy + h, LINE, 0.5); };
+  // columns as in the sheet (A–H widths)
+  const cols = [['Date', 23], ['Staff Name / Department', 28.43], ['Type', 16.71], ['Amount', 19], ['Details', 41], ['Invoice Status', 17.29], ['Net', 20], ['Remarks', 27.14]], tot = cols.reduce((s, c) => s + c[1], 0), xs = [L]; cols.forEach(c => xs.push(xs[xs.length - 1] + (R - L) * c[1] / tot));
+  const head = () => { pg.fill(L, y, R - L, 20, HEAD); cols.forEach((c, i) => center(xs[i], xs[i + 1], y + 13, c[0], { bold:true, color:WH })); xs.forEach(x => pg.line(x, y, x, y + 20, LINE, 0.5)); y += 20; };
+  const newPage = first => { pg = new PdfPage(H); pages.push(pg); y = TOP;
+    pg.fill(L, y, R - L, 26, DARK); center(L, R, y + 17.5, 'Business Advance' + (r.title ? ' — ' + r.title : ''), { bold:true, size:12, color:YEL }); y += 26;
+    if(first){ y += 8; pg.text(L, y + 8, [r.no, r.holder && 'Held by ' + r.holder + (r.department ? ' / ' + r.department : ''), r.date && 'Issued ' + baDate(r.date), r.ref && 'Ref. ' + r.ref, r.status === 'Settled' ? 'Settled' : ''].filter(Boolean).join('   ·   '), { size:8.5 }); y += 18;
+      // the four totals sit over columns B–E, as in the sheet
+      [['Current Balance', vMoney(t.balance), t.balance < 0 ? RED : K], ['Total Spent', vMoney(t.spent)], ['Total Received', vMoney(t.received)], ['Pending Invoice', String(t.pending), t.pending ? RED : K]].forEach(([k, v, c], i) => {
+        const bw = 150, x0 = xs[1] + i * bw, x1 = x0 + bw; pg.fill(x0, y, x1 - x0, 20, HEAD); center(x0, x1, y + 13, k, { bold:true, color:WH }); center(x0, x1, y + 34, v, { bold:true, size:9.5, color:c || K }); box(x0, y, x1 - x0, 44); pg.line(x0, y + 20, x1, y + 20, LINE, 0.5); });
+      y += 62; }
+    else y += 10;
+    head(); };
+  newPage(true);
+  const n2 = v => 'MVR ' + vNum(v).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  (es.length ? es : [null]).forEach((e, k) => {
+    const cells = e ? [baDate(e.date), e.party, e.type, n2(e.amount), e.details, e.invoice || '', (baNet(e) < 0 ? '-' : '') + n2(Math.abs(baNet(e))), e.remarks] : ['', 'No entries yet', '', '', '', '', '', ''];
+    const wr = cells.map((s, i) => pdfWrap(String(s || ''), false, FS, xs[i + 1] - xs[i] - 8)), h = Math.max(22, Math.max(...wr.map(w => w.length)) * LH + 10);
+    if(y + h > BOT){ newPage(false); }
+    if(k % 2) pg.fill(L, y, R - L, h, STRIPE);
+    wr.forEach((w, i) => { const top = y + (h - w.length * LH) / 2 + 7.6; w.forEach((ln, j) => { const o = { color:i === 6 && e && baNet(e) < 0 ? RED : K }; if(i === 4) pg.text(xs[i] + 4, top + j * LH, ln, Object.assign({ size:FS }, o)); else center(xs[i], xs[i + 1], top + j * LH, ln, o); }); });
+    xs.forEach(x => pg.line(x, y, x, y + h, LINE, 0.5)); y += h; pg.line(L, y, R, y, LINE, 0.5);
+  });
+  // sign-off under the table
+  if(y + 70 > BOT) newPage(false);
+  y += 30; const sw = 170; ['Prepared by', 'Checked by', 'Approved by'].forEach((k, i) => { const x = L + i * (sw + 60); pg.line(x, y + 24, x + sw, y + 24, LINE, 0.7); pg.text(x, y + 36, k, { bold:true, size:8.5 }); pg.text(x, y + 47, 'Name / Signature / Date', { size:7.5, color:[0.45, 0.45, 0.45] }); });
+  pages.forEach((p, i) => p.text(R - pdfTextWidth('Page ' + (i + 1) + ' of ' + pages.length, false, 7.5), H - 18, 'Page ' + (i + 1) + ' of ' + pages.length, { size:7.5, color:[0.45, 0.45, 0.45] }));
+  const out = pages.map(p => ({ ops:p.ops, bare:true, mw:W, mh:H })), images = {};
+  // the invoices after the statement, one portrait page each
+  if(withInv){ let n = 0;
+    for(const e of es.filter(x => x.fileId)){
+      let data = null; try{ data = await pcFileLoad(e.fileId); }catch(err){} if(!data || !data.pages) continue;
+      for(const [i, p] of data.pages.entries()){
+        const m = /^data:image\/jpeg;base64,(.+)$/.exec(p.jpeg || ''); if(!m) continue; const key = 'Inv' + (++n); images[key] = { w:p.w, h:p.h, jpeg:pdfB64(m[1]) };
+        const ip = new PdfPage(PCA4_H), cap = 'Invoice — ' + [e.party, e.remarks, vMoney(e.amount), baDate(e.date)].filter(Boolean).join(' · ') + (data.pages.length > 1 ? ' (page ' + (i + 1) + ' of ' + data.pages.length + ')' : '');
+        ip.text(36, 30, cap, { size:8.5, bold:true }); const mw = PCA4_W - 72, mh = PCA4_H - 80, sc = Math.min(mw / p.w, mh / p.h), w = p.w * sc, h = p.h * sc; ip.image(key, (PCA4_W - w) / 2, 44, w, h);
+        out.push({ ops:ip.ops, bare:true });
+      }
+    }
+  }
+  return pcPdfFinish(out, { title:'', number:'', docTitle:'Business Advance ' + (r.no || '') + ' ' + (r.title || ''), pageNumbers:false, images });
+}
+
+/* =====================================================================
    MAINTENANCE — CLEANING CHECKLIST: for each location, its rooms and the tasks in each,
    the cleaners and the supervisor. Every week gets a checklist that is ticked here (or printed,
    filled by hand and the signed copy linked), and can be downloaded as a PDF in the finance layout.
@@ -10487,6 +10729,7 @@ function render(){
     else if(ui.tab==='keys') el.innerHTML = viewKeyRegistry();
     else if(ui.tab==='petty-statement') el.innerHTML = viewPettyCashStatement();
     else if(ui.tab==='petty-count') el.innerHTML = viewPettyCashCount();
+    else if(ui.tab==='business-advance') el.innerHTML = viewBusinessAdvance();
     else if(ui.tab==='utilities') el.innerHTML = viewUtilities('Electricity');
     else if(/^utility-/.test(ui.tab) && utTypeBySlug(ui.tab.slice(8))) el.innerHTML = viewUtilities(utTypeBySlug(ui.tab.slice(8)));
     else if(ui.tab==='utility-report') el.innerHTML = viewUtilityReport();

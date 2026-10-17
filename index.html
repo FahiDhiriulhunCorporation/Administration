@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.194';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.195';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -1877,7 +1877,7 @@ function currentNav(){
   const nUnbal = cntOf(() => pcFundList().filter(f => { const rc = pcReconcile(f); return rc.counted && Math.abs(rc.diff) >= 0.005; }).length);
   const nav = [
     { id:'dashboard', label:'Dashboard', icon:'dashboard' },
-    ...(authUser ? [{ id:'my-work', label:'My Work', icon:'tasks', badge:cntOf(() => (state.tasks || []).filter(t => !tkDone(t) && (t.assignees || []).some(a => a.key === 'u:' + authUser.uid)).length + (apIsApprover() ? state.purchaseRequisitions.filter(p => p.status === 'pending_approval').length + state.documents.filter(d => d.status === 'Pending approval').length : 0)), tone:'warn', hint:'My open tasks and approvals waiting for me' }] : []),
+    ...(authUser ? [{ id:'my-work', label:'My Dashboard', icon:'tasks', badge:cntOf(() => (state.tasks || []).filter(t => !tkDone(t) && (t.assignees || []).some(a => a.key === 'u:' + authUser.uid)).length + (apIsApprover() ? state.purchaseRequisitions.filter(p => p.status === 'pending_approval').length + state.documents.filter(d => d.status === 'Pending approval').length : 0)), tone:'warn', hint:'My open tasks and approvals waiting for me' }] : []),
     { id:'reports', label:'Summary Report', icon:'statement' },
     { section:'Department' },
     { id:'staff-list', label:'Admin Staff', icon:'users' },
@@ -6860,9 +6860,90 @@ function gsDraw(keep){
 function gsGo(i){ const r = (window._gsShown || [])[i]; if(!r) return; gsClose(); try{ (new Function(r.go))(); }catch(e){ console.warn(e); } }
 document.addEventListener('keydown', e => { if((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k'){ e.preventDefault(); gsOpen(); } });
 
-/* ---------- My Work ---------- */
+/* ---------- My Dashboard (was My Work): panels each person can arrange, a background of their own and a quote for the day ---------- */
+const DASH_QUOTES = [
+  ['The secret of getting ahead is getting started.', 'Mark Twain'], ['It always seems impossible until it’s done.', 'Nelson Mandela'], ['Well done is better than well said.', 'Benjamin Franklin'],
+  ['Quality is not an act, it is a habit.', 'Aristotle'], ['Do what you can, with what you have, where you are.', 'Theodore Roosevelt'], ['Act as if what you do makes a difference. It does.', 'William James'],
+  ['The best way out is always through.', 'Robert Frost'], ['Believe you can and you’re halfway there.', 'Theodore Roosevelt'], ['Small deeds done are better than great deeds planned.', 'Peter Marshall'],
+  ['What we do today matters most.', 'Buddha'], ['Great things are done by a series of small things brought together.', 'Vincent van Gogh'], ['Energy and persistence conquer all things.', 'Benjamin Franklin'],
+  ['Alone we can do so little; together we can do so much.', 'Helen Keller'], ['Opportunities multiply as they are seized.', 'Sun Tzu'], ['Simplicity is the ultimate sophistication.', 'Leonardo da Vinci'],
+  ['The future depends on what you do today.', 'Mahatma Gandhi'], ['Whatever you are, be a good one.', 'Abraham Lincoln'], ['Courage is grace under pressure.', 'Ernest Hemingway'],
+  ['Done is better than perfect.', 'Sheryl Sandberg'], ['Start where you are. Use what you have. Do what you can.', 'Arthur Ashe'], ['Keep your face always toward the sunshine.', 'Walt Whitman'],
+  ['Little by little, one travels far.', 'J. R. R. Tolkien'], ['Nothing will work unless you do.', 'Maya Angelou'], ['The harder I work, the luckier I get.', 'Samuel Goldwyn'],
+  ['Make each day your masterpiece.', 'John Wooden'], ['You miss 100% of the shots you don’t take.', 'Wayne Gretzky'], ['A goal without a plan is just a wish.', 'Antoine de Saint-Exupéry'],
+  ['If you want to go fast, go alone. If you want to go far, go together.', 'African proverb'], ['Patience is bitter, but its fruit is sweet.', 'Jean-Jacques Rousseau'],
+  ['The only way to do great work is to love what you do.', 'Steve Jobs'], ['Well begun is half done.', 'Aristotle'], ['It does not matter how slowly you go as long as you do not stop.', 'Confucius'],
+  ['Kindness is the language which the deaf can hear and the blind can see.', 'Mark Twain'], ['Be so good they can’t ignore you.', 'Steve Martin'], ['Teamwork makes the dream work.', 'John C. Maxwell'],
+  ['Hard work beats talent when talent doesn’t work hard.', 'Tim Notke'], ['What you do speaks so loudly that I cannot hear what you say.', 'Ralph Waldo Emerson'], ['Focus on being productive instead of busy.', 'Tim Ferriss'],
+  ['Every accomplishment starts with the decision to try.', 'John F. Kennedy'], ['Change your thoughts and you change your world.', 'Norman Vincent Peale'], ['One day or day one. You decide.', 'Unknown'],
+  ['The way to get started is to quit talking and begin doing.', 'Walt Disney'], ['Do the right thing, even when no one is looking.', 'Unknown'], ['Success is the sum of small efforts, repeated day in and day out.', 'Robert Collier'],
+  ['Be the change that you wish to see in the world.', 'Mahatma Gandhi'], ['In the middle of difficulty lies opportunity.', 'Albert Einstein'], ['Dream big. Start small. Act now.', 'Robin Sharma'],
+  ['Discipline is the bridge between goals and accomplishment.', 'Jim Rohn'], ['Your attitude, not your aptitude, will determine your altitude.', 'Zig Ziglar'], ['A smile is the shortest distance between two people.', 'Victor Borge'],
+  ['Plans are nothing; planning is everything.', 'Dwight D. Eisenhower'], ['Excellence is never an accident.', 'Aristotle'], ['If opportunity doesn’t knock, build a door.', 'Milton Berle'],
+  ['Strive for progress, not perfection.', 'Unknown'], ['The best time to plant a tree was 20 years ago. The second best time is now.', 'Chinese proverb'], ['Gratitude turns what we have into enough.', 'Unknown'],
+  ['Learn from yesterday, live for today, hope for tomorrow.', 'Albert Einstein'], ['Coming together is a beginning; keeping together is progress; working together is success.', 'Henry Ford'],
+  ['Perseverance is not a long race; it is many short races one after the other.', 'Walter Elliot'], ['Be kind, for everyone you meet is fighting a hard battle.', 'Ian Maclaren'] ];
+function dashQuote(){ const d = vToday(), n = Math.floor((Date.parse(d) - Date.parse(d.slice(0, 4) + '-01-01')) / 864e5) + (+d.slice(0, 4)) * 7; return DASH_QUOTES[n % DASH_QUOTES.length]; }
+const DASH_DEFAULT = { cols:[['tasks', 'approvals', 'money', 'leave'], ['notes', 'requests']], hidden:[] };
+let myDash = null, dashEdit = false, dashDragId = '';
+const DASH_LS = () => 'fdc_dash_' + (authUser ? authUser.uid : 'local');
+function dashPrefs(){
+  if(!myDash){ try{ myDash = JSON.parse(localStorage.getItem(DASH_LS()) || 'null'); }catch(e){} }
+  const d = Object.assign({ bg:'', dim:0.35 }, myDash || {}), cols = Array.isArray(d.cols) && d.cols.length === 2 ? d.cols.map(c => c.slice()) : DASH_DEFAULT.cols.map(c => c.slice());
+  const all = ['tasks', 'approvals', 'money', 'leave', 'notes', 'requests'], seen = new Set(cols.flat().concat(d.hidden || []));
+  all.filter(k => !seen.has(k)).forEach(k => cols[0].push(k));                                     // panels added later appear on the left
+  return { cols:cols.map(c => c.filter(k => all.includes(k))), hidden:(d.hidden || []).filter(k => all.includes(k)), bg:d.bg || '', dim:d.dim == null ? 0.35 : +d.dim };
+}
+function dashSave(p){
+  myDash = p; try{ localStorage.setItem(DASH_LS(), JSON.stringify(p)); }catch(e){}
+  if(authUser && firestoreDb) firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).set({ dash:p, updatedAt:Date.now() }, { merge:true }).catch(e => toast('Dashboard not saved: ' + e.message, true));
+}
+function dashMove(id, dir){
+  const p = dashPrefs(); const c = p.cols.findIndex(x => x.includes(id)); if(c < 0) return; const i = p.cols[c].indexOf(id);
+  if(dir === 'up' && i > 0){ p.cols[c].splice(i, 1); p.cols[c].splice(i - 1, 0, id); }
+  else if(dir === 'down' && i < p.cols[c].length - 1){ p.cols[c].splice(i, 1); p.cols[c].splice(i + 1, 0, id); }
+  else if(dir === 'left' || dir === 'right'){ const to = dir === 'left' ? 0 : 1; if(to !== c){ p.cols[c].splice(i, 1); p.cols[to].splice(Math.min(i, p.cols[to].length), 0, id); } }
+  dashSave(p); rerenderMain();
+}
+function dashHide(id){ const p = dashPrefs(); p.cols = p.cols.map(c => c.filter(k => k !== id)); p.hidden.push(id); dashSave(p); rerenderMain(); }
+function dashShow(id){ const p = dashPrefs(); p.hidden = p.hidden.filter(k => k !== id); p.cols[0].unshift(id); dashSave(p); rerenderMain(); }
+function dashReset(){ const p = dashPrefs(); dashSave(Object.assign({}, p, { cols:DASH_DEFAULT.cols.map(c => c.slice()), hidden:[] })); rerenderMain(); }
+function dashDragStart(e, id){ dashDragId = id; e.dataTransfer.effectAllowed = 'move'; try{ e.dataTransfer.setData('text/plain', id); }catch(x){} }
+function dashDragOver(e){ if(!dashDragId) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function dashDrop(e, beforeId, col){
+  e.preventDefault(); e.stopPropagation(); const id = dashDragId; dashDragId = ''; if(!id || id === beforeId) return;
+  const p = dashPrefs(); p.cols = p.cols.map(c => c.filter(k => k !== id));
+  if(beforeId){ const c = p.cols.findIndex(x => x.includes(beforeId)); p.cols[c].splice(p.cols[c].indexOf(beforeId), 0, id); } else p.cols[col].push(id);
+  dashSave(p); rerenderMain();
+}
+// background picture: kept small (compressed JPEG) with the person's notes
+function openDashBg(){
+  const p = dashPrefs();
+  openModal('Dashboard background', `${p.bg ? `<div class="rounded-lg h-36 mb-4 border border-slate-200" style="background:linear-gradient(rgba(0,0,0,${p.dim}),rgba(0,0,0,${p.dim})),url('${p.bg}') center/cover"></div>` : '<p class="text-sm text-slate-500 mb-4">Choose a picture to show behind your dashboard. Only you see it.</p>'}
+    <label class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer"><input type="file" accept="image/*" class="hidden" onchange="dashBgFile(this)">${p.bg ? 'Change picture' : 'Choose picture'}</label>
+    <span id="dash-bg-st" class="text-xs text-slate-400 ml-2"></span>
+    ${p.bg ? `<div class="mt-5"><label class="${VEH_LBL}">Darken the picture <span class="font-normal text-slate-400" id="dash-dim-v">${Math.round(p.dim * 100)}%</span></label><input type="range" min="0" max="80" value="${Math.round(p.dim * 100)}" class="w-full" oninput="document.getElementById('dash-dim-v').textContent=this.value+'%'" onchange="dashDim(this.value)"></div>` : ''}
+    <div class="flex justify-between gap-2.5 mt-6">${p.bg ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50" onclick="dashBgRemove()">Remove picture</button>` : '<span></span>'}<button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="closeModal()">Done</button></div>`);
+}
+async function dashBgFile(input){
+  const f = input.files[0]; input.value = ''; if(!f) return; const st = document.getElementById('dash-bg-st'); if(st) st.textContent = 'Preparing…';
+  try{
+    const img = new Image(), url = URL.createObjectURL(f); img.src = url; await img.decode(); URL.revokeObjectURL(url);
+    let w = Math.min(1920, img.naturalWidth), q = 0.78, out = '';
+    for(let i = 0; i < 8; i++){ const h = Math.round(img.naturalHeight * w / img.naturalWidth), cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h); out = cv.toDataURL('image/jpeg', q); if(out.length < 650000) break; w = Math.round(w * 0.82); q = Math.max(0.5, q - 0.06); }
+    const p = dashPrefs(); p.bg = out; dashSave(p); rerenderMain(); openDashBg(); toast('Background set.');
+  }catch(e){ if(st) st.textContent = 'Could not use that picture.'; }
+}
+function dashDim(v){ const p = dashPrefs(); p.dim = Math.max(0, Math.min(0.8, (+v || 0) / 100)); dashSave(p); rerenderMain(); openDashBg(); }
+function dashBgRemove(){ const p = dashPrefs(); p.bg = ''; dashSave(p); closeModal(); rerenderMain(); }
+function dashApplyBg(){
+  const m = document.querySelector('main'); if(!m) return; const p = ui.tab === 'my-work' && authUser ? dashPrefs() : null;
+  if(p && p.bg){ m.style.backgroundImage = `linear-gradient(rgba(0,0,0,${p.dim}),rgba(0,0,0,${p.dim})),url('${p.bg}')`; m.style.backgroundSize = 'cover'; m.style.backgroundPosition = 'center'; m.style.backgroundAttachment = 'fixed'; }
+  else if(m.style.backgroundImage){ m.style.backgroundImage = ''; m.style.backgroundSize = ''; m.style.backgroundPosition = ''; m.style.backgroundAttachment = ''; }
+}
+
 function viewMyWork(){
-  if(!authUser) return vHead('My Work', 'Sign in to see your tasks, requests and approvals.', '');
+  if(!authUser) return vHead('My Dashboard', 'Sign in to see your tasks, requests and approvals.', '');
   const me = 'u:' + authUser.uid, t0 = vToday(), first = String(authUser.name || '').split(' ')[0];
   const row = (title, sub, right, go) => `<button onclick="${esc(go)}" class="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-slate-50 border-b border-slate-100 last:border-0"><span class="flex-1 min-w-0"><span class="block text-sm font-semibold text-slate-900 truncate">${title}</span>${sub ? `<span class="block text-[11.5px] text-slate-400 truncate">${sub}</span>` : ''}</span>${right || ''}<span class="text-slate-300">›</span></button>`;
   const panel = (title, count, body, empty) => `<div class="bg-white rounded-xl border border-slate-200 mb-5 overflow-hidden"><div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between"><h2 class="text-sm font-bold text-slate-900">${title}</h2><span class="text-xs font-semibold text-slate-400">${count}</span></div>${body || `<div class="px-5 py-6 text-sm text-slate-400">${empty}</div>`}</div>`;
@@ -6874,25 +6955,40 @@ function viewMyWork(){
     apBody = prs.map(p => row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requester].filter(Boolean).join(' · ')), vPill('warn', 'Pending approval'), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`)).join('') +
       docs.map(d => row(esc(d.title || 'Document'), esc([(DOC_TYPES.find(x => x.k === d.type) || {}).label, d.refNo].filter(Boolean).join(' · ')), vPill('warn', 'Pending approval'), `goTo('docs-${d.type}'); openDocView('${d.id}')`)).join('');
   }
-  const pcs = (state.pettyCash || []).filter(r => r.requesterUid === authUser.uid && !r.statementNo).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const nm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(), myName = nm(authUser.name);
+  // petty cash still to finish (signature, processing or invoice) and business advances I hold that are not settled
+  const pcs = (state.pettyCash || []).filter(r => r.requesterUid === authUser.uid && !r.statementNo && pcStatus(r).key !== 'processed').sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const bas = (state.businessAdvances || []).filter(r => r.status !== 'Settled' && (nm(r.holder) === myName || r.createdByUid === authUser.uid)).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const moneyBody = bas.map(r => { const t = baTotals(r); return row(esc((r.no ? r.no + ' · ' : '') + (r.title || 'Business advance')), 'Balance ' + esc(vMoney(t.balance)) + ' · spent ' + esc(vMoney(t.spent)) + (t.pending ? ' · ' + t.pending + ' invoice' + (t.pending === 1 ? '' : 's') + ' pending' : ''), vPill(t.pending ? 'warn' : 'acc', t.pending ? 'Invoices pending' : 'Business advance'), `vehUi.baId='${r.id}'; goTo('business-advance')`); }).join('') +
+    pcs.map(r => { const s = pcStatus(r); return row('Petty cash ' + esc(r.number || ''), esc([r.purpose, vDate(r.date), fmtMVR(pcTotal(r))].filter(Boolean).join(' · ')), vPill(s.kind, esc(s.label)), `goTo('petty-cash'); openPcDetails('${r.id}')`); }).join('');
   const srs = (state.stockRequests || []).filter(r => r.requestedByUid === authUser.uid).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0)).slice(0, 8);
   const trs = (state.travelRequests || []).filter(t => t.staffKey ? t.staffKey === me : t.createdBy === authUser.name).filter(t => t.status !== 'Closed');
-  const nm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(), myName = nm(authUser.name);
   const prs = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') !== 'closed' && (nm(p.requester) ? (myName && nm(p.requester) === myName) : (p.createdByEmail && p.createdByEmail === authUser.email))).sort((a, b) => prNumberCollator.compare(String(b.prNumber || ''), String(a.prNumber || '')));
-  const reqBody = prs.map(p => { const st = prStatusMeta(p.status || 'open'); return row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requisitionDate ? vDate(p.requisitionDate) : ''].filter(Boolean).join(' · ')) + (p.status === 'pending_approval' ? ' · waiting for ' + esc(apNames()) : ''), vPill(p.status === 'released' ? 'good' : p.status === 'pending_approval' ? 'warn' : 'acc', esc(st.label)), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`); }).join('') + pcs.map(r => { const s = pcStatus(r); return row('Petty cash ' + esc(r.number || ''), esc([r.purpose, vDate(r.date)].filter(Boolean).join(' · ')), vPill(s.kind, esc(s.label)), `goTo('petty-cash'); openPcDetails('${r.id}')`); }).join('') +
+  const reqBody = prs.map(p => { const st = prStatusMeta(p.status || 'open'); return row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requisitionDate ? vDate(p.requisitionDate) : ''].filter(Boolean).join(' · ')) + (p.status === 'pending_approval' ? ' · waiting for ' + esc(apNames()) : ''), vPill(p.status === 'released' ? 'good' : p.status === 'pending_approval' ? 'warn' : 'acc', esc(st.label)), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`); }).join('') +
     srs.map(r => row('Stock request', esc([fmtD(r.requestedAt), (getLocation(r.locationId) || {}).name].filter(Boolean).join(' · ')), vPill(r.status === 'approved' ? 'good' : r.status === 'rejected' ? 'crit' : 'warn', esc(r.status || 'pending')), `ui.movementsView='requests'; goTo('movements')`)).join('') +
     trs.map(t => row('Travel: ' + esc(t.destination || t.purpose || ''), esc(t.status || ''), vPill('acc', esc(t.status || 'Open')), `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelDetail('${t.id}')`)).join('');
   let leave = []; try{ leave = ((lvBetween(t0, clIsoAdd(t0, 60)).find(x => x.key === me) || {}).items || []); }catch(e){}
   const leaveBody = leave.slice(0, 10).map(x => row(esc(lvCodeLabel(x.code)), esc(x.from === x.to ? vDate(x.from) : vDate(x.from) + ' – ' + vDate(x.to)) + ' · ' + (tkDays(x.from, x.to) + 1) + ' day' + (x.from === x.to ? '' : 's'), '', `goTo('leave-plan')`)).join('');
-  const over = tasks.filter(tkOverdue).length;
-  return vHead('My Work', `Hello ${esc(first)} — everything that needs you, in one place.`, '') +
-    vKpis(statCard('My open tasks', fmtNum(tasks.length), over ? over + ' overdue' : 'None overdue', over ? 'rose' : 'brand') + statCard('Waiting for my approval', fmtNum(apN), apIsApprover() ? 'PRs and documents' : 'You are not an approver', apN ? 'amber' : 'slate') + statCard('My requests', fmtNum(prs.length + pcs.length + srs.length + trs.length), 'PRs, petty cash, stock and travel', 'slate') + statCard('My leave', fmtNum(leave.length), 'In the next 60 days', 'emerald')) +
-    `<div class="grid grid-cols-1 xl:grid-cols-2 gap-x-5 items-start"><div>` +
-    panel('My tasks', tasks.length, taskBody, 'No open tasks — nice work ✨') +
-    (apIsApprover() ? panel('Waiting for my approval', apN, apBody, 'Nothing waiting for you.') : '') +
-    panel('My upcoming leave', leave.length, leaveBody, 'No leave planned in the next 60 days.') + `</div><div>` +
-    notesPanel() +
-    panel('My requests', prs.length + pcs.length + srs.length + trs.length, reqBody, 'No open requests.') + `</div></div>`;
+  const over = tasks.filter(tkOverdue).length, nReq = prs.length + srs.length + trs.length;
+  const W = { tasks:['My tasks', () => panel('My tasks', tasks.length, taskBody, 'No open tasks — nice work ✨')],
+    approvals:['Waiting for my approval', () => apIsApprover() ? panel('Waiting for my approval', apN, apBody, 'Nothing waiting for you.') : (dashEdit ? panel('Waiting for my approval', 0, '', 'Shows here when you are an approver.') : '')],
+    money:['Business advance & petty cash', () => panel('Business advance &amp; petty cash', bas.length + pcs.length, moneyBody, 'No open business advance or petty cash.')],
+    leave:['My upcoming leave', () => panel('My upcoming leave', leave.length, leaveBody, 'No leave planned in the next 60 days.')],
+    notes:['My notes', () => notesPanel()],
+    requests:['My requests', () => panel('My requests', nReq, reqBody, 'No open requests.')] };
+  const P = dashPrefs(), q = dashQuote();
+  const tool = (id, c) => `<div class="flex items-center gap-1 mb-1.5 text-xs font-semibold text-slate-500"><span class="cursor-grab select-none px-1" title="Drag to move">⠿</span><span class="flex-1 truncate">${esc(W[id][0])}</span>
+    ${[['left', '◀', c === 0], ['up', '▲'], ['down', '▼'], ['right', '▶', c === 1]].map(([d, ic, off]) => `<button onclick="dashMove('${id}', '${d}')" ${off ? 'disabled' : ''} class="w-6 h-6 rounded hover:bg-slate-100 disabled:opacity-25" title="Move ${d}">${ic}</button>`).join('')}<button onclick="dashHide('${id}')" class="w-6 h-6 rounded hover:bg-rose-50 hover:text-rose-600" title="Hide">✕</button></div>`;
+  const widget = (id, c) => { const html = W[id][1](); if(!html && !dashEdit) return '';
+    return dashEdit ? `<div class="rounded-xl border-2 border-dashed border-brand-300 p-2 mb-4" draggable="true" ondragstart="dashDragStart(event, '${id}')" ondragover="dashDragOver(event)" ondrop="dashDrop(event, '${id}')">${tool(id, c)}<div class="pointer-events-none select-none [&>div]:mb-0">${html}</div></div>` : html; };
+  const col = (c) => `<div ${dashEdit ? `ondragover="dashDragOver(event)" ondrop="dashDrop(event, '', ${c})" class="min-h-[160px] rounded-xl ${P.cols[c].length ? '' : 'border-2 border-dashed border-slate-200'}"` : ''}>${P.cols[c].map(id => widget(id, c)).join('')}${dashEdit ? `<div class="text-center text-[11px] text-slate-400 py-3">Drop here</div>` : ''}</div>`;
+  const glass = P.bg ? 'bg-white rounded-xl border border-slate-200 px-5 py-4 mb-6 shadow-sm' : 'mb-6';
+  const head = `<div class="${glass}"><div class="flex items-start justify-between gap-4 flex-wrap"><div class="min-w-0"><h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">My Dashboard</h1><p class="text-sm text-slate-500 mt-1">Hello ${esc(first)} — everything that needs you, in one place.</p></div>
+      <div class="flex gap-2 flex-wrap">${dashEdit ? vBtnPlain('Reset layout', 'dashReset()') + vBtnPrimary('Done', 'dashEdit=false; rerenderMain()') : vBtnPlain('🖼 Background', 'openDashBg()') + vBtnPlain('✥ Arrange', 'dashEdit=true; rerenderMain()')}</div></div>
+    <figure class="mt-3 pl-3 border-l-4 border-brand-400"><blockquote class="text-[14.5px] italic text-slate-700">“${esc(q[0])}”</blockquote><figcaption class="text-xs text-slate-400 mt-0.5">— ${esc(q[1])}</figcaption></figure></div>`;
+  const hiddenBar = dashEdit ? `<div class="rounded-xl border border-slate-200 bg-white px-4 py-3 mb-5 text-sm flex items-center gap-2 flex-wrap"><span class="text-slate-500">Drag the panels or use the arrows to move them.</span>${P.hidden.length ? '<span class="text-slate-400 ml-2">Hidden:</span>' + P.hidden.map(id => `<button onclick="dashShow('${id}')" class="px-2.5 py-1 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50">+ ${esc(W[id][0])}</button>`).join('') : ''}</div>` : '';
+  return head + vKpis(statCard('My open tasks', fmtNum(tasks.length), over ? over + ' overdue' : 'None overdue', over ? 'rose' : 'brand') + statCard('Waiting for my approval', fmtNum(apN), apIsApprover() ? 'PRs and documents' : 'You are not an approver', apN ? 'amber' : 'slate') + statCard('Advance & petty cash', fmtNum(bas.length + pcs.length), bas.reduce((s, r) => s + baTotals(r).pending, 0) ? bas.reduce((s, r) => s + baTotals(r).pending, 0) + ' invoice(s) pending' : 'Open business advance and petty cash', bas.length + pcs.length ? 'amber' : 'slate') + statCard('My requests', fmtNum(nReq), 'PRs, stock and travel', 'slate')) +
+    hiddenBar + `<div class="grid grid-cols-1 xl:grid-cols-2 gap-x-5 items-start">${col(0)}${col(1)}</div>`;
 }
 
 
@@ -6906,6 +7002,7 @@ function notesStart(){
   if(!authUser || !firestoreDb) return;
   notesUnsub = firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).onSnapshot(d => {
     const list = (d.exists && d.data().list) || [];
+    if(d.exists && d.data().dash){ const nd = d.data().dash; if(JSON.stringify(nd) !== JSON.stringify(myDash)){ myDash = nd; try{ localStorage.setItem(DASH_LS(), JSON.stringify(nd)); }catch(e){} if(ui.tab === 'my-work' && !dashEdit) rerenderMain(); } }
     if(Date.now() - (window._notesTyping || 0) < 2500) return;                    // don't disturb someone typing
     myNotes = list; try{ localStorage.setItem(NOTES_LS(), JSON.stringify(list)); }catch(e){}
     if(ui.tab === 'my-work') rerenderMain();
@@ -6914,7 +7011,7 @@ function notesStart(){
 function notesPersist(){
   try{ localStorage.setItem(NOTES_LS(), JSON.stringify(myNotes)); }catch(e){}
   clearTimeout(notesSaveT);
-  notesSaveT = setTimeout(() => { if(authUser && firestoreDb) firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).set({ list:myNotes, updatedAt:Date.now() }).catch(e => toast('Note not saved: ' + e.message, true)); }, 600);
+  notesSaveT = setTimeout(() => { if(authUser && firestoreDb) firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).set({ list:myNotes, updatedAt:Date.now() }, { merge:true }).catch(e => toast('Note not saved: ' + e.message, true)); }, 600);
 }
 function notesPanel(){
   if(myNotes === null) notesStart();
@@ -7079,7 +7176,7 @@ function plusAfterRender(){
   document.documentElement.classList.toggle('role-viewer', amIViewer());
   ntBadge();
   const pr = document.getElementById('presence-row'); if(pr) pr.innerHTML = presenceHtml();
-  phoneCards(); sfSave();
+  phoneCards(); sfSave(); try{ dashApplyBg(); if(ui.tab === 'my-work' && myNotes === null) notesStart(); }catch(e){}
 }
 let plusBooted = false;
 function plusBoot(){

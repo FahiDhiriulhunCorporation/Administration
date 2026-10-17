@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.186';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.188';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -8212,20 +8212,51 @@ async function saveWrNew(){
 }
 // from the app's records
 function wrAutoStock(start, end){
-  const sr = state.stockRequests || [], by = {}; const k = r => r.department || 'Not given';
-  sr.forEach(r => { const at = r.requestedAt ? localDateStr(new Date(r.requestedAt)) : '', dec = r.decidedAt ? localDateStr(new Date(r.decidedAt)) : '';
-    if(r.status === 'pending' && at <= end){ (by[k(r)] = by[k(r)] || { p:0, c:0 }).p++; }
-    if(r.status === 'approved' && dec >= start && dec <= end){ (by[k(r)] = by[k(r)] || { p:0, c:0 }).c++; } });
-  const depts = WR_STOCK_DEPTS.concat(Object.keys(by).filter(d => !WR_STOCK_DEPTS.includes(d)));
+  // the app's departments; a name typed differently (code, plural, short form) is matched to its department
+  const names = DEPARTMENTS.map(d => d.name), low = x => String(x || '').toLowerCase().replace(/[^a-z&]+/g, ' ').trim();
+  const deptOf = x => { const t = low(x); if(!t) return 'Not given';
+    const hit = DEPARTMENTS.find(d => low(d.name) === t) || DEPARTMENTS.find(d => low(d.code) === t) || DEPARTMENTS.find(d => t.startsWith(low(d.name)) || low(d.name).startsWith(t)) || DEPARTMENTS.find(d => t.split(' ')[0] === low(d.name).split(' ')[0] && t.split(' ')[0].length > 3);
+    return hit ? hit.name : String(x).trim(); };
+  const by = {}, bump = (d, f) => { (by[d] = by[d] || { p:0, c:0 })[f]++; };
+  // pending: stock-out requests waiting for approval at the end of the week
+  (state.stockRequests || []).forEach(r => { if(r.kind === 'transfer' || r.status !== 'pending') return; const at = r.requestedAt ? localDateStr(new Date(r.requestedAt)) : (r.date || ''); if(at <= end) bump(deptOf(r.department), 'p'); });
+  // completed: stock issued during the week — approved requests and stock outs logged directly (one count per issue, not per item)
+  const seen = new Set();
+  (state.movements || []).forEach(m => { if(m.type !== 'out' || !m.date || m.date < start || m.date > end) return;
+    const key = m.requestId || [m.date, m.department, m.staffName, m.reason, m.loggedByName].join('|'); if(seen.has(key)) return; seen.add(key); bump(deptOf(m.department), 'c'); });
+  const depts = names.concat(Object.keys(by).filter(d => !names.includes(d)).sort((a, b) => (a === 'Not given') - (b === 'Not given') || a.localeCompare(b)));
   return depts.map(d => ({ department:d, pending:by[d] && by[d].p ? String(by[d].p) : '', completed:by[d] && by[d].c ? String(by[d].c) : '' }));
 }
 function wrAutoVehicles(start, end){
-  const from = start;                                                               // fueling and servicing within the report's week
+  // everything for the report's week: the fuel log and servicing, plus fuel and vehicle work paid through petty cash and Purchase Requisitions
+  const inW = d => !!d && d >= start && d <= end, dt = d => pcOrdinalDate(d).replace(/ \d{4}$/, ''), money = n => vNum(n) ? ' (' + vMoney(n) + ')' : '';
+  const tag = (w, n) => { n = String(n || '').trim(); return !n ? w : new RegExp('^' + (w === 'PR' ? 'PR' : 'P\\.?C'), 'i').test(n) ? n : w + ' ' + n; };
+  const FUEL = /fuel|petrol|diesel|gasoline/i, alnum = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const keysOf = v => { const pl = String(v.plate || ''), parts = pl.split(/[-\s]+/).filter(Boolean), last = parts[parts.length - 1] || ''; return [alnum(pl), /\d/.test(last) && alnum(last).length >= 4 ? alnum(last) : ''].filter(k => k.length >= 4); };
+  const mentions = (v, text) => { const t = alnum(text); return !!t && keysOf(v).some(k => t.includes(k)); };
+  const fuelReqs = state.fuelRequisitions || [], linkedPC = new Set(fuelReqs.map(q => q.pettyCashId).filter(Boolean)), linkedPR = new Set(fuelReqs.map(q => q.prId).filter(Boolean));
+  const pcLive = (state.pettyCash || []).filter(r => !r.cancelled && r.status !== 'cancelled' && inW(r.processedDate || r.date));
+  const prLive = (state.purchaseRequisitions || []).filter(p => p.status !== 'rejected' && p.status !== 'cancelled' && inW(prRequisitionDate(p)));
   return vSorted().filter(v => (v.status || 'Active') === 'Active').map(v => {
-    const fu = state.fuelRecords.filter(r => r.vehicleId === v.id && r.date >= from && r.date <= end).sort((a, b) => a.date.localeCompare(b.date)).map(r => (r.fuelType || 'Fuel') + ' ' + fmtNum(vNum(r.litres)) + 'Lt, ' + pcOrdinalDate(r.date));
-    const sv = state.serviceRecords.filter(r => r.vehicleId === v.id && r.date >= from && r.date <= end).map(r => [r.kind === 'incident' ? (r.issue || 'Issue') + (r.status ? ' (' + r.status + ')' : '') : (r.serviceType || r.type || 'Service'), pcOrdinalDate(r.date)].join(' '));
-    const open = state.serviceRecords.filter(r => r.vehicleId === v.id && r.kind === 'incident' && r.status !== 'Resolved').map(r => (r.issue || 'Issue') + ' (' + pcOrdinalDate(r.date) + ')');
-    return { vehicle:[vName(v), v.plate].filter(Boolean).join('\n'), fueling:fu.join('\n') || '-', service:sv.join('\n') || '-', comment:open.join('\n') };
+    const fu = [], sv = [];
+    // fuel funded by PR / petty cash during the week
+    fuelReqs.filter(q => q.vehicleId === v.id && inW(q.date)).forEach(q => fu.push(tag(q.kind === 'PR' ? 'PR' : 'Petty cash', q.refNo) + ': ' + (q.fuelType || 'Fuel') + (vNum(q.litres) ? ' ' + fmtNum(vNum(q.litres)) + 'Lt' : '') + money(q.amount) + ', ' + dt(q.date)));
+    pcLive.forEach(r => { const d = r.processedDate || r.date;
+      if(r.kind === 'fuel' && !linkedPC.has(r.id)) (r.fuelRows || []).filter(x => x.vehicleId === v.id).forEach(x => fu.push(tag('Petty cash', r.number) + ': ' + (x.fuelType || 'Fuel') + (pcFuelLitres(x) ? ' ' + fmtNum(pcFuelLitres(x)) + 'Lt' : '') + money(pcFuelAmt(x)) + ', ' + dt(d)));
+      else if(r.kind !== 'fuel'){ const its = pcItems(r).filter(it => mentions(v, [it.name, it.description, r.purpose].join(' ')));
+        its.forEach(it => { const t = [it.name, it.description].filter(Boolean).join(' – ') || r.purpose || 'Item', line = tag('Petty cash', r.number) + ': ' + t + money(pcItemTotal(it)) + ', ' + dt(d);
+          (FUEL.test(t + ' ' + (r.category || '')) ? fu : sv).push(line); }); } });
+    prLive.forEach(p => { if(linkedPR.has(p.id)) return; const d = prRequisitionDate(p);
+      (p.lineItems || []).filter(l => mentions(v, [l.itemName, l.itemDescription, p.title].join(' '))).forEach(l => { const t = [l.itemName, l.itemDescription].filter(Boolean).join(' – ') || p.title || 'Item', line = tag('PR', p.prNumber) + ': ' + t + money(l.totalCost) + ', ' + dt(d);
+        (FUEL.test(t) ? fu : sv).push(line); }); });
+    // fuel log (fills)
+    state.fuelRecords.filter(r => r.vehicleId === v.id && inW(r.date)).sort((a, b) => a.date.localeCompare(b.date)).forEach(r => { const rq = vReqById(r.requisitionId);
+      fu.push((r.fuelType || 'Fuel') + ' ' + fmtNum(vNum(r.litres)) + 'Lt' + money(r.total) + ', ' + dt(r.date) + (rq ? ' — ' + tag(rq.kind === 'PR' ? 'PR' : 'Petty cash', rq.refNo) : '')); });
+    // servicing and incidents
+    state.serviceRecords.filter(r => r.vehicleId === v.id && inW(r.date)).forEach(r => sv.push((r.kind === 'incident' ? (r.issue || 'Issue') + (r.status ? ' (' + r.status + ')' : '') : (r.serviceType || r.type || 'Service')) + money(r.cost) + ', ' + dt(r.date)));
+    const open = state.serviceRecords.filter(r => r.vehicleId === v.id && r.kind === 'incident' && r.status !== 'Resolved').map(r => (r.issue || 'Issue') + ' (since ' + dt(r.date) + ')');
+    const due = state.serviceRecords.filter(r => r.vehicleId === v.id && r.nextDate && r.nextDate <= clIsoAdd(end, 14) && !state.serviceRecords.some(x => x.vehicleId === v.id && x.kind !== 'incident' && x.date > r.date)).map(r => 'Next service due ' + dt(r.nextDate));
+    return { vehicle:[vName(v), v.plate].filter(Boolean).join('\n'), fueling:fu.join('\n') || '-', service:sv.join('\n') || '-', comment:open.concat(due).join('\n') };
   });
 }
 function wrAutoPrs(end, start){

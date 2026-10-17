@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.196';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.199';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7375,7 +7375,7 @@ function viewDocs(k){
   const kpis = vKpis(statCard(k ? t.plural : 'Documents', fmtNum(all.length), fmtNum(all.filter(d => String(d.date || '').slice(0, 4) === yy).length) + ' in ' + yy, 'brand') +
     statCard('Pending approval', fmtNum(all.filter(d => d.status === 'Pending approval').length), 'Waiting to be approved or signed', all.some(d => d.status === 'Pending approval') ? 'amber' : 'slate') +
     statCard('Needs attention', fmtNum(al.length), al.length ? al.slice(0, 2).map(d => (d.refNo || d.title) + ': ' + docAlert(d).t).join(' · ') : 'Nothing expiring or overdue', al.some(d => docAlert(d).k === 'crit') ? 'rose' : al.length ? 'amber' : 'slate') +
-    statCard('Without a file link', fmtNum(all.filter(d => !d.link).length), 'Link the signed / final copy', all.some(d => !d.link) ? 'amber' : 'slate'));
+    statCard('Without a file', fmtNum(all.filter(d => !d.link && !(d.track && d.track.fileId)).length), 'Link or attach the signed / final copy', all.some(d => !d.link && !(d.track && d.track.fileId)) ? 'amber' : 'slate'));
   const typeTabs = vTabs([['', 'All (' + state.documents.length + ')']].concat(DOC_TYPES.map(x => [x.k, x.label + ' (' + state.documents.filter(d => d.type === x.k).length + ')'])), k || '', 'docGo');
   const noRef = k === 'tor';            // TORs are samples: listed by title, without reference or date
   const rows = list.map(d => { const a = docAlert(d), ty = docType(d.type) || { label:d.type }, smp = docIsSample(d);
@@ -7383,7 +7383,7 @@ function viewDocs(k){
       ${noRef ? '' : vTd(`<span class="font-semibold text-slate-800 num whitespace-nowrap">${smp ? '—' : esc(d.refNo || '—')}</span>${k ? '' : `<div class="text-[11px] text-slate-400">${esc(ty.label)}</div>`}`, { first:1 })}
       ${vTd(`<div class="font-semibold text-slate-800">${esc(d.title || '—')}</div><div class="text-[11.5px] text-slate-400">${esc(docSub(d))}</div>${a ? `<div class="text-[11.5px] font-semibold mt-0.5 ${a.k === 'crit' ? 'text-rose-600' : 'text-amber-600'}">${esc(a.t)}</div>` : ''}`, noRef ? { first:1 } : undefined)}
       ${noRef ? '' : vTd(smp || !d.date ? '—' : vDate(d.date), { cls:'whitespace-nowrap' })}${vTd(esc(d.department || (d.type === 'tor' ? torDeptOf(d.title) : '') || '—'))}${vTd(docIsSample(d) ? vPill('', 'Sample') : docStatusPill(d.status))}
-      ${vTd(d.link ? `<a href="${esc(d.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : '<span class="text-xs text-slate-400">—</span>', { last:1 })}</tr>`; }).join('');
+      ${vTd(d.link ? `<a href="${esc(d.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : d.track && d.track.fileId ? '<span class="text-xs font-semibold text-slate-500" title="File attached">📎</span>' : '<span class="text-xs text-slate-400">—</span>', { last:1 })}</tr>`; }).join('');
   return vHead(k ? t.plural : 'Documentation', k ? 'The ' + t.label.toLowerCase() + ' register: reference number, date, status, details and the link to the file.' : 'EXCO papers, memos, TORs, SOPs, agreements, staff request forms, letters and meeting minutes in one register.',
       (k === 'exco' ? vBtnPlain('Blank paper (Word)', "excoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "excoDownload('', 'pdf', this)") : '') + (k === 'memo' ? vBtnPlain('Blank memo (Word)', "memoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "memoDownload('', 'pdf', this)") : '') + (k === 'srf' ? vBtnPlain('Blank form (Word)', "srfDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "srfDownload('', 'pdf', this)") : '') + (k === 'tor' ? vBtnPlain('Blank TOR', 'openTorBlank()') : '') + (k === 'agreement' ? vBtnPlain('+ Third-party agreement', "window._agPrefill = { extra:{ thirdParty:true, remindDays:'60' } }; openDocEdit('', 'agreement')") : '') + (canManageInventory() ? vBtnPlain('Numbering', 'openDocPrefixes()') : '') + vBtnPlain('Export CSV', `docExportCsv('${k || ''}')`) + vBtnPrimary('+ ' + (k ? t.label : 'Document'), `openDocEdit('', '${k || ''}')`)) + kpis +
     `<div class="mb-4">${typeTabs}</div>${k === 'agreement' ? `<div class="inline-flex rounded-lg bg-slate-100 p-1 gap-1 mb-4">${[['', 'All agreements'], ['fdc', 'FDC agreements (' + all.filter(z => !agIsTp(z)).length + ')'], ['tp', 'Third-party (' + all.filter(agIsTp).length + ')']].map(([v, l]) => `<button onclick="vehUi.agTp='${v}'; rerenderMain()" class="px-3 py-1 rounded-md text-xs font-semibold ${(vehUi.agTp || '') === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${l}</button>`).join('')}</div>` : ''}
@@ -7541,9 +7541,24 @@ function agBlocks(d){
 }
 const agRuns = s => exRuns(s);
 
+// the Corporation's seal: the FDC logo from the letterhead, in stamp blue (PNG data URL, made once)
+let agSealCache = null;
+async function agSealPng(){
+  if(agSealCache) return agSealCache;
+  const img = new Image(); img.src = 'data:image/png;base64,' + EXCO_HDR_PNG; await img.decode();
+  const W = img.naturalWidth, H = img.naturalHeight, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, W, H).data, ink = (i, j) => { const k = (j * W + i) * 4; return d[k + 3] > 40 && (d[k] + d[k + 1] + d[k + 2]) / 3 < 235; };
+  let x0 = W, x1 = 0, y0 = H, y1 = 0; for(let j = 0; j < H; j++) for(let i = 0; i < W * 0.45; i++) if(ink(i, j)){ x0 = Math.min(x0, i); x1 = Math.max(x1, i); y0 = Math.min(y0, j); y1 = Math.max(y1, j); }
+  if(x1 <= x0) return null;
+  const S = 3, w = x1 - x0 + 1, h = y1 - y0 + 1, o = document.createElement('canvas'); o.width = w * S; o.height = h * S; const ox = o.getContext('2d'); ox.imageSmoothingEnabled = true; ox.drawImage(c, x0, y0, w, h, 0, 0, w * S, h * S);
+  const im = ox.getImageData(0, 0, o.width, o.height), q = im.data;
+  for(let k = 0; k < q.length; k += 4){ const lum = (q[k] + q[k + 1] + q[k + 2]) / 3, a = q[k + 3] / 255 * Math.min(1, Math.max(0, (245 - lum) / 70)); q[k] = 30; q[k + 1] = 64; q[k + 2] = 175; q[k + 3] = Math.round(a * 235); }
+  ox.putImageData(im, 0, 0); agSealCache = { url:o.toDataURL('image/png'), w:o.width, h:o.height }; return agSealCache;
+}
 /* --- PDF (A4, the template's layout: logo strip, Calibri-like type, page X of Y from the first page after the cover) --- */
 async function buildAgreementPdf(d){
   const B = agBlocks(d), K = [0, 0, 0], X0 = 72, X1 = 523, W = X1 - X0, TOP = 112, BOT = 752, FS = 11.5, LH = 17.2;
+  let seal = null; try{ const sp = await agSealPng(); seal = sp ? await pdfSignatureImage(sp.url) : null; }catch(e){}
   const F = { r:'cal_regular', b:'cal_bold' }, tw = (s, b, z) => pdfTextWidthK(s, b ? F.b : F.r, z || FS);
   const pages = []; let pg, y;
   const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP; };
@@ -7582,7 +7597,7 @@ async function buildAgreementPdf(d){
     if(b.t === 'sign'){
       para('**IN WITNESS WHEREOF**, the Parties have executed this Agreement as of the date first above written.', X0, W, { after:18 });
       const cx = [X0, X0 + W / 2 + 6], top = y; [['For and on behalf of the Corporation', b.fdc], ['For and on behalf of the ' + b.role, b.other]].forEach(([h, s], i) => { y = top; txt(cx[i], y + FS, h, true); y += 70;
-        [['Name: ', String(s[0]).toUpperCase()], ['Designation: ', String(s[1]).toUpperCase()], ['Date: ', b.date], ['Sign:', '']].forEach(([k, v]) => { txt(cx[i], y + FS, k + v, false); y += 30; }); y += 20; txt(cx[i], y + FS, 'Company Seal:', false); });
+        [['Name: ', String(s[0]).toUpperCase()], ['Designation: ', String(s[1]).toUpperCase()], ['Date: ', b.date], ['Sign:', '']].forEach(([k, v]) => { txt(cx[i], y + FS, k + v, false); y += 30; }); y += 20; txt(cx[i], y + FS, 'Company Seal:', false); if(i === 0 && seal){ const sw = 112, sh = sw * seal.h / seal.w; pg.image('Seal', cx[0] + 78, y + FS / 2 - sh / 2, sw, sh); } });
       y += 70; para('**IN WITNESS WHEREOF**, we indicate by our signatures that we confirm the execution of the above said Agreement by the concerned Parties to be true and accurate as of what was agreed between the Parties.', X0, W, { after:40 });
       const t2 = y; b.wit.forEach((w, i) => { y = t2; [['Name: ', w[0]], ['ID card No.: ', w[1]], ['Date: ', b.date], ['Sign:', '']].forEach(([k, v]) => { txt(cx[i], y + FS, k + v, false); y += 30; }); });
     }
@@ -7597,12 +7612,15 @@ async function buildAgreementPdf(d){
       [[String(i), 1], [' of ', 0], [String(total), 1]].forEach(([t, bb]) => { f.text(px, 786, t, { size:10, font:bb ? 'F12' : 'F9' }); px += pdfTextWidthK(t, bb ? 'cal_bold' : 'cal_regular', 10); }); }
     AG_FOOT.forEach((l, k) => f.text((PCA4_W - pdfTextWidthK(l, 'cal_regular', 8.5)) / 2 + 30, 802 + k * 11, l, { size:8.5, color:G, font:'F9' }));
     p.ops = f.ops.concat(p.ops); });
-  return pcPdfFinish(pages.map(p => ({ ops:p.ops, bare:true })), { title:'', number:'', docTitle:'Agreement ' + (d.refNo || ''), images:hdr ? { ExH:hdr } : {}, cal:true, calB:true });
+  return pcPdfFinish(pages.map(p => ({ ops:p.ops, bare:true })), { title:'', number:'', docTitle:'Agreement ' + (d.refNo || ''), images:Object.assign({}, hdr ? { ExH:hdr } : {}, seal ? { Seal:seal } : {}), cal:true, calB:true });
 }
 
 /* --- Word (Calibri, the FDC letterhead; the cover page has no page number) --- */
 async function buildAgreementDocx(d){
   const B = agBlocks(d), F = 'Calibri', S = 23, f = o => Object.assign({ font:F, sz:S }, o || {});
+  let seal = null; try{ seal = await agSealPng(); }catch(e){}
+  const sealRun = () => { if(!seal) return ''; const cx = 1422400, cy = Math.round(cx * seal.h / seal.w);      // floats beside "Company Seal:" without moving the text
+    return `<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="3" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>1130000</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>${-Math.round(cy / 2 - 90000)}</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="7" name="Seal"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="7" name="seal.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdSeal"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`; };
   const runs = (s, o) => agRuns(s).map(r => wR(r.t, f(Object.assign({}, o, r.bold ? { b:true } : {})))).join('');
   const P = (inner, o) => wP(inner, Object.assign({ after:160, line:300 }, o || {}));
   const brk = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
@@ -7628,8 +7646,8 @@ async function buildAgreementDocx(d){
       const col = (lines) => lines.map(([t, o]) => P(runs(t), Object.assign({ after:220 }, o || {}))).join('');
       const tc = inner => wTc(4513, inner);
       const tbl = rows => `<w:tbl><w:tblPr><w:tblW w:w="9026" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="4513"/><w:gridCol w:w="4513"/></w:tblGrid>${rows}</w:tbl>`;
-      const sideS = (h, s) => col([['**' + h + '**', { after:900 }], ['Name: ' + String(s[0]).toUpperCase()], ['Designation: ' + String(s[1]).toUpperCase()], ['Date: ' + b.date], ['Sign:', { after:700 }], ['Company Seal:']]);
-      body += tbl(wTr(tc(sideS('For and on behalf of the Corporation', b.fdc)) + tc(sideS('For and on behalf of the ' + b.role, b.other))));
+      const sideS = (h, s, me) => col([['**' + h + '**', { after:900 }], ['Name: ' + String(s[0]).toUpperCase()], ['Designation: ' + String(s[1]).toUpperCase()], ['Date: ' + b.date], ['Sign:', { after:700 }]]) + (me ? P(runs('Company Seal:') + sealRun(), { after:220 }) : P(runs('Company Seal:'), { after:220 }));
+      body += tbl(wTr(tc(sideS('For and on behalf of the Corporation', b.fdc, true)) + tc(sideS('For and on behalf of the ' + b.role, b.other))));
       body += P(runs('**IN WITNESS WHEREOF**, we indicate by our signatures that we confirm the execution of the above said Agreement by the concerned Parties to be true and accurate as of what was agreed between the Parties.'), { jc:'both', before:400, after:700 });
       const sideW = w => col([['Name: ' + w[0]], ['ID card No.: ' + w[1]], ['Date: ' + b.date], ['Sign:']]);
       body += tbl(wTr(tc(sideW(b.wit[0])) + tc(sideW(b.wit[1]))));
@@ -7643,7 +7661,7 @@ async function buildAgreementDocx(d){
   const addr = AG_FOOT.map(l => wP(wR(l, { font:F, color:'595959', sz:17 }), { jc:'center', line:240 })).join('');
   z.file('word/footer1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${LH_NS}>${wP(wR('Page ', { font:F, sz:20 }) + fb('PAGE') + wR(' of ', { font:F, sz:20 }) + fb('SECTIONPAGES'), { jc:'center', after:60 })}${addr}</w:ftr>`);
   z.file('word/footer2.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${LH_NS}>${addr}</w:ftr>`);
-  let rels = await z.file('word/_rels/document.xml.rels').async('string'); rels = rels.replace('</Relationships>', '<Relationship Id="rIdF2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/></Relationships>'); z.file('word/_rels/document.xml.rels', rels);
+  let rels = await z.file('word/_rels/document.xml.rels').async('string'); rels = rels.replace('</Relationships>', '<Relationship Id="rIdF2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>' + (seal ? '<Relationship Id="rIdSeal" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/seal.png"/>' : '') + '</Relationships>'); if(seal) z.file('word/media/seal.png', seal.url.split(',')[1], { base64:true }); z.file('word/_rels/document.xml.rels', rels);
   let ct = await z.file('[Content_Types].xml').async('string'); if(!/footer2\.xml/.test(ct)) ct = ct.replace('</Types>', '<Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>'); z.file('[Content_Types].xml', ct);
   return z.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression:'DEFLATE' });
 }
@@ -7690,7 +7708,7 @@ function agLoadClauses(){ const f = document.getElementById('vform'), o = vehFor
 function agRead(o){ const ex = o.extra || {}, out = {}; AG_KEYS.forEach(n => { out[n] = String(ex[n] == null ? '' : ex[n]).replace(/\s+$/, ''); }); out.thirdParty = ex.thirdParty === '1'; return out; }
 
 /* --- tracking (all agreements): renewal reminder, payments, obligations, amendments, signed copy --- */
-const agTrack = d => Object.assign({ payments:[], obligations:[], amendments:[] }, d.track || {});
+const agTrack = d => Object.assign({ payments:[], obligations:[], amendments:[], docs:[] }, (d && d.track) || {});
 function agTotals(d){ const t = agTrack(d), value = agNum(agX(d).value), paid = t.payments.filter(p => p.paid).reduce((s, p) => s + agNum(p.amount), 0), sched = t.payments.reduce((s, p) => s + agNum(p.amount), 0); return { value, paid, sched, left:Math.max(0, (value || sched) - paid) }; }
 function agAlert(d){
   const x = agX(d), t0 = vToday(), t = agTrack(d), rd = Math.max(1, Math.round(agNum(x.remindDays)) || 60);
@@ -7712,8 +7730,90 @@ function agTrackHtml(d){
     sec('Payments', `agRowEdit('${id}', 'payments', -1)`, rowsP || '<div class="px-4 py-3 text-sm text-slate-400">No payments scheduled.</div>') +
     sec('Obligations and deliverables', `agRowEdit('${id}', 'obligations', -1)`, rowsO || '<div class="px-4 py-3 text-sm text-slate-400">No obligations recorded.</div>') +
     sec('Amendments', `agRowEdit('${id}', 'amendments', -1)`, (rowsA || '<div class="px-4 py-3 text-sm text-slate-400">No amendments.</div>') + (ed && !agIsTp(d) || ed ? `<div class="px-4 py-2 border-t border-slate-100"><button onclick="agNewAmendment('${id}')" class="text-xs font-semibold text-brand-600 hover:underline">Write an amendment from the template…</button></div>` : '')) +
-    sec('Signed copy', '', `<div class="px-4 py-3 text-sm flex items-center gap-3 flex-wrap">${t.fileId ? `<button onclick="agOpenSigned('${id}')" class="font-semibold text-brand-600 hover:underline">📎 ${esc(t.fileName || 'Signed copy')}</button>` : '<span class="text-slate-400">No signed copy attached.</span>'}${ed ? `<label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer ml-auto"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agSignedFile(this, '${id}')">${t.fileId ? 'Replace' : 'Attach the signed copy (PDF or photo)'}</label>` : ''}</div>`);
+    sec('Agreement document', '', `<div class="px-4 py-3 text-sm space-y-2"><div class="flex items-center gap-3 flex-wrap">${d.link ? vLink(d.link, '🔗 Open the linked file') : '<span class="text-slate-400">No link.</span>'}${ed ? `<button onclick="closeModal(); openDocEdit('${id}')" class="text-xs font-semibold text-brand-600 hover:underline ml-auto">${d.link ? 'Change link' : 'Add a link'}</button>` : ''}</div>
+      <div class="flex items-center gap-3 flex-wrap">${t.fileId ? `<button onclick="agOpenSigned('${id}')" class="font-semibold text-brand-600 hover:underline">📎 ${esc(t.fileName || 'Agreement file')}</button>` : '<span class="text-slate-400">No file attached.</span>'}${ed ? `<label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer ml-auto"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agSignedFile(this, '${id}')">${t.fileId ? 'Replace file' : 'Attach the signed agreement (PDF)'}</label>` : ''}</div></div>`) +
+    sec('Additional documents', `agDocEdit('${id}', -1)`, (t.docs || []).length ? (t.docs || []).map((x, i) => { const ho = x.handoverId ? (state.handovers || []).find(h => h.id === x.handoverId) : null;
+      return `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm flex-wrap"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">${esc(x.kind || 'Document')}</span><span class="flex-1 min-w-0 truncate ${ed ? 'cursor-pointer hover:text-brand-700' : ''}" ${ed ? `onclick="agDocEdit('${id}', ${i})"` : ''}>${esc(x.title || (ho ? 'Handover ' + (ho.referenceNumber || '') : 'Document'))}${x.date ? ' <span class="text-slate-400">· ' + vDate(x.date) + '</span>' : ''}</span>
+        ${ho ? `<button onclick="closeModal(); goTo('handovers'); openHandoverForm('${ho.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Open handover</button>` : ''}${x.link ? `<a href="${esc(x.link)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-600 hover:underline">Open link</a>` : ''}${x.fileId ? `<button onclick="agOpenDocFile('${id}', ${i})" class="text-xs font-semibold text-brand-600 hover:underline">📎 View file</button>` : ''}</div>`; }).join('')
+      : '<div class="px-4 py-3 text-sm text-slate-400">No additional documents — add a handover, annex, quotation, certificate or any other document.</div>');
 }
+// agreement files: a PDF is kept as the original PDF (split into parts that fit the cloud store); photos become compressed pages
+const AG_PDF_MAX = 25 * 1024 * 1024, AG_CHUNK = 700000;
+async function agPrepare(files){
+  if(files.length === 1 && (/pdf/i.test(files[0].type || '') || /\.pdf$/i.test(files[0].name || ''))){
+    const f = files[0]; if(f.size > AG_PDF_MAX) throw new Error('the PDF is larger than 25 MB.');
+    return { pdf:true, name:f.name, size:f.size, bytes:new Uint8Array(await f.arrayBuffer()) };
+  }
+  if(files.some(f => /pdf/i.test(f.type || '') || /\.pdf$/i.test(f.name || ''))) throw new Error('attach one PDF at a time (photos can be several).');
+  return pcPrepareAttachment(files);
+}
+const agSizeText = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+const agAttText = a => a.pdf ? a.name + ' · PDF, ' + agSizeText(a.size) : a.name + ' · ' + a.pages.length + ' page' + (a.pages.length === 1 ? '' : 's');
+async function agStore(att, voucher){
+  const fid = uid();
+  if(att.pdf){
+    let bin = ''; for(let i = 0; i < att.bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, att.bytes.subarray(i, i + 0x8000));
+    const b64 = btoa(bin), n = Math.ceil(b64.length / AG_CHUNK);
+    for(let i = 0; i < n; i++) await pcFileSave(fid + '_c' + i, { id:fid + '_c' + i, part:i, data:b64.slice(i * AG_CHUNK, (i + 1) * AG_CHUNK) });
+    await pcFileSave(fid, { id:fid, voucher, name:att.name, kind:'pdf', chunks:n, size:att.size, at:Date.now() });
+    return { fileId:fid, fileName:att.name, filePages:0, fileKind:'pdf', fileSize:att.size };
+  }
+  await pcFileSave(fid, { id:fid, voucher, name:att.name, pages:att.pages, at:Date.now() });
+  return { fileId:fid, fileName:att.name, filePages:att.pages.length, fileKind:'img' };
+}
+async function agFileDel(fid){ if(!fid) return; try{ const m = await pcFileLoad(fid); if(m && m.kind === 'pdf') for(let i = 0; i < (m.chunks || 0); i++) pcFileDelete(fid + '_c' + i); }catch(e){} pcFileDelete(fid); }
+async function agOpenFile(fid, title, backId){
+  openModal(title, '<div class="text-sm text-slate-500">Loading the file…</div>', true);
+  let m = null; try{ m = await pcFileLoad(fid); }catch(e){}
+  const back = backId ? `<button onclick="openDocView('${backId}')" class="text-xs font-semibold text-brand-600 hover:underline">‹ Back to the agreement</button>` : '';
+  if(m && m.kind === 'pdf'){
+    try{ let b64 = ''; for(let i = 0; i < m.chunks; i++){ const c = await pcFileLoad(fid + '_c' + i); if(!c) throw new Error('a part of the file is missing'); b64 += c.data; }
+      const bin = atob(b64), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u], { type:'application/pdf' }));
+      openModal(title, `<div class="flex items-center gap-4 mb-3 text-xs font-semibold">${back}<span class="flex-1"></span><a href="${url}" target="_blank" rel="noopener" class="text-brand-600 hover:underline">Open in a new tab</a><a href="${url}" download="${esc(m.name || 'agreement.pdf')}" class="text-brand-600 hover:underline">Download PDF</a></div><iframe src="${url}" title="${esc(m.name || 'PDF')}" class="w-full rounded-lg border border-slate-200" style="height:72vh"></iframe>`, true);
+    }catch(e){ openModal(title, vEmpty('The PDF could not be loaded: ' + esc(e && e.message ? e.message : String(e))) + back, true); }
+    return;
+  }
+  openModal(title, m && m.pages ? `<div class="space-y-3">${m.pages.map((p, k) => `<img src="${p.jpeg}" alt="Page ${k + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div><div class="mt-4">${back}</div>` : vEmpty('The file could not be loaded.') + back, true);
+}
+// the agreement file chosen in the form (saved with the agreement)
+let agFormAtt = null;
+function agFileRow(d){
+  agFormAtt = null; const t = d ? agTrack(d) : {};
+  return `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agFormFile(this)"><span id="ag-att-act">${t.fileId ? 'Replace the attached agreement' : '📎 Attach the agreement (PDF)'}</span></label><span id="ag-att-info" class="text-xs text-slate-500">${t.fileId ? '📎 ' + esc(t.fileName || 'Agreement') + ' kept' : 'Optional — attach the file, link it above, or both.'}</span></div>
+    <p class="text-[11.5px] text-slate-400 mt-2">Handovers, annexes and other documents are added on the agreement's page under <b>Additional documents</b>.</p>`;
+}
+async function agFormFile(input){
+  const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('ag-att-info'); info.textContent = 'Preparing the file…';
+  try{ agFormAtt = await agPrepare(files); info.textContent = '📎 ' + agAttText(agFormAtt) + ' (saved with the agreement)'; document.getElementById('ag-att-act').textContent = 'Replace file'; }
+  catch(e){ agFormAtt = null; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); }
+}
+// additional documents: a handover from the app, a link, an attached file — or all three
+const AG_DOC_KINDS = ['Handover', 'Annex / schedule', 'Addendum', 'Quotation / proposal', 'Invoice / receipt', 'Certificate / licence', 'Correspondence', 'Other'];
+let agDocAtt = null;
+function agDocEdit(id, i){
+  const d = docById(id); if(!d) return; const t = agTrack(d), x = i >= 0 ? ((t.docs || [])[i] || {}) : { kind:'Handover', date:vToday() }; agDocAtt = null;
+  const hos = (state.handovers || []).slice().sort((a, b) => String(b.handoverDate || '').localeCompare(String(a.handoverDate || '')));
+  openModal((i >= 0 ? 'Edit' : 'Add') + ' document — ' + (d.refNo || ''), vFormOpen + vGrid(2, vS('Kind', 'kind', AG_DOC_KINDS, x.kind || 'Other', null, { attrs:' onchange="document.getElementById(\'ag-ho\').classList.toggle(\'hidden\', this.value !== \'Handover\')"' }) + vF('Date', 'date', x.date || '', 'date') +
+      `<div id="ag-ho" class="sm:col-span-2 ${x.kind === 'Handover' ? '' : 'hidden'}">${vS('Handover in the app (optional)', 'handoverId', hos.map(h => [h.id, [h.referenceNumber, h.handoverType, h.handoverDate ? vDate(h.handoverDate) : '', h.toStaffName || h.toDepartment].filter(Boolean).join(' · ')]), x.handoverId || '', '— none —')}</div>` +
+      vF('Title', 'title', x.title || '', 'text', { span:'sm:col-span-2', attrs:' placeholder="e.g. Handover of the Male\u2019 office premises"' }) + vF('Link (SharePoint / OneDrive)', 'link', x.link || '', 'url', { span:'sm:col-span-2' })) +
+    `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agDocFile(this)"><span id="agd-act">${x.fileId ? 'Replace file' : '📎 Attach a file (PDF)'}</span></label><span id="agd-info" class="text-xs text-slate-500">${x.fileId ? '📎 ' + esc(x.fileName || 'File') + ' kept' : ''}</span></div>` +
+    vFoot('Save', `agDocSave('${id}', ${i})`, i >= 0 ? `agDocDelete('${id}', ${i})` : ''));
+}
+async function agDocFile(input){ const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('agd-info'); info.textContent = 'Preparing…';
+  try{ agDocAtt = await agPrepare(files); info.textContent = '📎 ' + agAttText(agDocAtt); document.getElementById('agd-act').textContent = 'Replace file'; }catch(e){ agDocAtt = null; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
+async function agDocSave(id, i){
+  const d = docById(id); if(!d) return; const o = vehFormObj(document.getElementById('vform')), t = agTrack(d), docs = (t.docs || []).map(z => Object.assign({}, z));
+  const link = o.link ? vSafeUrl(o.link) : ''; if(o.link && !link) return vFail('The link must start with https://');
+  const x = Object.assign(i >= 0 ? docs[i] : { uid:uid() }, { kind:o.kind || 'Other', date:o.date || '', title:String(o.title || '').trim(), link, handoverId:o.kind === 'Handover' ? (o.handoverId || '') : '' });
+  if(!x.title && !x.handoverId && !x.link && !x.fileId && !agDocAtt) return vFail('Add a title, a link, a file or a handover.');
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  try{ if(agDocAtt){ const st = await agStore(agDocAtt, d.refNo || ''); if(x.fileId) agFileDel(x.fileId); Object.assign(x, st); agDocAtt = null; } }
+  catch(e){ if(btn) btn.disabled = false; return vFail('The file could not be saved: ' + (e && e.message ? e.message : e)); }
+  if(i < 0) docs.push(x); await vehSave('documents', { id, track:Object.assign({}, t, { docs }) }); closeModal(); openDocView(id);
+}
+async function agDocDelete(id, i){ const d = docById(id); if(!d) return; const t = agTrack(d), x = (t.docs || [])[i]; await vehSave('documents', { id, track:Object.assign({}, t, { docs:(t.docs || []).filter((z, k) => k !== i) }) }); if(x && x.fileId) agFileDel(x.fileId); closeModal(); openDocView(id); }
+async function agOpenDocFile(id, i){ const d = docById(id), x = d && (agTrack(d).docs || [])[i]; if(!x || !x.fileId) return; agOpenFile(x.fileId, x.title || x.kind || 'Document', id); }
 const AG_ROW = { payments:{ title:'Payment', fields:[['due', 'Due date', 'date'], ['amount', 'Amount (MVR)', 'number'], ['note', 'Description (e.g. October rent, 1st instalment)'], ['paid', 'Paid', 'check'], ['paidOn', 'Paid on', 'date'], ['ref', 'Voucher / reference']] },
   obligations:{ title:'Obligation', fields:[['who', 'Whose obligation', 'who'], ['text', 'Obligation / deliverable'], ['due', 'Due date', 'date'], ['status', 'Status', 'status']] },
   amendments:{ title:'Amendment', fields:[['date', 'Date', 'date'], ['title', 'Title (e.g. Second Amendment)'], ['note', 'What changed'], ['link', 'Link to the signed amendment']] } };
@@ -7735,15 +7835,11 @@ async function agRowSave(id, key, i){
 async function agRowDelete(id, key, i){ const d = docById(id); if(!d) return; const t = agTrack(d); await vehSave('documents', { id, track:Object.assign({}, t, { [key]:t[key].filter((x, k) => k !== i) }) }); closeModal(); openDocView(id); }
 async function agSignedFile(input, id){
   const files = [...input.files]; input.value = ''; if(!files.length) return; const d = docById(id); if(!d) return; toast('Attaching…');
-  try{ const att = await pcPrepareAttachment(files), fid = uid(); await pcFileSave(fid, { id:fid, voucher:d.refNo || '', name:att.name, pages:att.pages, at:Date.now() });
-    const t = agTrack(d), old = t.fileId; await vehSave('documents', { id, track:Object.assign({}, t, { fileId:fid, fileName:att.name, filePages:att.pages.length }) }); if(old) pcFileDelete(old); toast('Signed copy attached.'); openDocView(id); }
+  try{ const att = await agPrepare(files), st = await agStore(att, d.refNo || '');
+    const t = agTrack(d), old = t.fileId; await vehSave('documents', { id, track:Object.assign({}, t, st) }); if(old) agFileDel(old); toast('Agreement file attached.'); openDocView(id); }
   catch(e){ toast('Could not attach: ' + (e && e.message ? e.message : e), true); }
 }
-async function agOpenSigned(id){
-  const d = docById(id), t = d && agTrack(d); if(!t || !t.fileId) return; openModal('Signed copy — ' + (d.refNo || ''), '<div class="text-sm text-slate-500">Loading…</div>', true);
-  let data = null; try{ data = await pcFileLoad(t.fileId); }catch(e){}
-  openModal('Signed copy — ' + (d.refNo || ''), data && data.pages ? `<div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div><div class="mt-4"><button onclick="openDocView('${id}')" class="text-xs font-semibold text-brand-600 hover:underline">‹ Back to the agreement</button></div>` : vEmpty('The file could not be loaded.'), true);
-}
+async function agOpenSigned(id){ const d = docById(id), t = d && agTrack(d); if(!t || !t.fileId) return; agOpenFile(t.fileId, 'Agreement file — ' + (d.refNo || ''), id); }
 // start an amendment of this agreement from the template, pre-filled
 function agNewAmendment(id){
   const o = docById(id); if(!o) return; const ox = agX(o), n = state.documents.filter(z => z.type === 'agreement' && agX(z).kind === 'amendment' && agX(z).origRef === o.refNo).length + 1;
@@ -8401,7 +8497,7 @@ function openDocEdit(id, k, torK){
       vSec('EXCO') + vGrid(2, t.fields.slice(3).map(f => docField(f, x)).join('')) + vSec('File')
      : vSec(t.label + ' details') + vGrid(2, t.fields.map(f => docField(f, x)).join('')) +
     vSec('Summary and file') + vGrid(2, vTa(k === 'minutes' ? 'Summary of discussion' : 'Summary', 'summary', d ? d.summary : '', { span:'sm:col-span-2', rows:3 }))) +
-    vGrid(2, vF('Link to the file (SharePoint / OneDrive)', 'link', d ? d.link : '', 'url', { span:'sm:col-span-2' })) +
+    vGrid(2, vF('Link to the file (SharePoint / OneDrive)', 'link', d ? d.link : '', 'url', { span:'sm:col-span-2' })) + (k === 'agreement' ? agFileRow(d) : '') +
     vFoot(d ? 'Save' : 'Register', `saveDoc('${id || ''}', '${k}')`, d && canManageInventory() ? `deleteDoc('${id}')` : ''), true);
 }
 async function saveDoc(id, k){
@@ -8425,6 +8521,7 @@ async function saveDoc(id, k){
   const rec = { id:id || undefined, type:k, refNo, title:o.title.trim(), date:o.date, department:String(o.department || '').trim(), status:DOC_STATUS.includes(o.status) ? o.status : 'Draft', summary:String(o.summary || '').trim(), link, extra,
     history:((old && old.history) || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:!old ? 'Registered' : old.status !== o.status ? 'Status: ' + o.status : 'Edited' }]) };
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  if(k === 'agreement' && agFormAtt){ try{ const st = await agStore(agFormAtt, refNo), t = agTrack(old || {}); if(t.fileId) agFileDel(t.fileId); rec.track = Object.assign({}, t, st); agFormAtt = null; }catch(e){ if(btn) btn.disabled = false; return vFail('The file could not be saved: ' + (e && e.message ? e.message : e)); } }
   const nid = await vehSave('documents', rec); closeModal(); rerenderMain(); toast(id ? 'Saved.' : refNo + ' registered.'); openDocView(id || nid);
 }
 function openDocView(id){
@@ -8439,7 +8536,7 @@ function openDocView(id){
     ${(d.type === 'exco' || d.type === 'memo') && exTable(x) ? (tb => `<div class="overflow-x-auto mb-5"><table class="text-sm border border-slate-300 mx-auto"><thead><tr>${tb.cols.map(c => `<th class="border border-slate-300 px-2 py-1 text-left">${esc(c.h)}</th>`).join('')}</tr></thead><tbody>${tb.rows.map(r => `<tr>${tb.cols.map((c, i) => `<td class="border border-slate-300 px-2 py-1">${esc(r[i] || '')}</td>`).join('')}</tr>`).join('')}${tb.total ? `<tr class="font-semibold">${exTotals(tb).map(v => `<td class="border border-slate-300 px-2 py-1">${esc(v)}</td>`).join('')}</tr>` : ''}</tbody></table></div>`)(exTable(x)) : ''}
     ${d.type === 'exco' || d.type === 'memo' ? (fn => `<div class="flex flex-wrap gap-4 mb-4"><button onclick="${fn}('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="${fn}('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>`)(d.type === 'exco' ? 'excoDownload' : 'memoDownload') : d.type === 'tor' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="torDownload('${d.id}', '', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="torDownload('${d.id}', '', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : d.type === 'srf' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="srfDownload('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="srfDownload('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : ''}
     ${d.type === 'agreement' ? `<div class="flex flex-wrap items-center gap-2 mb-4">${agIsTp(d) ? vPill('acc', 'Third-party agreement') : vPill('', esc((AG_KINDS[agKind(x)] || {}).label || '')) + `<button onclick="agDownload('${d.id}', 'docx', this)" class="ml-2 text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="agDownload('${d.id}', 'pdf', this)" class="ml-2 text-xs font-semibold text-brand-600 hover:underline">Download PDF</button>`}</div>` + agTrackHtml(d) : ''}
-    ${smp && !d.link ? '' : `<div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">${d.link ? vLink(d.link, 'Open the file') : '<span class="text-amber-600">No file linked yet — use Edit to add the SharePoint link.</span>'}</div>`}
+    ${smp && !d.link || d.type === 'agreement' ? '' : `<div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">${d.link ? vLink(d.link, 'Open the file') : '<span class="text-amber-600">No file linked yet — use Edit to add the SharePoint link.</span>'}</div>`}
     <div class="flex flex-wrap gap-2 mb-4 ${smp ? 'hidden' : ''}">${DOC_STATUS.filter(s => s !== (d.status || 'Draft')).slice(0, 8).map(s => `<button onclick="docSetStatus('${d.id}', '${s}')" class="px-2.5 py-1 rounded-md border border-slate-200 text-[11.5px] font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700">${s}</button>`).join('')}</div>
     ${(d.history || []).length ? `<div class="text-[11px] text-slate-400">${(d.history || []).slice(-5).map(h => esc(h.text) + ' · ' + esc(h.by || '') + ' ' + fmtD(h.at)).join(' — ')}</div>` : ''}
     <div class="flex justify-end gap-4 pt-3 mt-4 border-t border-slate-100">${canManageInventory() ? `<button onclick="deleteDoc('${d.id}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Delete</button>` : ''}<button onclick="openDocEdit('${d.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button></div>`, true);

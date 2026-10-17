@@ -1622,7 +1622,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.188';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.190';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -6865,9 +6865,9 @@ function viewMyWork(){
   }
   const pcs = (state.pettyCash || []).filter(r => r.requesterUid === authUser.uid && !r.statementNo).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const srs = (state.stockRequests || []).filter(r => r.requestedByUid === authUser.uid).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0)).slice(0, 8);
-  const trs = (state.travelRequests || []).filter(t => t.createdBy === authUser.name || t.staffKey === me).filter(t => t.status !== 'Closed');
+  const trs = (state.travelRequests || []).filter(t => t.staffKey ? t.staffKey === me : t.createdBy === authUser.name).filter(t => t.status !== 'Closed');
   const nm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(), myName = nm(authUser.name);
-  const prs = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') !== 'closed' && ((myName && nm(p.requester) === myName) || (p.createdByEmail && p.createdByEmail === authUser.email))).sort((a, b) => prNumberCollator.compare(String(b.prNumber || ''), String(a.prNumber || '')));
+  const prs = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') !== 'closed' && (nm(p.requester) ? (myName && nm(p.requester) === myName) : (p.createdByEmail && p.createdByEmail === authUser.email))).sort((a, b) => prNumberCollator.compare(String(b.prNumber || ''), String(a.prNumber || '')));
   const reqBody = prs.map(p => { const st = prStatusMeta(p.status || 'open'); return row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requisitionDate ? vDate(p.requisitionDate) : ''].filter(Boolean).join(' · ')) + (p.status === 'pending_approval' ? ' · waiting for ' + esc(apNames()) : ''), vPill(p.status === 'released' ? 'good' : p.status === 'pending_approval' ? 'warn' : 'acc', esc(st.label)), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`); }).join('') + pcs.map(r => { const s = pcStatus(r); return row('Petty cash ' + esc(r.number || ''), esc([r.purpose, vDate(r.date)].filter(Boolean).join(' · ')), vPill(s.kind, esc(s.label)), `goTo('petty-cash'); openPcDetails('${r.id}')`); }).join('') +
     srs.map(r => row('Stock request', esc([fmtD(r.requestedAt), (getLocation(r.locationId) || {}).name].filter(Boolean).join(' · ')), vPill(r.status === 'approved' ? 'good' : r.status === 'rejected' ? 'crit' : 'warn', esc(r.status || 'pending')), `ui.movementsView='requests'; goTo('movements')`)).join('') +
     trs.map(t => row('Travel: ' + esc(t.destination || t.purpose || ''), esc(t.status || ''), vPill('acc', esc(t.status || 'Open')), `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelDetail('${t.id}')`)).join('');
@@ -8190,7 +8190,7 @@ function viewWeeklyReport(){
   if(vehUi.wrId && wrById(vehUi.wrId)) return wrEditor(wrById(vehUi.wrId));
   const list = state.weeklyReports.slice().sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)) || String(a.department).localeCompare(String(b.department)));
   const thisWeek = wrWeekEnd(vToday()), mine = list.filter(r => r.weekEnd === thisWeek);
-  return vHead('Department Weekly Report', 'Each department\'s weekly report: document entries, dispatch, stock requests, vehicles, tasks, PRs and staff on leave — filled from the app and downloaded as a PDF.', vBtnPrimary('+ Weekly report', 'openWrNew()')) +
+  return vHead('Department Weekly Report', 'Each department\'s weekly report: document entries, dispatch, stock requests, vehicles, tasks, PRs and staff on leave — filled from the app and downloaded as a PDF.', vBtnPlain('Blank template', 'openWrBlank()') + vBtnPrimary('+ Weekly report', 'openWrNew()')) +
     vKpis(statCard('This week', 'Week ' + wrIsoWeek(thisWeek), pcOrdinalDate(clIsoAdd(thisWeek, -5)) + ' – ' + pcOrdinalDate(thisWeek), 'brand') + statCard('Reports this week', fmtNum(mine.length), mine.map(r => r.department).join(', ') || 'None yet', mine.length ? 'emerald' : 'amber') +
       statCard('Open tasks', fmtNum(list[0] ? (list[0].tasks || []).filter(t => t.status !== 'Completed').length : 0), list[0] ? 'In the latest report (' + esc(list[0].department) + ')' : '—', 'slate') + statCard('Staff on leave this week', fmtNum(lvBetween(clIsoAdd(thisWeek, -5), thisWeek).length), 'From the Staff Leave Plan', 'slate')) +
     (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${fmtD(r.updatedAt)}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><button onclick="event.stopPropagation(); wrMailOpen('${r.id}')" title="Email draft with the PDF attached" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✉ Mail</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
@@ -8298,7 +8298,7 @@ function wrEditor(r){
   const entries = vPanel('Document Entry', `<button onclick="wrAddEntryDept()" class="text-xs font-semibold text-brand-600 hover:underline">+ Department</button>`, `<div class="overflow-x-auto"><table id="wr-entries" class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="px-3 py-2 w-48">Department</th><th class="px-2 py-2">Number of entries · type of entry</th></tr></thead><tbody>${ent.map(e => wrEntryRow(e)).join('')}</tbody></table></div>`);
   const leaveHtml = vPanel('Staff Leaves', `<button onclick="goTo('leave-plan')" class="text-xs font-semibold text-brand-600 hover:underline">Staff Leave Plan →</button>`, leave.length ? `<div class="divide-y divide-slate-100">${leave.map(x => `<div class="px-5 sm:px-6 py-2.5 flex justify-between gap-3 text-sm"><span><b class="text-slate-800">${esc(x.name)}</b> <span class="text-xs text-slate-400">${esc(x.department || '')}</span></span><span class="text-slate-600 text-right">${x.items.map(i => `<span class="px-1 rounded font-bold text-[11px]" style="background:${esc(lvType(i.code).color)};color:${lvInk(lvType(i.code).color)}">${esc(i.code)}</span> ${pcOrdinalDate(i.from).replace(/ \d{4}$/, '')}${i.to !== i.from ? ' – ' + pcOrdinalDate(i.to).replace(/ \d{4}$/, '') : ''}`).join(' · ')}</span></div>`).join('')}</div>` : vEmpty('Nobody is on leave this week, according to the Staff Leave Plan.'));
   return `<div class="flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.wrId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All weekly reports</button><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Weekly Report — ${esc(r.department)}</h1><p class="text-sm text-slate-500 mt-0.5">Week ${r.weekNo} · ${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}${r.preparedBy ? ' · prepared by ' + esc(r.preparedBy) : ''}</p></div>
-      <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
+      <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}${vBtnPlain('Blank template', `wrBlankPdf('${r.id}', this)`)}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
     <datalist id="wr-depts">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist><datalist id="wr-etypes">${['Invoice', 'Statement', 'Letter', 'Memo', 'Contract', 'Agreement', 'Quotation', 'Purchase Order', 'Payment Voucher'].map(t => `<option value="${t}"></option>`).join('')}</datalist><datalist id="wr-people">${state.profiles.map(p => `<option value="${esc(p.name || '')}"></option>`).join('')}</datalist>
     <div id="wr-form">${entries}${sec('dispatch')}${sec('stock')}${sec('vehicles')}${sec('tasks')}${sec('prs')}${sec('complaints')}${leaveHtml}
     ${vPanel('Notes', '', `<div class="p-4"><textarea id="wr-notes" rows="3" class="${VEH_FIELD}" placeholder="Anything else for this week">${esc(r.notes || '')}</textarea></div>`)}</div>
@@ -8329,7 +8329,8 @@ async function wrSave(id, pdf, btn){
 }
 function deleteWr(id){ if(!vehRequireAdmin('delete weekly reports')) return; const r = wrById(id); if(!r) return; confirmAction('Delete the weekly report of ' + r.department + ', week ' + r.weekNo + '?', async () => { await vehDelete('weeklyReports', id); vehUi.wrId = ''; rerenderMain(); toast('Deleted.'); }); }
 // the PDF: letterhead, title block, then each section as a table that runs over pages
-async function buildWeeklyReportPdf(r){
+async function buildWeeklyReportPdf(r, opt){
+  const blank = !!(opt && opt.blank), B = (n, k, h) => Array.from({ length:n }, () => Array(k).fill(h || ' \n '));   // blank: a template to fill by hand
   const K = [0, 0, 0], HEAD = [0.85, 0.89, 0.73], GRID = [0.45, 0.45, 0.45], SOFT = [0.75, 0.75, 0.75], L = 48, R = 547, FS = 8.5, LH = 10.6;
   const TOP = PC_TOP + 10, ROOM = PC_BOTTOM - TOP;                                  // usable height of a fresh page
   const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = PC_TOP + 14;
@@ -8405,6 +8406,19 @@ async function buildWeeklyReportPdf(r){
     y += 18;
   };
   // 1 Document Entry · 2 Dispatch · 3 Stock Request · 4 Vehicle Management · 5 Tasks · 6 Purchase Requisition · 7 Admin Complaints · 8 Staff Leaves
+  if(blank){
+    const vs = vSorted().filter(v => (v.status || 'Active') === 'Active');
+    table('Document Entry', [['Department', 2], ['Number of Entries', 1.2], ['Type of Entry', 3]], WR_ENTRY_DEPTS.map(d => [d, ' \n ', '']));
+    table('Dispatch', [['Department', 1.4], ['Dispatch Item', 2], ['Dispatched By', 1.3], ['Dispatch Date', 1.2]], B(6, 4));
+    table('Stock Request', [['Department', 2], ['Pending', 1.5], ['Completed', 1.5]], DEPARTMENTS.map(d => [d.name, '', '']));
+    table('Vehicle Management', [['', 1.1], ['Fueling', 1.6], ['Service', 1.4], ['Comment', 2.4]], vs.length ? vs.map(v => [[vName(v), v.plate].filter(Boolean).join('\n'), '', '', '']) : B(6, 4));
+    table('Tasks', [['Task', 2.2], ['Assigned To', 1.2], ['Status', 1], ['Progress', 2.4]], B(8, 4));
+    table('Purchase Requisition Request', [['PR Number', 1.5], ['PR Request', 2], ['Requested Date', 1.2], ['Status', 1], ['Details', 1.5]], B(8, 5));
+    table('Admin Complaints', [['Complaint', 2], ['Raised By', 1.3], ['Status', 0.9], ['Processing / Resolution', 2.6]], B(6, 4, ' \n \n \n '));
+    table('Staff Leaves', [['Staff', 2], ['Department', 1.6], ['Leave', 2.4]], B(6, 3));
+    keep(14 + 6 * 22); pg.text(L, y, 'Notes', { bold:true, size:11 }); y += 10; for(let i = 0; i < 6; i++){ y += 22; pg.line(L, y, R, y, GRID, 0.5); }
+    return pcPdfFinish(pages.map(p => ({ ops:p.ops })), { title:'', number:'', docTitle:'Weekly Report Template ' + r.department + ' Week ' + r.weekNo, pageNumbers:true });
+  }
   table('Document Entry', [['Department', 2], ['Number of Entries', 1.2], ['Type of Entry', 3]], (r.entries || []).map(e => [e.department, (e.lines || []).map(l => l.count ? String(l.count).padStart(2, '0') : '').join('\n'), (e.lines || []).map(l => l.type || '').join('\n')]));
   table('Dispatch', [['Department', 1.4], ['Dispatch Item', 2], ['Dispatched By', 1.3], ['Dispatch Date', 1.2]], (r.dispatch || []).map(x => [x.department, x.item, x.by, x.date ? (pcFindDates(x.date)[0] ? pcOrdinalDate(pcFindDates(x.date)[0]) : x.date) : '']));
   table('Stock Request', [['Department', 2], ['Pending', 1.5], ['Completed', 1.5]], wrRows(r, 'stock').map(x => [x.department, x.pending, x.completed]));
@@ -8531,6 +8545,24 @@ async function wrMailShare(id, btn){
     toast('Pick Outlook (or Mail), then add To: ' + wmVal('wm-to') + ' and CC: ' + wmVal('wm-cc') + ' — they were copied for you.');
   }catch(e){ if(e && e.name !== 'AbortError') toast('Could not share: ' + (e.message || e), true); }
   finally{ if(btn.isConnected) btn.disabled = false; }
+}
+// a blank template of a week's report (title block, sections and empty rows) to fill in by hand
+function openWrBlank(){
+  const me = authUser && authUser.department ? authUser.department : 'Administration';
+  openModal('Blank weekly report template', vFormOpen + vGrid(2, `<div><label class="${VEH_LBL}">Department${vReqStar}</label><input name="department" list="wr-depts-b" value="${esc(me)}" class="${VEH_FIELD}"><datalist id="wr-depts-b">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist></div>` +
+    vF('Any day in the week', 'day', vToday(), 'date', { req:1 })) + `<p class="text-[11.5px] text-slate-400 mt-2">Downloads a PDF with the week number, dates and every section with empty rows — departments and vehicles are listed so it can be filled by hand.</p>` + vFoot('Download template', 'wrBlankGo(this)'));
+}
+async function wrBlankGo(btn){
+  const o = vehFormObj(document.getElementById('vform')); if(!o.department) return vFail('Enter the department.'); if(!o.day) return vFail('Choose the week.');
+  const end = wrWeekEnd(o.day), r = { department:o.department, weekStart:clIsoAdd(end, -5), weekEnd:end, weekNo:wrIsoWeek(end) };
+  await wrBlankPdf(r, btn); closeModal();
+}
+async function wrBlankPdf(r, btn){
+  if(typeof r === 'string') r = wrById(r); if(!r) return;
+  const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ downloadBlob(await buildWeeklyReportPdf(r, { blank:true }), wrFileName(r).replace(/\.pdf$/, ' - Template.pdf')); }
+  catch(e){ console.error(e); toast('Could not create the template: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
 async function wrPdf(id, btn){
   const r = wrById(id); if(!r) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }

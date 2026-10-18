@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.229';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.231';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2537,7 +2537,7 @@ function viewFueling(){
     const list = all.filter(r => vMatch(vehUi.fuelQ, vFuelHay(r)) && (!vehUi.fuelVeh || r.vehicleId === vehUi.fuelVeh) && (!vehUi.fuelMonth || String(r.date || '').slice(0, 7) === vehUi.fuelMonth) && (!vehUi.fuelFund || r.fundType === vehUi.fuelFund) && (!vehUi.fuelReq || r.requisitionId === vehUi.fuelReq));
     const fr = vehUi.fuelReq ? vReqById(vehUi.fuelReq) : null;
     const filterNote = vehUi.fuelReq ? `<div class="flex items-center gap-2.5 mb-4">${vPill('acc', 'Showing entries for ' + esc(fr ? vReqLabel(fr) : 'requisition'))}<button onclick="vehSet('fuelReq','')" class="text-xs font-semibold text-brand-600 hover:underline">Show all</button></div>` : '';
-    body = filterNote + (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Vehicle' }, { t:'Fuel' }, { t:'Funding' }, { t:'Litres', n:1 }, { t:'Total', n:1 }, { t:'Rate / L', n:1 }, { t:'Odometer', n:1 }, { t:'Station' }, { t:'' }])}<tbody>${list.map(r => { const v = vehById(r.vehicleId), rq = vReqById(r.requisitionId); return `
+    body = vFuelSwapNote() + filterNote + (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Vehicle' }, { t:'Fuel' }, { t:'Funding' }, { t:'Litres', n:1 }, { t:'Total', n:1 }, { t:'Rate / L', n:1 }, { t:'Odometer', n:1 }, { t:'Station' }, { t:'' }])}<tbody>${list.map(r => { const v = vehById(r.vehicleId), rq = vReqById(r.requisitionId); return `
       <tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(esc(r.fuelType || '—'))}
         ${vTd(r.fundType ? `${vPill(r.fundType === 'PR' ? 'acc' : '', esc(vFundShort(r.fundType)))} <span class="font-semibold text-xs">${esc(rq ? rq.refNo : '')}</span><div class="text-[11.5px] text-slate-400">${r.poNo ? esc((r.fundType === 'PR' ? 'PO ' : 'Voucher ') + r.poNo) : ''}</div>` : '<span class="text-slate-400">—</span>')}
         ${vTd(String(Math.round(vNum(r.litres) * 1000) / 1000) + ' L', { n:1 })}${vTd(`<b>${vMoney(r.total)}</b>`, { n:1 })}${vTd(r.rate ? `<span class="text-xs text-slate-400 whitespace-nowrap">${pcMoneyPlain(r.rate)} / L</span>` : '—', { n:1 })}${vTd(r.odometer ? vNum(r.odometer).toLocaleString() : '—', { n:1 })}${vTd(esc(r.station || '—'))}
@@ -2874,6 +2874,29 @@ function vehOpenReqView(id){
   openModal((rq.kind === 'PR' ? 'PR ' : 'Petty cash ') + rq.refNo, body, true);
 }
 function vehNewReqLike(id){ const sr = vReqById(id); if(!sr) return; openVehReqForm(null, { vehicleId:sr.vehicleId, fuelType:sr.fuelType, kind:sr.kind }); }
+// entries where the price per litre went into Litres (e.g. 16.01 L at 3.12 / L for MVR 50): no fuel costs under MVR 8 a litre
+const VEH_MIN_RATE = 8;
+const vFuelSwapped = f => { const L = vNum(f.litres), T = vNum(f.total); return L >= VEH_MIN_RATE && T > 0 && T / L < VEH_MIN_RATE; };
+function vFuelSwapNote(){
+  const bad = state.fuelRecords.filter(vFuelSwapped); if(!bad.length || (authUser && !canManageInventory())) return '';
+  return `<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-4 text-sm text-amber-800 flex flex-wrap items-center justify-between gap-3"><div><b>${bad.length} fuel entr${bad.length === 1 ? 'y has' : 'ies have'} the litres and the rate swapped</b> — e.g. ${esc(vNum(bad[0].litres) + ' L')} at ${pcMoneyPlain(vNum(bad[0].total) / vNum(bad[0].litres))} / L for ${vMoney(bad[0].total)}. The price per litre was entered as the litres.</div><button onclick="vFuelSwapFix()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700">Fix ${bad.length === 1 ? 'it' : 'them'}</button></div>`;
+}
+function vFuelSwapFix(){
+  const bad = state.fuelRecords.filter(vFuelSwapped); if(!bad.length) return;
+  confirmAction(`Correct ${bad.length} fuel entr${bad.length === 1 ? 'y' : 'ies'}? The number in Litres becomes the rate per litre, and the litres are worked out from the amount (e.g. MVR 50 ÷ 16.01 = 3.123 L). The petty cash invoices behind them are corrected too.`, async () => {
+    const vouchers = {};
+    for(const f of bad){
+      const rate = Math.round(vNum(f.litres) * 100) / 100, lit = Math.round(vNum(f.total) / vNum(f.litres) * 1000) / 1000;
+      await vehSave('fuelRecords', { id:f.id, litres:lit, rate });
+      if(f.pcId && f.pcInvUid){ (vouchers[f.pcId] = vouchers[f.pcId] || {})[f.pcInvUid] = { litres:lit, rate }; }
+    }
+    for(const [pid, fixes] of Object.entries(vouchers)){
+      const r = state.pettyCash.find(x => x.id === pid); if(!r || !Array.isArray(r.invoices)) continue;
+      await vehSave('pettyCash', { id:pid, invoices:r.invoices.map(iv => fixes[iv.uid] ? Object.assign({}, iv, fixes[iv.uid]) : iv) });
+    }
+    rerenderMain(); toast(bad.length + ' fuel entr' + (bad.length === 1 ? 'y' : 'ies') + ' corrected.');
+  });
+}
 function openVehFuelView(id){
   const r = state.fuelRecords.find(x => x.id === id); if(!r) return;
   const v = vehById(r.vehicleId), rq = vReqById(r.requisitionId);
@@ -3673,9 +3696,9 @@ function pcInvoiceRowHtml(inv){
     <input type="text" data-f="supplier" value="${esc(inv.supplier || '')}" placeholder="Supplier" class="${VEH_FIELD}">
     <input type="text" data-f="number" value="${esc(inv.number || '')}" placeholder="Invoice no." class="${VEH_FIELD}">
     <input type="date" data-f="date" value="${esc(inv.date || '')}" class="${VEH_FIELD}">
-    <input type="number" data-f="amount" value="${esc(inv.amount == null ? '' : inv.amount)}" min="0" step="0.01" placeholder="Amount" oninput="pcInvoiceRecalc()" class="${VEH_FIELD}">
+    <input type="number" data-f="amount" value="${esc(inv.amount == null ? '' : inv.amount)}" min="0" step="0.01" placeholder="Amount" oninput="pcInvoiceRecalc(); pcFuelCalc(this, 'amount')" class="${VEH_FIELD}">
     <button type="button" onclick="pcRemoveInvoice(this)" class="text-slate-400 hover:text-rose-600 pt-2.5" title="Remove this invoice">✕</button>
-    ${pcInvFuelVehs ? `<div class="sm:col-span-5 grid grid-cols-[1fr_7rem] gap-2"><select data-f="vehicleId" class="${VEH_FIELD} bg-white"><option value="">Vehicle fueled…</option>${pcInvFuelVehs.map(([id, lab]) => `<option value="${esc(id)}" ${(inv.vehicleId || (pcInvFuelVehs.length === 1 ? pcInvFuelVehs[0][0] : '')) === id ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select><input type="number" data-f="litres" value="${esc(inv.litres == null ? '' : inv.litres)}" min="0" step="any" placeholder="Litres" class="${VEH_FIELD}"></div>` : ''}
+    ${pcInvFuelVehs ? `<div class="sm:col-span-5 grid gap-x-2 gap-y-1" style="grid-template-columns:minmax(0,1fr) 7.5rem 6.5rem"><div class="text-[11px] font-semibold text-slate-500">Vehicle</div><div class="text-[11px] font-semibold text-slate-500">Rate / L (MVR)</div><div class="text-[11px] font-semibold text-slate-500">Litres</div><select data-f="vehicleId" class="${VEH_FIELD} bg-white"><option value="">Vehicle fueled…</option>${pcInvFuelVehs.map(([id, lab]) => `<option value="${esc(id)}" ${(inv.vehicleId || (pcInvFuelVehs.length === 1 ? pcInvFuelVehs[0][0] : '')) === id ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select><input type="number" data-f="rate" value="${esc(inv.rate ? inv.rate : '')}" min="0" step="any" placeholder="Rate / L (MVR)" title="Price of 1 litre in MVR" oninput="pcFuelCalc(this, 'rate')" class="${VEH_FIELD}"><input type="number" data-f="litres" value="${esc(inv.litres == null ? '' : inv.litres)}" min="0" step="any" placeholder="Litres" oninput="pcFuelCalc(this, 'litres')" class="${VEH_FIELD}"><div class="pc-fuel-calc text-xs text-slate-500 -mt-0.5" style="grid-column:1 / -1"></div></div>` : ''}
     <textarea data-f="description" rows="${Math.max(1, String(inv.description || '').split('\n').length)}" placeholder="Description for the statement — press Enter for another line, e.g. PETROL 3.577 Lt, 13.98 MVR/Lt (50.00)" oninput="this.rows = Math.max(1, this.value.split(String.fromCharCode(10)).length);${pcInvFuelVehs ? ' pcInvDescLitres(this)' : ''}" class="sm:col-span-5 resize-y ${VEH_FIELD}">${esc(inv.description || '')}</textarea>
     <input type="text" data-f="link" value="${esc(inv.link || '')}" placeholder="Link to the invoice document, e.g. SharePoint (optional)" inputmode="url" autocomplete="off" class="veh-link sm:col-span-5 ${VEH_FIELD}">
     <div class="sm:col-span-5 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs -mt-0.5"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcRowFileChosen(this)"><span class="pc-att-act">📎 Attach the invoice file (PDF or photo)</span></label><span class="pc-att-info text-slate-500"></span><button type="button" onclick="pcRowReadAttached(this)" class="pc-att-read font-semibold text-brand-600 hover:underline hidden">Fill the boxes from this file</button><button type="button" onclick="pcRowAttachRemove(this)" class="pc-att-rm text-slate-400 hover:text-rose-600 hidden">Remove file</button></div></div>`;
@@ -3690,7 +3713,7 @@ function pcAttachRefresh(row){
 function pcRowAttachRemove(btn){ const row = btn.closest('.pc-irow'); delete pcAttach[row.dataset.key]; row.dataset.fid = ''; row.dataset.pages = '0'; row.dataset.fname = ''; pcAttachRefresh(row); }
 function pcReadInvoices(){
   return [...document.querySelectorAll('#pc-invoices .pc-irow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); const go = f => { const e = row.querySelector(`[data-f="${f}"]`); return e ? e.value.trim() : ''; };
-    return { key:row.dataset.key, uid:row.dataset.uid || '', vehicleId:go('vehicleId'), litres:go('litres'), supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
+    return { key:row.dataset.key, uid:row.dataset.uid || '', vehicleId:go('vehicleId'), litres:go('litres'), rate:go('rate'), supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
     .filter(i => i.supplier || i.number || i.date || i.amount || i.description || i.link || i.fileId || pcAttach[i.key]);
 }
 function pcInvoiceRecalc(){ const el = document.getElementById('pc-inv-total'); if(el) el.textContent = fmtMVR(pcRound(pcReadInvoices().reduce((s, i) => s + vNum(i.amount), 0))); }
@@ -3699,10 +3722,27 @@ function pcAddInvoice(inv){
   const empty = rows.find(r => ![...r.querySelectorAll('input[type=text],input[type=number],input[type=date],textarea')].some(i => i.value.trim()) && !r.dataset.fid && !pcAttach[r.dataset.key]);
   const tmp = document.createElement('div'); tmp.innerHTML = pcInvoiceRowHtml(inv); const row = tmp.firstElementChild;
   if(empty && inv) empty.replaceWith(row); else box.appendChild(row);
-  pcAttachRefresh(row); pcInvoiceRecalc(); return row;
+  pcAttachRefresh(row); pcInvoiceRecalc();
+  const lEl = row.querySelector('[data-f="litres"]'); if(lEl){ if(lEl.value) lEl.dataset.auto = '0'; pcFuelCalc(lEl, 'init'); }
+  return row;
 }
 // fills the row's empty boxes from what was read (never over what was typed)
-function pcInvDescLitres(el){ const row = el.closest('.pc-irow'), l = row.querySelector('[data-f="litres"]'), m = /(\d+(?:\.\d+)?)\s*(?:l|lt|ltr|litres?|liters?)\b/i.exec(el.value); if(l && m && !l.value) l.value = m[1]; }
+function pcInvDescLitres(el){ const row = el.closest('.pc-irow'), l = row.querySelector('[data-f="litres"]'), rt = row.querySelector('[data-f="rate"]');
+  const m = /(\d+(?:\.\d+)?)\s*(?:l|lt|ltr|litres?|liters?)\b/i.exec(el.value), mr = /(\d+(?:\.\d+)?)\s*(?:MVR|MRF|Rf)\s*\/\s*(?:l|lt|ltr|litre|liter)\b/i.exec(el.value);
+  if(l && m && !l.value) l.value = m[1]; if(rt && mr && !rt.value) rt.value = mr[1]; if(l) pcFuelCalc(l, 'desc'); }
+// a fuel invoice: rate per litre (MVR) and litres work each other out from the amount — litres = amount ÷ rate, rate = amount ÷ litres
+function pcFuelCalc(el, src){
+  const row = el.closest('.pc-irow'); if(!row) return; const rt = row.querySelector('[data-f="rate"]'), l = row.querySelector('[data-f="litres"]'), out = row.querySelector('.pc-fuel-calc'); if(!rt || !l || !out) return;
+  const amt = vNum(row.querySelector('[data-f="amount"]').value);
+  if(src === 'litres') l.dataset.auto = '0'; if(src === 'rate') rt.dataset.auto = '0';
+  if(amt > 0 && vNum(rt.value) > 0 && (src === 'rate' || src === 'amount') && l.dataset.auto !== '0') l.value = String(Math.round(amt / vNum(rt.value) * 1000) / 1000);
+  else if(amt > 0 && vNum(l.value) > 0 && (src === 'litres' || src === 'amount') && (rt.dataset.auto === '1' || !rt.value)){ rt.value = String(Math.round(amt / vNum(l.value) * 100) / 100); rt.dataset.auto = '1'; }
+  const R = vNum(rt.value), L = vNum(l.value), fL = x => vNum(x).toLocaleString('en-US', { maximumFractionDigits:3 }) + ' L';
+  if(!(amt > 0) || !(R > 0 || L > 0)){ out.innerHTML = amt > 0 ? 'Enter the rate per litre or the litres — the other is worked out from the amount.' : ''; return; }
+  const calc = L > 0 && R > 0 ? pcRound(L * R) : 0, off = calc && Math.abs(calc - amt) > 0.05;
+  out.innerHTML = (R > 0 ? `Litres = MVR ${pcMoneyPlain(amt)} ÷ MVR ${pcMoneyPlain(R)} per litre = <b class="text-slate-700">${fL(Math.round(amt / R * 1000) / 1000)}</b>` : `Rate = MVR ${pcMoneyPlain(amt)} ÷ ${fL(L)} = <b class="text-slate-700">MVR ${pcMoneyPlain(amt / L)} per litre</b>`)
+    + (calc ? ` · Total = ${fL(L)} × MVR ${pcMoneyPlain(R)} = <b class="${off ? 'text-amber-600' : 'text-slate-700'}">MVR ${pcMoneyPlain(calc)}</b>${off ? ' (the invoice says MVR ' + pcMoneyPlain(amt) + ')' : ''}` : '');
+}
 function pcFillRowFrom(row, got){
   let n = 0;
   [['supplier', got.supplier], ['number', got.number], ['date', got.date], ['amount', got.amount], ['description', got.description]].forEach(([f, v]) => { const el = row.querySelector(`[data-f="${f}"]`); if(el && v && !el.value.trim()){ el.value = v; n++; } });
@@ -3968,7 +4008,7 @@ function openPcInvoices(id){
   const invoices = pcInvoices(r).length ? pcInvoices(r) : [{}];
   openModal('Invoices — ' + (r.number || ''), vFormOpen + `
     <div class="text-sm text-slate-600 mb-1"><b class="text-slate-900">${esc(r.number || '')}</b> · ${esc(r.purpose || '')} · requested ${fmtMVR(pcTotal(r))}</div>
-    ${pcInvFuelVehs ? '<div class="text-[12px] rounded-lg bg-amber-50 text-amber-800 px-3.5 py-2.5 mb-3">Fueling voucher: choose the vehicle and litres on each invoice. Saving logs each one under Fueling against the vehicle\'s petty cash fuel requisition, so its balance goes down.</div>' : ''}<div class="text-[12px] text-slate-500 mb-4">A voucher needs an invoice to go into a statement. The <b>description</b> of each invoice is what the statement shows under Details (one line per invoice). Type the details, or read them from the invoice file.</div>
+    ${pcInvFuelVehs ? '<div class="text-[12px] rounded-lg bg-amber-50 text-amber-800 px-3.5 py-2.5 mb-3">Fueling voucher: choose the vehicle on each invoice and enter the rate per litre (MVR) — the litres are worked out from the amount (or enter the litres and the rate is worked out). Saving logs each one under Fueling against the vehicle\'s petty cash fuel requisition, so its balance goes down.</div>' : ''}<div class="text-[12px] text-slate-500 mb-4">A voucher needs an invoice to go into a statement. The <b>description</b> of each invoice is what the statement shows under Details (one line per invoice). Type the details, or read them from the invoice file.</div>
     <div class="hidden sm:grid grid-cols-[1.6fr_1.2fr_8.25rem_6.25rem_1.5rem] gap-2 text-[11px] font-semibold text-slate-400 mb-1.5"><span>Supplier</span><span>Invoice no.</span><span>Invoice date</span><span>Amount</span><span></span></div>
     <div id="pc-invoices">${invoices.map(pcInvoiceRowHtml).join('')}</div>
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-1">
@@ -3977,7 +4017,7 @@ function openPcInvoices(id){
       <span id="pc-inv-status" class="text-xs text-slate-400"></span>
       <span class="ml-auto text-sm text-slate-500">Invoice total <b id="pc-inv-total" class="text-slate-900 num ml-1">${fmtMVR(pcInvoiceTotal(r))}</b></span></div>
     ${vFoot('Save invoices', `savePcInvoices('${id}')`)}`, true);
-  document.querySelectorAll('#pc-invoices .pc-irow').forEach(pcAttachRefresh); pcInvoiceRecalc();
+  document.querySelectorAll('#pc-invoices .pc-irow').forEach(row => { pcAttachRefresh(row); const lEl = row.querySelector('[data-f="litres"]'); if(lEl){ if(lEl.value) lEl.dataset.auto = '0'; pcFuelCalc(lEl, 'init'); } }); pcInvoiceRecalc();
 }
 // a fueling voucher's invoices become fuel entries (one per invoice) against the vehicle's petty cash fuel requisition
 async function pcSyncFuelLog(r){
@@ -3987,7 +4027,7 @@ async function pcSyncFuelLog(r){
     const row = (r.fuelRows || []).find(f => f.vehicleId === iv.vehicleId) || {}, v = vehById(iv.vehicleId);
     const rq = state.fuelRequisitions.find(q => q.pettyCashId === r.id && q.vehicleId === iv.vehicleId);
     const lit = vNum(iv.litres), rec = { vehicleId:iv.vehicleId, fuelType: (rq && rq.fuelType) || row.fuelType || (v && v.fuelType) || 'Petrol', fundType:'Petty Cash', requisitionId: rq ? rq.id : '',
-      date: iv.date || r.date, litres: lit, rate: lit ? Math.round(vNum(iv.amount) / lit * 100) / 100 : '', total: vNum(iv.amount), station: iv.supplier || '', ref: iv.number || '', docUrl: iv.link || '',
+      date: iv.date || r.date, litres: lit, rate: vNum(iv.rate) || (lit ? Math.round(vNum(iv.amount) / lit * 100) / 100 : ''), total: vNum(iv.amount), station: iv.supplier || '', ref: iv.number || '', docUrl: iv.link || '',
       notes: 'Petty cash voucher ' + r.number, pcId: r.id, pcInvUid: iv.uid };
     const ex = mine.find(f => f.pcInvUid === iv.uid);
     if(ex) rec.id = ex.id;
@@ -4005,9 +4045,10 @@ async function savePcInvoices(id){
     const link = inv.link ? normalizeWebUrl(inv.link) : '';
     if(link === null) return vFail('Invoice ' + (i + 1) + ': the document link must be a web address (starting with https://).');
     if(r.kind === 'fuel' && !inv.vehicleId) return vFail('Invoice ' + (i + 1) + ': choose the vehicle that was fueled.');
-    if(r.kind === 'fuel' && !(vNum(inv.litres) > 0)) return vFail('Invoice ' + (i + 1) + ': enter the litres.');
+    if(r.kind === 'fuel' && !(vNum(inv.litres) > 0)) return vFail('Invoice ' + (i + 1) + ': enter the rate per litre or the litres.');
+    if(r.kind === 'fuel' && vNum(inv.amount) / vNum(inv.litres) < VEH_MIN_RATE) return vFail('Invoice ' + (i + 1) + ': ' + vNum(inv.litres) + ' L for MVR ' + pcMoneyPlain(inv.amount) + ' is only MVR ' + pcMoneyPlain(vNum(inv.amount) / vNum(inv.litres)) + ' a litre — it looks like the price per litre went into Litres. Put it under Rate / L instead.');
     invoices.push(Object.assign({ uid: inv.uid || uid(), supplier:inv.supplier, number:inv.number, date:inv.date, amount:vNum(inv.amount), description:inv.description, link, fileId:inv.fileId || '', filePages:inv.filePages || 0, fileName:inv.fileName || '', _key:inv.key },
-      r.kind === 'fuel' ? { vehicleId:inv.vehicleId, litres:vNum(inv.litres) } : {}));
+      r.kind === 'fuel' ? { vehicleId:inv.vehicleId, litres:vNum(inv.litres), rate:vNum(inv.rate) || (vNum(inv.litres) ? Math.round(vNum(inv.amount) / vNum(inv.litres) * 100) / 100 : 0) } : {}));
   }
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   try{

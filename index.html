@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.214';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.216';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -10021,8 +10021,8 @@ function trNextMemoNo(){
 }
 function trTicketInfo(t){
   const k = t.ticket || {};
-  if(k.via === 'pr'){ const p = state.purchaseRequisitions.find(x => x.id === k.prId); return p ? { kind:'PR', label:p.prNumber || 'PR', amount:vNum(p.totalCost), sub:prFirstItem(p) || '', url:p.prUrl || '' } : { kind:'PR', label:'PR not found', amount:0, sub:'' }; }
-  if(k.via === 'petty'){ const r = state.pettyCash.find(x => x.id === k.pettyId); return r ? { kind:'Petty cash', label:r.number || 'Petty cash request', amount:pcTotal(r), sub:r.purpose || '' } : { kind:'Petty cash', label:'Request not found', amount:0, sub:'' }; }
+  if(k.via === 'pr'){ const p = k.prId && state.purchaseRequisitions.find(x => x.id === k.prId); return p ? { kind:'PR', label:p.prNumber || 'PR', amount:vNum(p.totalCost), sub:prFirstItem(p) || '', url:p.prUrl || '' } : { kind:'PR', label:k.ref || (k.prId ? 'PR not found' : 'PR (not linked)'), amount:0, sub:k.ref ? '' : 'Not linked in the app' }; }
+  if(k.via === 'petty'){ const r = k.pettyId && state.pettyCash.find(x => x.id === k.pettyId); return r ? { kind:'Petty cash', label:r.number || 'Petty cash request', amount:pcTotal(r), sub:r.purpose || '' } : { kind:'Petty cash', label:k.ref || (k.pettyId ? 'Request not found' : 'Petty cash (not linked)'), amount:0, sub:k.ref ? '' : 'Not linked in the app' }; }
   if(k.via === 'none') return { kind:'none', label:'No ticket needed' };
   return null;
 }
@@ -10077,7 +10077,7 @@ function trAddPerson(){ const box = document.getElementById('tr-people-box'); if
 function trProfileDesig(name){ const pr = hoFindProfile(name); return pr ? [pr.designation, pr.department].filter(Boolean).join(', ') : ''; }
 function trFillDesig(inp){ const row = inp.closest('.tr-person'), d = row.querySelector('.tr-pdesig'), c = row.querySelector('.tr-pcat'); if(d && !d.value.trim()){ const v = trProfileDesig(inp.value); if(v) d.value = v; } const k = trStaffCat(inp.value); if(c && k) c.value = k; trDsaPreview(); }
 function trFillOne(nameInp, desigName){ const f = document.getElementById('vform'); if(!f || !f[desigName]) return; const v = trProfileDesig(nameInp.value); if(v) f[desigName].value = v; }
-function trTicketVia(v){ ['pr', 'petty'].forEach(k => { const el = document.getElementById('tr-tk-' + k); if(el) el.style.display = v === k ? '' : 'none'; }); }
+function trTicketVia(v){ ['pr', 'petty'].forEach(k => { const el = document.getElementById('tr-tk-' + k); if(el) el.style.display = v === k ? '' : 'none'; }); const r = document.getElementById('tr-tk-ref'); if(r) r.style.display = v === 'pr' || v === 'petty' ? '' : 'none'; }
 function trDsaToggle(on){ const el = document.getElementById('tr-dsa'); if(el) el.style.display = on ? '' : 'none'; trDsaPreview(); }
 function trDatesChanged(){
   const f = document.getElementById('vform'); if(!f) return; const n = trDays(f.fromDate.value, f.toDate.value), out = document.getElementById('tr-days');
@@ -10146,8 +10146,9 @@ function openTravelForm(id, scope){
     <div class="mt-3.5">${vF('Link to the signed travel request form (optional)', 'formUrl', t ? t.formUrl : '', 'url')}${trAttRow('form', t && t.formFile, 'Attach the signed travel request form (PDF)')}</div>
     ${vSec('Ticket')}
     ${vGrid(2, vS('Ticket bought through', 'ticket.via', [['pr', 'Purchase Requisition (PR)'], ['petty', 'Petty Cash Request'], ['none', 'No ticket needed']], tk.via, 'Not decided yet', { attrs:' onchange="trTicketVia(this.value)"' }) +
-      `<div id="tr-tk-pr" ${tk.via === 'pr' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Purchase Requisition</label><select name="ticket.prId" class="${VEH_FIELD} bg-white"><option value="">Choose a PR…</option>${prs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.prId ? 'selected' : ''}>${esc(p.prNumber || '—')}${prFirstItem(p) ? ' — ' + esc(prFirstItem(p)) : ''} — ${esc(vMoney(p.totalCost))}</option>`).join('')}</select></div>` +
-      `<div id="tr-tk-petty" ${tk.via === 'petty' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Petty Cash Request</label><select name="ticket.pettyId" class="${VEH_FIELD} bg-white"><option value="">Choose a request…</option>${pcs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.pettyId ? 'selected' : ''}>${esc(p.number || '—')}${p.purpose ? ' — ' + esc(String(p.purpose).slice(0, 50)) : ''} — ${esc(fmtMVR(pcTotal(p)))}</option>`).join('')}</select></div>`)}
+      `<div id="tr-tk-pr" ${tk.via === 'pr' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Purchase Requisition</label><select name="ticket.prId" class="${VEH_FIELD} bg-white"><option value="">Not linked (optional)</option>${prs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.prId ? 'selected' : ''}>${esc(p.prNumber || '—')}${prFirstItem(p) ? ' — ' + esc(prFirstItem(p)) : ''} — ${esc(vMoney(p.totalCost))}</option>`).join('')}</select></div>` +
+      `<div id="tr-tk-petty" ${tk.via === 'petty' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Petty Cash Request</label><select name="ticket.pettyId" class="${VEH_FIELD} bg-white"><option value="">Not linked (optional)</option>${pcs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.pettyId ? 'selected' : ''}>${esc(p.number || '—')}${p.purpose ? ' — ' + esc(String(p.purpose).slice(0, 50)) : ''} — ${esc(fmtMVR(pcTotal(p)))}</option>`).join('')}</select></div>`)}
+    <div id="tr-tk-ref" class="mt-3.5" ${tk.via === 'pr' || tk.via === 'petty' ? '' : 'style="display:none"'}>${vF('PR / petty cash number (if not in the app, e.g. a backdated request)', 'ticket.ref', tk.ref || '', 'text', { attrs:' placeholder="optional"' })}</div>
     ${vSec('Daily Subsistence Allowance (DSA)')}
     <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="dsa.enabled" value="1" ${d.enabled ? 'checked' : ''} onchange="trDsaToggle(this.checked)"> DSA is paid for this trip</label>
     <div id="tr-dsa" ${d.enabled ? '' : 'style="display:none"'} class="mt-3">
@@ -10192,8 +10193,6 @@ async function saveTravel(id){
   if(o.toDate < o.fromDate) return vFail('The return date is before the departure date.');
   if(!parts.length) return vFail('Add at least one traveller.');
   const tk = o.ticket || {}, dd = o.dsa || {}, on = !!(f['dsa.enabled'] && f['dsa.enabled'].checked);
-  if(tk.via === 'pr' && !tk.prId) return vFail('Choose the PR for the ticket, or change how the ticket is bought.');
-  if(tk.via === 'petty' && !tk.pettyId) return vFail('Choose the petty cash request for the ticket, or change how the ticket is bought.');
   const urls = {}; for(const [k, v] of [['formUrl', o.formUrl], ['memoUrl', dd.memoUrl]]){ if(v){ const u = vSafeUrl(v); if(!u) return vFail('Enter a full web link starting with https://'); urls[k] = u; } else urls[k] = ''; }
   const memoNo = String(dd.memoNo || '').trim();
   if(on && memoNo && /\/$/.test(memoNo)) return vFail('Complete the memo number (it ends with the running number).');
@@ -10201,7 +10200,7 @@ async function saveTravel(id){
   const rec = { id:id || undefined, scope:o.scope === 'foreign' ? 'foreign' : 'local', formNumber:String(o.formNumber || '').trim(), formDate:o.formDate || '', destination:o.destination.trim(), country:String(o.country).trim(), rateLocation:String(o.rateLocation || '').trim(), fromDate:o.fromDate, toDate:o.toDate,
     budget:o.budget || '', purpose:String(o.purpose || '').trim(), status:TR_STATUSES.includes(o.status) ? o.status : 'Open', participants:parts, comments:String(o.comments || '').trim(),
     requestedBy:String(o.requestedBy || '').trim(), requestedDesig:String(o.requestedDesig || '').trim(), authorizedBy:String(o.authorizedBy || '').trim(), authorizedDesig:String(o.authorizedDesig || '').trim(), formUrl:urls.formUrl,
-    ticket:{ via:tk.via || '', prId:tk.via === 'pr' ? tk.prId : '', pettyId:tk.via === 'petty' ? tk.pettyId : '' },
+    ticket:{ via:tk.via || '', prId:tk.via === 'pr' ? tk.prId : '', pettyId:tk.via === 'petty' ? tk.pettyId : '', ref:(tk.via === 'pr' && !tk.prId) || (tk.via === 'petty' && !tk.pettyId) ? String(tk.ref || '').trim() : '' },
     dsa:{ enabled:on, currency:String(dd.currency || 'MVR').trim() || 'MVR', mealRate:pcRound(vNum(dd.mealRate)), mealDays:Math.round(vNum(dd.mealDays)), pocketRate:pcRound(vNum(dd.pocketRate)), pocketDays:Math.round(vNum(dd.pocketDays)), accomRate:pcRound(vNum(dd.accomRate)), accomDays:Math.round(vNum(dd.accomDays)), stopRate:pcRound(vNum(dd.stopRate)), stopDays:Math.round(vNum(dd.stopDays)),
       cat2:Object.fromEntries(TR_ALLOW.map(([k]) => [k, pcRound(vNum((dd.cat2 || {})[k]))])), memoNo, memoDate:dd.memoDate || '', memoFrom:String(dd.memoFrom || '').trim(), memoTo:String(dd.memoTo || '').trim(), memoCc:String(dd.memoCc || '').trim(), signName:String(dd.signName || '').trim(), signDesig:String(dd.signDesig || '').trim(), memoUrl:urls.memoUrl } };
   if(on && !trDsaTotal(rec)) return vFail('Enter the DSA amounts and days, or untick "DSA is paid for this trip".');
@@ -10388,7 +10387,11 @@ async function buildTravelMemoPdf(t){
     y = b0 + blockH; pg.line(X[0], y, X[7], y, GRID, 0.5); X.forEach(x => pg.line(x, b0, x, y, GRID, 0.5));
   });
   if(ps.length > 1){ const h = 17; pg.fill(X[0], y, X[7] - X[0], h, HEAD); txt(X[0] + 4, y + 11.5, 'Total DSA (' + ps.length + ' staff)', { bold:true, size:8.5 }); center(X[6], X[7], y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(X[0], y + h, X[7], y + h, GRID, 0.5); pg.line(X[0], y, X[0], y + h, GRID, 0.5); pg.line(X[6], y, X[6], y + h, GRID, 0.5); pg.line(X[7], y, X[7], y + h, GRID, 0.5); y += h; }
-  y += 30; txt(L, y, 'Best Regards,'); y += 62;
+  y += 30; txt(L, y, 'Thank You');
+  // the sign-off sits at the bottom of the page (or just below the table when the table runs low)
+  const signH = 62 + (d.signName ? 18 : 0) + (d.signDesig ? 18 : 0) + 16;
+  y = Math.max(y + 40, 762 - signH);
+  txt(L, y, 'Best Regards,'); y += 62;
   if(d.signName){ txt(L, y, d.signName); y += 18; } if(d.signDesig){ txt(L, y, d.signDesig); y += 18; }
   y += 16; txt(L, y, 'Attachment: Travel Request Form', { size:8.5, color:[0.3, 0.3, 0.3] });
   return lhPdfFinish([pg], 'DSA Memo ' + no, R);

@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.225';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.227';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -5160,7 +5160,7 @@ function openPcReplRequest(no){
     ${vGrid(2, vF('Approved by', 'hodName', r.hodName != null ? r.hodName : pcLastReplApprover().name, 'text', { attrs:' list="pr-people"' }) + vF('Approval date', 'hodDate', r.hodDate || '', 'date') + vF('Approved amount (MVR)', 'hodAmount', r.hodAmount != null ? r.hodAmount : '', 'number') + vF('Remarks', 'hodRemarks', r.hodRemarks || ''))}
     <p class="text-[11.5px] text-slate-400 mt-2">Leave the approval empty if the HOD will fill it in by hand. The Finance sections stay blank on the form.</p>
     ${vSec('Signed form')}
-    ${vF('Link to the signed form (optional)', 'docUrl', r.docUrl || '', 'url')}
+    ${vF('Link to the signed form (optional)', 'docUrl', r.docUrl || '', 'url')}${trAttRow('repl', r.docFile && r.docFile.fileId ? r.docFile : null, 'Attach the signed form (PDF or photo)')}
     ${vFoot('Save request', `savePcReplRequest('${esc(no)}')`, r.number ? `deletePcReplRequest('${esc(no)}')` : '')}`, true);
 }
 async function savePcReplRequest(no){
@@ -5177,16 +5177,32 @@ async function savePcReplRequest(no){
   const prev = s.rec.replRequest || {};
   const rr = { number: String(o.number).trim() === no ? '' : String(o.number).trim(), date: o.date, reqName: o.reqName.trim(), reqDept: (o.reqDept || '').trim(), amount: pcRound(vNum(o.amount)), comments: (o.comments || '').trim(),
     hodName: (o.hodName || '').trim(), hodDate: o.hodDate || '', hodAmount: o.hodAmount === '' || o.hodAmount == null ? null : pcRound(vNum(o.hodAmount)), hodRemarks: (o.hodRemarks || '').trim(),
-    docUrl: url, createdAt: prev.createdAt || Date.now(), createdBy: prev.createdBy || (authUser ? authUser.name : ''), updatedAt: Date.now() };
+    docUrl: url, docFile: prev.docFile || null, createdAt: prev.createdAt || Date.now(), createdBy: prev.createdBy || (authUser ? authUser.name : ''), updatedAt: Date.now() };
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   await vehSave('pettyStatements', { id: s.rec.id, replRequest: rr });
+  const att = trAtt.repl; delete trAtt.repl; if(att) pcReplBgUpload(s.rec.id, rr.number || no, att);
   closeModal(); rerenderMain(); toast('Replenishment request ' + (rr.number || no) + ' saved.'); openPcStatementDetail(no);
 }
+// the signed replenishment form kept with the request (original PDF or photos), uploaded in the background
+async function pcReplBgUpload(recId, no, att){
+  const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar();
+  try{ const st = await agStore(att, no, f => { agUploads[key].f = f; agUploadBar(); });
+    const rec = state.pettyStatements.find(x => x.id === recId); if(!rec || !rec.replRequest){ agFileDel(st.fileId); return; }
+    const old = rec.replRequest.docFile && rec.replRequest.docFile.fileId;
+    await vehSave('pettyStatements', { id:recId, replRequest:Object.assign({}, rec.replRequest, { docFile:st }) }); if(old) agFileDel(old);
+    toast('Signed replenishment form attached.'); rerenderMain();
+    const ov = document.getElementById('modal-overlay'), te = document.getElementById('modal-title');      // the statement's window is open: show the file there too
+    if(ov && !ov.classList.contains('hidden') && te && te.textContent.trim() === 'Statement ' + rec.no) openPcStatementDetail(rec.no); }
+  catch(e){ toast('The file ' + att.name + ' could not be uploaded: ' + (e && e.message ? e.message : e), true); }
+  finally{ delete agUploads[key]; agUploadBar(); }
+}
+function pcReplOpenFile(recId){ const rec = state.pettyStatements.find(x => x.id === recId), f = rec && rec.replRequest && rec.replRequest.docFile; if(f && f.fileId) agOpenFile(f.fileId, 'Replenishment request — ' + (rec.replRequest.number || rec.no), null); }
+const pcReplDocs = (rec, rr, label) => [rr.docFile && rr.docFile.fileId ? `<button type="button" onclick="event.stopPropagation(); pcReplOpenFile('${esc(rec.id)}')" class="text-brand-600 font-semibold hover:underline">📎 ${esc(label || 'Signed form')}</button>` : '', rr.docUrl ? vLink(rr.docUrl, rr.docFile && rr.docFile.fileId ? 'Link' : (label || 'Signed form')) : ''].filter(Boolean).join(' · ');
 function deletePcReplRequest(no){
   const locId = pcStLocation(); if(!pcCanStatement(locId)) return;
   const s = pcStatements(locId).find(x => x.no === no); if(!s || !s.rec) return;
   closeModal();
-  confirmAction('Delete replenishment request ' + pcReplNo(s) + '?', async () => { await vehSave('pettyStatements', { id: s.rec.id, replRequest: null }); rerenderMain(); toast('Replenishment request deleted.'); });
+  confirmAction('Delete replenishment request ' + pcReplNo(s) + '?', async () => { const fid = s.rec.replRequest && s.rec.replRequest.docFile && s.rec.replRequest.docFile.fileId; await vehSave('pettyStatements', { id: s.rec.id, replRequest: null }); if(fid) agFileDel(fid); rerenderMain(); toast('Replenishment request deleted.'); });
 }
 function pcReplDateParts(iso){
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); if(!m) return { d:'', suf:'', my:'' };
@@ -5226,7 +5242,7 @@ async function pcReplForm(no, btn){
 function pcReplCell(s){
   if(!s.rec) return '<span class="text-slate-300">—</span>';
   const pend = pcStmtPending(s), got = vNum(s.rec.replenishedAmount), rr = s.rec.replRequest;
-  const req = rr ? `<div class="text-[11px] text-slate-500 mt-1">Requested ${vDate(rr.date)}${rr.docUrl ? ' · ' + vLink(rr.docUrl, 'Signed form') : ''}</div>` : '';
+  const req = rr ? `<div class="text-[11px] text-slate-500 mt-1">Requested ${vDate(rr.date)}${pcReplDocs(s.rec, rr) ? ' · ' + pcReplDocs(s.rec, rr) : ''}</div>` : '';
   return (pend > 0 ? vPill('warn', 'Pending ' + fmtMVR(pend)) + (got ? `<div class="text-[11px] text-slate-400 mt-0.5">${fmtMVR(got)} received</div>` : '') : vPill('good', 'Replenished' + (s.rec.replenishedDate ? ' ' + vDate(s.rec.replenishedDate) : ''))) + req;
 }
 // a short status for the closed-statements list
@@ -5255,7 +5271,7 @@ function openPcStatementDetail(no){
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
       <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Replenishment</div><div class="mt-1.5">${pend > 0 ? vPill('warn', 'Pending ' + fmtMVR(pend)) : vPill('good', 'Replenished' + (rec.replenishedDate ? ' ' + vDate(rec.replenishedDate) : ''))}${got && pend > 0 ? `<span class="text-xs text-slate-500 ml-2">${fmtMVR(got)} received</span>` : ''}</div></div>
         <div class="flex items-center gap-4 flex-wrap">${can && s.rec ? act(rr ? 'Edit request' : 'Raise request', `openPcReplRequest('${esc(no)}')`, rr ? 'text-slate-500 hover:text-brand-600' : '') : ''}${can && s.rec && pend > 0 ? act('Mark replenished', `openPcReplenish('${esc(no)}')`) : ''}${can && got > 0 ? act('Undo', `pcUndoReplenish('${esc(no)}')`, 'text-slate-400 hover:text-rose-600') : ''}</div></div>
-      ${rr ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-sm">${item('Request no.', esc(pcReplNo(s)))}${item('Requested', vDate(rr.date) + ' · ' + fmtMVR(rr.amount))}${item('Approved by', esc(rr.hodName || '—') + (rr.hodDate ? ' · ' + vDate(rr.hodDate) : ''))}${item('Signed form', rr.docUrl ? vLink(rr.docUrl, 'Open') : '—')}</div>` : `<div class="text-xs text-slate-500 mt-2">No replenishment request yet.</div>`}
+      ${rr ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-sm">${item('Request no.', esc(pcReplNo(s)))}${item('Requested', vDate(rr.date) + ' · ' + fmtMVR(rr.amount))}${item('Approved by', esc(rr.hodName || '—') + (rr.hodDate ? ' · ' + vDate(rr.hodDate) : ''))}${item('Signed form', pcReplDocs(s.rec, rr, 'Open') || '—')}</div>` : `<div class="text-xs text-slate-500 mt-2">No replenishment request yet.</div>`}
       ${rec.replenishNote ? `<div class="text-xs text-slate-500 mt-2">Note: ${esc(rec.replenishNote)}</div>` : ''}
     </div>
     <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Reconciliation</div>
@@ -10094,7 +10110,6 @@ function viewTravel(scope){
       ${vTd(`<span class="font-semibold">${esc(t.formNumber || '—')}</span><div class="text-[11.5px] text-slate-400">${t.formDate ? vDate(t.formDate) : ''}</div>`, { first:1 })}
       ${vTd(`<div class="font-semibold text-slate-800">${esc(t.destination || '—')}</div><div class="text-[11.5px] text-slate-400">${esc([t.country && t.country !== TR_HOME ? t.country : '', t.rateLocation, t.purpose].filter(Boolean).join(' · '))}</div>`)}
       ${vTd(`${t.fromDate ? vDate(t.fromDate) + (t.toDate && t.toDate !== t.fromDate ? ' – ' + vDate(t.toDate) : '') : '—'}<div class="text-[11.5px] text-slate-400">${trDays(t.fromDate, t.toDate) || '—'} day${trDays(t.fromDate, t.toDate) === 1 ? '' : 's'}</div>`, { cls:'whitespace-nowrap' })}
-      ${vTd(ps.length ? esc(ps[0].name) + (ps.length > 1 ? ` <span class="text-slate-400">+${ps.length - 1}</span>` : '') : '—')}
       ${vTd(!tk ? '<span class="text-amber-600 text-xs font-semibold">Not linked</span>' : tk.kind === 'none' ? '<span class="text-slate-400 text-xs">Not needed</span>' : `<span class="text-xs font-semibold text-slate-700">${esc(tk.label)}</span><div class="text-[11px] text-slate-400">${esc(tk.kind)}</div>`)}
       ${vTd(!dsa ? '<span class="text-slate-400 text-xs">No DSA</span>' : `<b>${trMoney(trCur(t), trDsaTotal(t))}</b><div class="mt-0.5">${trDsaPaid(t) ? vPill('good', 'DSA paid') : trMemoSigned(t) ? vPill('good', 'Memo signed') : memo.memoNo ? vPill('warn', 'Memo not signed') : vPill('', 'No memo yet')}</div>`, { cls:'whitespace-nowrap' })}
       ${vTd(trStatusPill(t.status), { last:1 })}
@@ -10106,7 +10121,7 @@ function viewTravel(scope){
     ${kpis}
     <div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['', 'All (' + all.length + ')'], ...TR_STATUSES.map(s => [s, s + ' (' + cnt(s) + ')'])], st, 'trSetStatus')}
       <input type="search" value="${esc(vehUi.trQ || '')}" oninput="vehUi.trQ = this.value; clearTimeout(window._trQt); window._trQt = setTimeout(rerenderMain, 250)" placeholder="Search form no., destination, traveller, memo…" class="${VEH_INPUT} flex-1 min-w-[14rem]" id="tr-search"></div>
-    ${list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Request' }, { t:'Destination' }, { t:'Travel dates' }, { t:'Travellers' }, { t:'Ticket' }, { t:'DSA' }, { t:'Status' }])}<tbody>${rows}</tbody></table>`)
+    ${list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Request' }, { t:'Destination' }, { t:'Travel dates' }, { t:'Ticket' }, { t:'DSA' }, { t:'Status' }])}<tbody>${rows}</tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(all.length ? 'No requests match.' : 'No ' + S.one + ' requests yet. Use "+ Travel request" to add the first one.')}</div>`}`;
 }
 function trSetStatus(v){ vehUi.trStatus = v; rerenderMain(); }

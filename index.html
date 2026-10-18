@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.222';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.224';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3350,10 +3350,11 @@ function viewPettyCash(){
   const sumOpt = (list, o) => pcRound(list.filter(r => r.option === o).reduce((s, r) => s + pcTotal(r), 0));
   const awaiting = authUser ? all.filter(r => pcCanSign(r) && !pcSigned(r)).length : 0;
   const counts = {}; all.forEach(r => { const k = pcStatus(r).key; counts[k] = (counts[k] || 0) + 1; });
+  const funds = pcFundList(); if(vehUi.pcLoc && !funds.some(f => f.id === vehUi.pcLoc)) vehUi.pcLoc = '';
   const list = all.filter(r => (!vehUi.pcLoc || r.locationId === vehUi.pcLoc) && (!vehUi.pcOpt || r.option === vehUi.pcOpt) && (!vehUi.pcStatus || pcStatus(r).key === vehUi.pcStatus) &&
     vMatch(vehUi.pcQ, [r.number, r.purpose, r.option, r.department, pcLocName(r.locationId), pcRequester(r).name, pcHod(r).name, r.category, pcTotal(r).toFixed(2)].concat(pcItems(r).map(i => (i.name || '') + ' ' + (i.description || '')))));
   const shown = list.slice(0, vehUi.pcShown);
-  const rows = shown.map(r => {
+  const rowHtml = r => {
     const rq = pcRequester(r), st = pcStatus(r);
     const quick = (pcCanSign(r) && !pcSigned(r) && !r.processedDate) ? `<button onclick="event.stopPropagation(); pcAct('sign','${r.id}')" class="mt-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700">Sign</button>`
       : (st.key === 'process' && pcCanProcess(r)) ? `<button onclick="event.stopPropagation(); pcAct('process','${r.id}')" class="mt-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700">Process</button>` : '';
@@ -3366,7 +3367,16 @@ function viewPettyCash(){
       ${vTd(`${vPill(st.kind, esc(st.label))}${quick ? '<br>' + quick : ''}`)}
       ${vTd(`<span class="text-xs font-semibold text-brand-600">Details ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}
     </tr>`;
-  }).join('');
+  };
+  // every location / fund in its own section, so requests of different petty cash floats are not mixed up
+  const groupHead = (f, rs) => { const n = list.filter(x => f ? x.locationId === f.id : !funds.some(y => y.id === x.locationId)), tot = pcRound(n.reduce((s, r) => s + pcTotal(r), 0));
+    return `<tr class="bg-slate-50"><td colspan="7" class="px-4 py-2.5 border-t border-slate-200"><div class="flex flex-wrap items-center justify-between gap-2"><span class="inline-flex items-center gap-2 text-sm font-bold text-slate-800">${f ? `<i class="w-2.5 h-2.5 rounded-full" style="background:${esc(f.color || '#94a3b8')}"></i>${esc(f.name)}` : 'No location'}</span><span class="text-xs text-slate-500">${n.length} request${n.length === 1 ? '' : 's'} · <b class="text-slate-700">${fmtMVR(tot)}</b>${n.length > rs.length ? ` · showing ${rs.length}` : ''}</span></div></td></tr>`; };
+  const rows = vehUi.pcLoc ? shown.map(rowHtml).join('')
+    : funds.map(f => { const rs = shown.filter(r => r.locationId === f.id); return rs.length ? groupHead(f, rs) + rs.map(rowHtml).join('') : ''; }).join('')
+      + (() => { const rs = shown.filter(r => !funds.some(f => f.id === r.locationId)); return rs.length ? groupHead(null, rs) + rs.map(rowHtml).join('') : ''; })();
+  const locCount = id => all.filter(r => r.locationId === id).length;
+  const tab = (id, label, n, color) => `<button onclick="vehUi.pcLoc='${id}'; vehUi.pcShown=30; rerenderMain()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold border ${vehUi.pcLoc === id ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">${color ? `<i class="w-2.5 h-2.5 rounded-full" style="background:${esc(color)}"></i>` : ''}${esc(label)}<span class="text-xs font-medium ${vehUi.pcLoc === id ? 'text-white/80' : 'text-slate-400'}">${n}</span></button>`;
+  const locTabs = `<div class="flex flex-wrap gap-2 mb-3">${tab('', 'All locations', all.length)}${funds.map(f => tab(f.id, f.name, locCount(f.id), f.color || '#94a3b8')).join('')}</div>`;
   return `
     ${vHead('Petty Cash Request', 'Requests for petty cash by location — a prior request, or a reimbursement of money already spent.', vBtnPlain('+ Fueling Petty Cash', "openPcForm(null,'fuel')") + vBtnPrimary('+ New Request', 'openPcForm()'))}
     ${vKpis(
@@ -3376,9 +3386,10 @@ function viewPettyCash(){
       statCard('Awaiting your signature', fmtNum(awaiting), awaiting ? 'Requests where you are the requester' : 'Nothing to sign', awaiting ? 'rose' : 'slate'))}
     ${pcBalancesHtml()}
     ${pcCashHtml()}
+    ${locTabs}
     <div class="flex flex-wrap gap-2.5 mb-5">
       ${vSearch('pc-q', 'pcQ', 'Search number, purpose, item, requester…')}
-      ${vSelect('pcStatus', PC_STATUSES.map(([k, l]) => [k, l + (counts[k] ? ' (' + counts[k] + ')' : '')]), vehUi.pcStatus, 'All statuses')}${vSelect('pcLoc', pcFundList().map(l => [l.id, l.name]), vehUi.pcLoc, 'All locations')}${vSelect('pcOpt', PC_OPTIONS, vehUi.pcOpt, 'All types')}${vSelect('pcSort', PC_SORTS, vehUi.pcSort || 'num-desc', null)}
+      ${vSelect('pcStatus', PC_STATUSES.map(([k, l]) => [k, l + (counts[k] ? ' (' + counts[k] + ')' : '')]), vehUi.pcStatus, 'All statuses')}${vSelect('pcOpt', PC_OPTIONS, vehUi.pcOpt, 'All types')}${vSelect('pcSort', PC_SORTS, vehUi.pcSort || 'num-desc', null)}
     </div>
     ${!all.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No petty cash requests yet.<div class="mt-4">' + vBtnPrimary('+ New Request', 'openPcForm()') + '</div>')}</div>`
       : !list.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No requests match these filters.')}</div>`
@@ -3458,8 +3469,8 @@ function pcRequesterChanged(){
 
 /* ---------- voucher numbers (PTC-V-<location code>-<yy>-<nn>), expense categories and invoices ---------- */
 const PC_CATEGORIES = ['Refreshments', 'Repair Work', 'Email & Software Subscriptions', 'App Purchase', 'Bank Charges', 'Staff Visa / Work Permit', 'Travel Arrangements', 'Printing & Office Supplies', 'Office Supplies', 'Garbage Disposal', 'Fuel', 'Postage & Delivery', 'Small tool'];
-const PC_STMT_CATS = PC_CATEGORIES.filter(c => c !== 'Office Supplies');          // the 12 columns of the finance statement (Office Supplies is added up in its Printing & Office Supplies column)
-const pcStmtCatIdx = c => PC_STMT_CATS.indexOf(c === 'Office Supplies' ? 'Printing & Office Supplies' : c);   // the columns of the statement, in order
+const PC_STMT_CATS = PC_CATEGORIES.filter(c => c !== 'Office Supplies');          // the 12 columns of the finance sample; Office Supplies gets its own column, inserted after Printing & Office Supplies
+const pcStmtCatIdx = c => PC_STMT_CATS.indexOf(c);   // the columns of the statement, in order
 const pcInvoices = r => (Array.isArray(r && r.invoices) ? r.invoices : []).filter(i => i && (i.number || i.supplier || vNum(i.amount)));
 const pcInvoiceTotal = r => pcRound(pcInvoices(r).reduce((s, i) => s + vNum(i.amount), 0));
 const pcHasInvoice = r => pcInvoices(r).some(i => vNum(i.amount) > 0);
@@ -4553,12 +4564,13 @@ function pcFillStatementSheet(xml, s, ctx){
     const re = doc.querySelector('row[r="' + r + '"]'); re.setAttribute('ht', '30'); re.setAttribute('customHeight', '1');
   }
   setStr('A1', 'Statement of Petty Cash  Reimbursed – ' + ctx.loc.name);
-  const colTot = {}; PC_CAT_COLS.forEach(c => { colTot[c] = 0; }); let grand = 0; const rowAmt = {};
+  const colTot = {}; PC_CAT_COLS.forEach(c => { colTot[c] = 0; }); let grand = 0; const rowAmt = {}, osAmt = {};
   const wrapN = (t, chars) => Math.max(1, String(t || '').split(String.fromCharCode(10)).reduce((n, ln) => n + Math.max(1, Math.ceil(ln.length / chars)), 0)), hods = {};
   s.list.slice(0, PC_STATEMENT_ROWS).forEach((r, i) => {
     const row = 5 + i, d = pcStatementRow(r), col = PC_CAT_COLS[pcStmtCatIdx(d.category)];
     setStr('B' + row, d.supplier); setStr('C' + row, d.date); setStr('D' + row, d.bill); setStr('E' + row, d.voucher); setStr('F' + row, d.details); setStr('G' + row, d.dept);
-    if(col){ setNum(col + row, d.amount); const ys = catS(col).yellow; if(ys != null) cell(col + row).setAttribute('s', ys); colTot[col] = pcRound(colTot[col] + d.amount); }
+    if(d.category === 'Office Supplies') osAmt[row] = d.amount;
+    else if(col){ setNum(col + row, d.amount); const ys = catS(col).yellow; if(ys != null) cell(col + row).setAttribute('s', ys); colTot[col] = pcRound(colTot[col] + d.amount); }
     rowAmt[row] = d.amount; grand = pcRound(grand + d.amount);
     const lines = Math.max(wrapN(d.supplier, 22), wrapN(d.date, 18), wrapN(d.bill, 24), wrapN(d.details, 36), wrapN(d.dept, 14)), re = doc.querySelector('row[r="' + row + '"]');
     re.setAttribute('ht', String(Math.max(36, lines * 22 + 10))); re.setAttribute('customHeight', '1');
@@ -4600,7 +4612,36 @@ function pcFillStatementSheet(xml, s, ctx){
   if(cols) [...cols.children].forEach(c => { if(c.getAttribute('hidden') === '1' && +c.getAttribute('max') > +c.getAttribute('min')){ for(let k = +c.getAttribute('min'); k <= +c.getAttribute('max'); k++){ const n = c.cloneNode(true); n.setAttribute('min', k); n.setAttribute('max', k); cols.insertBefore(n, c); } cols.removeChild(c); } });
   const hCol = cols && [...cols.children].find(c => +c.getAttribute('min') <= 8 && +c.getAttribute('max') >= 8);
   if(cols) [...cols.children].forEach(c => { const idx = +c.getAttribute('min'), letter = PC_CAT_COLS.find(l => pcColIndex(l) === idx); if(letter && colTot[letter] > 0){ c.removeAttribute('hidden'); if(hCol && hCol.getAttribute('width')){ c.setAttribute('width', hCol.getAttribute('width')); c.setAttribute('customWidth', '1'); } } });   // a column shown now is as wide as the others
-  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + new XMLSerializer().serializeToString(doc).replace(/^<\?xml[^>]*\?>\s*/, '');   // the serializer may add its own declaration
+  const out = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + new XMLSerializer().serializeToString(doc).replace(/^<\?xml[^>]*\?>\s*/, '');   // the serializer may add its own declaration
+  return pcStmtInsertCol(out, 'O', 'Office Supplies', osAmt)       // the narrow category columns of the sample (Garbage Disposal, Fuel, Small tool) get the same width as the others, so headers and amounts are not cut off
+    .replace(/<col\b[^>]*\/>/g, c => { const mn = +(/min="(\d+)"/.exec(c) || [])[1], w = +(/width="([\d.]+)"/.exec(c) || [])[1]; return mn >= 8 && mn <= 20 && w && w < 25 ? c.replace(/width="[\d.]+"/, 'width="25.71"') : c; });
+}
+// a column letter ⇄ number
+const pcColLetter = n => { let s = ''; while(n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+// inserts a category column right after `after` (every cell, formula, merge and width to the right moves one column along),
+// with the header, the amounts of each row and its total — the row totals (SUM(H:…)) and the grand total take it in by themselves
+function pcStmtInsertCol(xml, after, header, amounts){
+  const at = pcColIndex(after) + 1, sh = (L, n) => { const i = pcColIndex(L); return (i >= at ? pcColLetter(i + 1) : L) + n; };
+  const refs = t => t.replace(/(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\d(])/g, (m, d1, L, d2, n) => { const i = pcColIndex(L); return d1 + (i >= at ? pcColLetter(i + 1) : L) + d2 + n; });
+  const outsideQuotes = t => t.split(/('(?:[^']|'')*')/).map((part, i) => i % 2 ? part : refs(part)).join('');
+  xml = xml.replace(/(<c\b[^>]*?\br=")([A-Z]+)(\d+)"/g, (m, a, L, n) => a + sh(L, n) + '"')
+    .replace(/(<f\b[^>]*>)([^<]*)(<\/f>)/g, (m, a, f, b) => a + outsideQuotes(f) + b)
+    .replace(/(<formula>)([^<]*)(<\/formula>)/g, (m, a, f, b) => a + outsideQuotes(f) + b)
+    .replace(/\b(ref|sqref|activeCell)="([^"]*)"/g, (m, k, v) => k + '="' + refs(v) + '"')
+    .replace(/<col\b[^>]*\/>/g, c => c.replace(/\b(min|max)="(\d+)"/g, (m, k, v) => k + '="' + (+v >= at ? +v + 1 : v) + '"'));
+  const L = pcColLetter(at), prev = after;
+  const colPrev = ([...xml.matchAll(/<col\b[^>]*\/>/g)].map(m => m[0]).find(c => +(/min="(\d+)"/.exec(c) || [])[1] <= at - 1 && +(/max="(\d+)"/.exec(c) || [])[1] >= at - 1));
+  if(colPrev) xml = xml.replace(colPrev, colPrev + colPrev.replace(/\bmin="\d+"/, 'min="' + at + '"').replace(/\bmax="\d+"/, 'max="' + at + '"').replace(/\bhidden="(?:true|1)"/, 'hidden="false"'));
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  xml = xml.replace(new RegExp('<c r="' + prev + '(\\d+)"([^>]*?)(\\/>|>[\\s\\S]*?<\\/c>)', 'g'), (m, n, attrs) => {
+    const st = (/\ss="(\d+)"/.exec(attrs) || [])[1], sA = st != null ? ' s="' + st + '"' : '', r = +n;
+    let cell = '<c r="' + L + n + '"' + sA + '/>';
+    if(r === 4) cell = '<c r="' + L + n + '"' + sA + ' t="inlineStr"><is><t>' + esc(header) + '</t></is></c>';
+    else if(r >= 5 && r <= 27 && amounts[r] != null) cell = '<c r="' + L + n + '"' + sA + '><v>' + amounts[r] + '</v></c>';
+    else if(r === 28){ const tot = Object.values(amounts).reduce((s2, v) => pcRound(s2 + vNum(v)), 0); cell = '<c r="' + L + n + '"' + sA + '><f>SUM(' + L + '5:' + L + '27)</f><v>' + tot + '</v></c>'; }
+    return m + cell;
+  });
+  return xml;
 }
 // one workbook for every statement: one sheet per statement, for every location and the Fueling fund, all years
 async function buildPettyCashStatementXlsx(focusNo){

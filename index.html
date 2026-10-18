@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.227';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.228';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -10061,6 +10061,13 @@ const trPCat = p => (p && TR_CATS.includes(p.category)) ? p.category : TR_CATS[0
 const trStaffCat = name => { try{ const n = trNorm(name), x = n && sdAll().find(p => trNorm(p.name) === n); return x && TR_CATS.includes(x.dsaCategory) ? x.dsaCategory : ''; }catch(e){ return ''; } };
 const trDays = (from, to) => { if(!from || !to) return 0; const a = Date.parse(from + 'T00:00:00Z'), b = Date.parse(to + 'T00:00:00Z'); return isNaN(a) || isNaN(b) || b < a ? 0 : Math.round((b - a) / 86400000) + 1; };
 const trList = scope => state.travelRequests.filter(t => (t.scope || 'local') === scope);
+// request numbers compared by their numbers: FDC/TRF/2026/9 < FDC/TRF/2026/27-01 < FDC/TRF/2026/27-02 < FDC/TRF/2026/28 (no number sorts lowest)
+function trNoCmp(a, b){
+  const x = String(a || '').match(/\d+/g) || [], y = String(b || '').match(/\d+/g) || [];
+  if(!x.length || !y.length) return (x.length ? 1 : 0) - (y.length ? 1 : 0);
+  for(let i = 0; i < Math.max(x.length, y.length); i++){ const d = (+x[i] || 0) - (+y[i] || 0); if(d) return d; }
+  return 0;
+}
 const trById = id => state.travelRequests.find(t => t.id === id) || null;
 const trParts = t => (t.participants || []).filter(p => p && String(p.name || '').trim());
 const trDsaOn = t => !!(t.dsa && t.dsa.enabled);
@@ -10097,7 +10104,7 @@ function viewTravel(scope){
   const S = TR_SCOPES[scope], all = trList(scope), yr = vToday().slice(0, 4), st = vehUi.trStatus || '', q = String(vehUi.trQ || '').toLowerCase().trim();
   const ratesMissing = !trRates().some(r => (r.scope || 'local') === scope && (r.meal || r.pocket || r.accom || r.stop));
   const list = all.filter(t => (!st || (t.status || 'Open') === st) && (!q || [t.formNumber, t.destination, t.country, t.rateLocation, t.purpose, (t.dsa || {}).memoNo, ...trParts(t).map(p => p.name)].join(' ').toLowerCase().includes(q)))
-    .sort((a, b) => String(b.fromDate || '').localeCompare(String(a.fromDate || '')) || (b.createdAt || 0) - (a.createdAt || 0));
+    .sort((a, b) => trNoCmp(b.formNumber, a.formNumber) || String(b.fromDate || '').localeCompare(String(a.fromDate || '')) || (b.createdAt || 0) - (a.createdAt || 0));     // by request number, newest first (FDC/TRF/2026/27-03 before 27-02)
   const cnt = s => all.filter(t => (t.status || 'Open') === s).length;
   const dsaYear = all.filter(t => String(t.fromDate || '').slice(0, 4) === yr), byCur = {};
   dsaYear.forEach(t => { const v = trDsaTotal(t); if(v) byCur[trCur(t)] = pcRound((byCur[trCur(t)] || 0) + v); });

@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.220';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.221';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -10095,6 +10095,14 @@ function trDsaPreview(){
   const cur = (f['dsa.currency'] || {}).value || 'MVR', groups = TR_CATS.map(c => [c, cats.filter(x => x === c).length]).filter(g => g[1]);
   if(!groups.length) groups.push([TR_CATS[0], 1]);
   const total = pcRound(groups.reduce((s, [c, n]) => s + per(c) * n, 0));
+  const brk = document.getElementById('tr-dsa-break');       // the calculation, allowance by allowance: rate × days = total, for each category in the request
+  if(brk){
+    const sc = f.scope.value, rate = (c, k) => vNum((f[c === 'Category 2' ? 'dsa.cat2.' + k : 'dsa.' + k + 'Rate'] || {}).value);
+    const gs = cats.length ? groups : TR_CATS.filter(c => TR_ALLOW.some(([k]) => days(k) > 0 && rate(c, k) > 0)).map(c => [c, 1]);       // no traveller named yet: every category with rates
+    const rows = TR_ALLOW.filter(([k]) => days(k) > 0 && gs.some(([c]) => rate(c, k) > 0));
+    const cell = (c, k) => { const r = rate(c, k), n = days(k); return r > 0 ? `<span class="text-slate-400">${pcMoneyPlain(r)}${TR_LUMP(k, sc) ? '' : ' × ' + n}</span> = <b class="text-slate-800">${pcMoneyPlain(pcRound(r * n))}</b>` : '<span class="text-slate-300">—</span>'; };
+    brk.innerHTML = rows.length ? `<div class="overflow-x-auto mb-2"><table class="w-full text-xs"><thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 text-left"><th class="py-1 pr-2 font-semibold">Allowance</th>${gs.map(([c]) => `<th class="py-1 pl-2 text-right font-semibold">${esc(c)} (${esc(cur)})</th>`).join('')}</tr></thead><tbody>${rows.map(([k]) => `<tr class="border-t border-slate-200"><td class="py-1 pr-2">${esc(trAllowLabel(k, sc))}</td>${gs.map(([c]) => `<td class="py-1 pl-2 text-right num whitespace-nowrap">${cell(c, k)}</td>`).join('')}</tr>`).join('')}<tr class="border-t border-slate-300"><td class="py-1 pr-2 font-semibold text-slate-700">Total per person</td>${gs.map(([c]) => `<td class="py-1 pl-2 text-right num font-semibold text-slate-800">${pcMoneyPlain(per(c))}</td>`).join('')}</tr></tbody></table></div>` : '';
+  }
   out.innerHTML = groups.map(([c, n]) => `${esc(c)}: ${trMoney(cur, per(c))} per person${n > 1 ? ' × ' + n : ''}`).join(' · ') + (groups.length > 1 || groups[0][1] > 1 ? ` = <b>${trMoney(cur, total)}</b>` : '');
 }
 function trCountryOpts(scope){ return [...new Set(trRates().filter(r => (r.scope || 'local') === scope && r.country).map(r => r.country))].sort().map(c => `<option value="${esc(c)}"></option>`).join(''); }
@@ -10158,7 +10166,7 @@ function openTravelForm(id, scope){
       <div class="grid grid-cols-[1fr_6.5rem_6.5rem_4.5rem] gap-2 items-end text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1"><div>Allowance</div><div>Category 1</div><div>Category 2</div><div>Days</div></div>
       ${TR_ALLOW.map(([k]) => `<div class="grid grid-cols-[1fr_6.5rem_6.5rem_4.5rem] gap-2 items-center mb-2${TR_FOREIGN_ONLY(k) ? ' tr-foreign-only' + (scope !== 'foreign' ? ' hidden' : '') : ''}"><div class="text-sm text-slate-700">${k === 'pocket' ? `<span class="tr-pocket-lbl">${trAllowLabel(k, scope)}</span>` : trAllowLabel(k, scope)}${k === 'stop' ? '<div class="text-[11px] text-slate-400">days = number of stop-overs</div>' : k === 'pmoney' ? '<div class="text-[11px] text-slate-400">total amount per person</div>' : k === 'pocket' ? `<div class="text-[11px] text-slate-400 tr-foreign-only${scope !== 'foreign' ? ' hidden' : ''}">total amount per person</div>` : k === 'daily' ? '<div class="text-[11px] text-slate-400">the daily rate (e.g. UNDP DSA), × days</div>' : ''}</div><input type="number" step="0.01" min="0" name="dsa.${k}Rate" value="${esc(d[k + 'Rate'] != null ? d[k + 'Rate'] : '')}" oninput="trDsaPreview()" class="${VEH_FIELD}"><input type="number" step="0.01" min="0" name="dsa.cat2.${k}" value="${esc(c2[k] != null ? c2[k] : '')}" oninput="trDsaPreview()" class="${VEH_FIELD}">${k === 'pmoney' ? '<div class="text-xs text-slate-500 text-center">Total amount</div>' : `${k === 'pocket' ? `<div class="text-xs text-slate-500 text-center tr-foreign-only${scope !== 'foreign' ? ' hidden' : ''}">Total amount</div>` : ''}<input type="number" step="1" min="0" name="dsa.${k}Days" value="${esc(d[k + 'Days'] != null && d[k + 'Days'] !== '' ? d[k + 'Days'] : (k === 'stop' ? 0 : k === 'pocket' && scope !== 'foreign' ? 1 : days || ''))}" ${k !== 'stop' && t ? 'data-auto="0"' : ''} oninput="this.dataset.auto='0'; trDsaPreview()" class="${VEH_FIELD}${k === 'pocket' ? ' tr-local-only' + (scope === 'foreign' ? ' hidden' : '') : ''}">`}</div>`).join('')}
       <div class="grid grid-cols-[1fr_6.5rem_6.5rem_4.5rem] gap-2 items-center mb-3"><div class="text-sm text-slate-700">Currency</div><input type="text" name="dsa.currency" value="${esc(d.currency || r.currency)}" oninput="trDsaPreview()" class="${VEH_FIELD}"><div></div><div></div></div>
-      <div class="rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600 mb-4">DSA: <span id="tr-dsa-total"></span></div>
+      <div class="rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600 mb-4"><div id="tr-dsa-break"></div>DSA: <span id="tr-dsa-total"></span></div>
       ${vGrid(2, vF('Memo number', 'dsa.memoNo', d.memoNo || trNextMemoNo(), 'text') + vF('Memo date', 'dsa.memoDate', d.memoDate || vToday(), 'date') +
         vF('From', 'dsa.memoFrom', d.memoFrom != null ? d.memoFrom : S.memoFrom) + vF('To', 'dsa.memoTo', d.memoTo != null ? d.memoTo : S.memoTo) + vF('CC', 'dsa.memoCc', d.memoCc != null ? d.memoCc : S.memoCc) + '<div></div>' +
         vF('Signed by (name)', 'dsa.signName', d.signName != null ? d.signName : S.signName, 'text', { attrs:' list="tr-people"' }) + vF('Signatory designation', 'dsa.signDesig', d.signDesig != null ? d.signDesig : S.signDesig))}

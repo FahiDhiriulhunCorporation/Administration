@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.228';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.229';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2537,12 +2537,12 @@ function viewFueling(){
     const list = all.filter(r => vMatch(vehUi.fuelQ, vFuelHay(r)) && (!vehUi.fuelVeh || r.vehicleId === vehUi.fuelVeh) && (!vehUi.fuelMonth || String(r.date || '').slice(0, 7) === vehUi.fuelMonth) && (!vehUi.fuelFund || r.fundType === vehUi.fuelFund) && (!vehUi.fuelReq || r.requisitionId === vehUi.fuelReq));
     const fr = vehUi.fuelReq ? vReqById(vehUi.fuelReq) : null;
     const filterNote = vehUi.fuelReq ? `<div class="flex items-center gap-2.5 mb-4">${vPill('acc', 'Showing entries for ' + esc(fr ? vReqLabel(fr) : 'requisition'))}<button onclick="vehSet('fuelReq','')" class="text-xs font-semibold text-brand-600 hover:underline">Show all</button></div>` : '';
-    body = filterNote + (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Vehicle' }, { t:'Fuel' }, { t:'Funding' }, { t:'Litres', n:1 }, { t:'Rate', n:1 }, { t:'Total', n:1 }, { t:'Odometer', n:1 }, { t:'Station' }, { t:'' }])}<tbody>${list.map(r => { const v = vehById(r.vehicleId), rq = vReqById(r.requisitionId); return `
+    body = filterNote + (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Vehicle' }, { t:'Fuel' }, { t:'Funding' }, { t:'Litres', n:1 }, { t:'Total', n:1 }, { t:'Rate / L', n:1 }, { t:'Odometer', n:1 }, { t:'Station' }, { t:'' }])}<tbody>${list.map(r => { const v = vehById(r.vehicleId), rq = vReqById(r.requisitionId); return `
       <tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(esc(r.fuelType || '—'))}
         ${vTd(r.fundType ? `${vPill(r.fundType === 'PR' ? 'acc' : '', esc(vFundShort(r.fundType)))} <span class="font-semibold text-xs">${esc(rq ? rq.refNo : '')}</span><div class="text-[11.5px] text-slate-400">${r.poNo ? esc((r.fundType === 'PR' ? 'PO ' : 'Voucher ') + r.poNo) : ''}</div>` : '<span class="text-slate-400">—</span>')}
-        ${vTd(vNum(r.litres).toFixed(2), { n:1 })}${vTd(r.rate ? vMoney(r.rate) : '—', { n:1 })}${vTd(`<b>${vMoney(r.total)}</b>`, { n:1 })}${vTd(r.odometer ? vNum(r.odometer).toLocaleString() : '—', { n:1 })}${vTd(esc(r.station || '—'))}
+        ${vTd(String(Math.round(vNum(r.litres) * 1000) / 1000) + ' L', { n:1 })}${vTd(`<b>${vMoney(r.total)}</b>`, { n:1 })}${vTd(r.rate ? `<span class="text-xs text-slate-400 whitespace-nowrap">${pcMoneyPlain(r.rate)} / L</span>` : '—', { n:1 })}${vTd(r.odometer ? vNum(r.odometer).toLocaleString() : '—', { n:1 })}${vTd(esc(r.station || '—'))}
         ${vTd(`<button onclick="openVehFuelView('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">View</button><button onclick="openVehFuelForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'whitespace-nowrap text-right' })}</tr>`; }).join('')}
-      <tr class="bg-slate-50"><td colspan="4" class="py-3 pl-5 sm:pl-6 text-sm"><b>Total</b> <span class="text-xs text-slate-400">(${list.length} entries)</span></td><td class="py-3 pr-3 text-right num"><b>${vSum(list, 'litres').toFixed(2)}</b></td><td></td><td class="py-3 pr-3 text-right num"><b>${vMoney(vSum(list, 'total'))}</b></td><td colspan="3"></td></tr></tbody></table>`)
+      <tr class="bg-slate-50"><td colspan="4" class="py-3 pl-5 sm:pl-6 text-sm"><b>Total</b> <span class="text-xs text-slate-400">(${list.length} entries)</span></td><td class="py-3 pr-3 text-right num"><b>${Math.round(vSum(list, 'litres') * 1000) / 1000} L</b></td><td class="py-3 pr-3 text-right num"><b>${vMoney(vSum(list, 'total'))}</b></td><td></td><td colspan="3"></td></tr></tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(all.length ? 'No entries match these filters.' : 'No fuel entries yet. Add a PR or Petty Cash requisition for a vehicle first, then log fuel against it.')}</div>`);
   } else {
     toolbar += '</div>';

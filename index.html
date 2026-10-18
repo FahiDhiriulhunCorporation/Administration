@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.221';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.222';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3457,7 +3457,9 @@ function pcRequesterChanged(){
 }
 
 /* ---------- voucher numbers (PTC-V-<location code>-<yy>-<nn>), expense categories and invoices ---------- */
-const PC_CATEGORIES = ['Refreshments', 'Repair Work', 'Email & Software Subscriptions', 'App Purchase', 'Bank Charges', 'Staff Visa / Work Permit', 'Travel Arrangements', 'Printing & Office Supplies', 'Garbage Disposal', 'Fuel', 'Postage & Delivery', 'Small tool'];   // the columns of the statement, in order
+const PC_CATEGORIES = ['Refreshments', 'Repair Work', 'Email & Software Subscriptions', 'App Purchase', 'Bank Charges', 'Staff Visa / Work Permit', 'Travel Arrangements', 'Printing & Office Supplies', 'Office Supplies', 'Garbage Disposal', 'Fuel', 'Postage & Delivery', 'Small tool'];
+const PC_STMT_CATS = PC_CATEGORIES.filter(c => c !== 'Office Supplies');          // the 12 columns of the finance statement (Office Supplies is added up in its Printing & Office Supplies column)
+const pcStmtCatIdx = c => PC_STMT_CATS.indexOf(c === 'Office Supplies' ? 'Printing & Office Supplies' : c);   // the columns of the statement, in order
 const pcInvoices = r => (Array.isArray(r && r.invoices) ? r.invoices : []).filter(i => i && (i.number || i.supplier || vNum(i.amount)));
 const pcInvoiceTotal = r => pcRound(pcInvoices(r).reduce((s, i) => s + vNum(i.amount), 0));
 const pcHasInvoice = r => pcInvoices(r).some(i => vNum(i.amount) > 0);
@@ -4554,7 +4556,7 @@ function pcFillStatementSheet(xml, s, ctx){
   const colTot = {}; PC_CAT_COLS.forEach(c => { colTot[c] = 0; }); let grand = 0; const rowAmt = {};
   const wrapN = (t, chars) => Math.max(1, String(t || '').split(String.fromCharCode(10)).reduce((n, ln) => n + Math.max(1, Math.ceil(ln.length / chars)), 0)), hods = {};
   s.list.slice(0, PC_STATEMENT_ROWS).forEach((r, i) => {
-    const row = 5 + i, d = pcStatementRow(r), col = PC_CAT_COLS[PC_CATEGORIES.indexOf(d.category)];
+    const row = 5 + i, d = pcStatementRow(r), col = PC_CAT_COLS[pcStmtCatIdx(d.category)];
     setStr('B' + row, d.supplier); setStr('C' + row, d.date); setStr('D' + row, d.bill); setStr('E' + row, d.voucher); setStr('F' + row, d.details); setStr('G' + row, d.dept);
     if(col){ setNum(col + row, d.amount); const ys = catS(col).yellow; if(ys != null) cell(col + row).setAttribute('s', ys); colTot[col] = pcRound(colTot[col] + d.amount); }
     rowAmt[row] = d.amount; grand = pcRound(grand + d.amount);

@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.219';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.220';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -10378,7 +10378,7 @@ function trMemoForeignTable(pg, t, ps, y, cur, L, R, txt, center){
     cols.forEach(c => center(c.x0, c.x1, st(1), c.v(rows[i]), c.bold ? { bold:true } : {}));
     y += h; pg.line(L, y, R, y, GRID, 0.5); [L, x1, R].concat(cols.map(c => c.x0)).forEach(xx => pg.line(xx, b0, xx, y, GRID, 0.5));
   });
-  if(people.length > 1){ const h = 17, last = cols[cols.length - 1]; pg.fill(L, y, R - L, h, HEAD); txt(L + 4, y + 11.5, 'Total DSA (' + people.length + ' staff)', { bold:true, size:FS }); center(last.x0, last.x1, y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(L, y + h, R, y + h, GRID, 0.5); [L, last.x0, R].forEach(xx => pg.line(xx, y, xx, y + h, GRID, 0.5)); y += h; }
+  if(people.length > 1){ const h = 17, last = cols[cols.length - 1]; pg.fill(L, y, R - L, h, HEAD); txt(L + 4, y + 11.5, 'Total DSA (' + people.length + ' staff)', { bold:true, size:FS }); center(last.x0, last.x1, y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(L, y, R, y, GRID, 0.6); pg.line(L, y + h, R, y + h, GRID, 0.6); [L, last.x0, R].forEach(xx => pg.line(xx, y, xx, y + h, GRID, 0.6)); y += h; }
   return y;
 }
 async function buildTravelMemoPdf(t){
@@ -10425,7 +10425,7 @@ async function buildTravelMemoPdf(t){
     let yy = b0; lines.forEach((l, i) => { const hh = subH[i], b = yy + hh / 2 + 3; txt(X[2] + 4, b, l.label, { size:8.5 }); center(X[3], X[4], b, pcMoneyPlain(l.rate)); center(X[4], X[5], b, l.lump ? '-' : String(l.days).padStart(2, '0')); center(X[5], X[6], b, pcMoneyPlain(l.total)); yy += hh; if(i < lines.length - 1) pg.line(X[2], yy, X[6], yy, GRID, 0.5); });
     y = b0 + blockH; pg.line(X[0], y, X[7], y, GRID, 0.5); X.forEach(x => pg.line(x, b0, x, y, GRID, 0.5));
   });
-  if(ps.length > 1){ const h = 17; pg.fill(X[0], y, X[7] - X[0], h, HEAD); txt(X[0] + 4, y + 11.5, 'Total DSA (' + ps.length + ' staff)', { bold:true, size:8.5 }); center(X[6], X[7], y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(X[0], y + h, X[7], y + h, GRID, 0.5); pg.line(X[0], y, X[0], y + h, GRID, 0.5); pg.line(X[6], y, X[6], y + h, GRID, 0.5); pg.line(X[7], y, X[7], y + h, GRID, 0.5); y += h; }
+  if(ps.length > 1){ const h = 17; pg.fill(X[0], y, X[7] - X[0], h, HEAD); txt(X[0] + 4, y + 11.5, 'Total DSA (' + ps.length + ' staff)', { bold:true, size:8.5 }); center(X[6], X[7], y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(X[0], y, X[7], y, GRID, 0.6); pg.line(X[0], y + h, X[7], y + h, GRID, 0.6); [X[0], X[6], X[7]].forEach(xx => pg.line(xx, y, xx, y + h, GRID, 0.6)); y += h; }
   }
   y += 30; txt(L, y, 'Thank You');
   // the sign-off sits at the bottom of the page (or just below the table when the table runs low)

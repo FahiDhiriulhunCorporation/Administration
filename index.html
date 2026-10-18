@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.216';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.217';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -10361,7 +10361,7 @@ async function buildTravelMemoPdf(t){
   const purp = String(t.purpose || '').trim(), lead = !purp || /^official trip$/i.test(purp) ? 'As part of the official trip' : 'As part of the official trip for ' + purp;
   const body = [lead + ', ' + who + ' travelling to ' + (t.destination || '') + ' from ' + pcOrdinalDate(t.fromDate) + ' to ' + pcOrdinalDate(t.toDate) + '.',
     'Kindly arrange the Daily Subsistence Allowance for the above-mentioned trip, as detailed below, in accordance with the Travel Policy.'];
-  body.forEach(p => { pdfWrap(p, false, FS, R - L).forEach(ln => { txt(L, y, ln); y += 18; }); });
+  body.forEach(p => { const ls = pdfWrap(p, false, FS, R - L); ls.forEach((ln, i) => { const gaps = (ln.match(/ /g) || []).length, ws = i < ls.length - 1 && gaps ? (R - L - pdfTextWidth(ln, false, FS)) / gaps : 0; txt(L, y, ln, ws ? { ws } : {}); y += 18; }); });      // justified: every line but the last fills the width
   y += 8;
   // the table: Staff Details (Name, Designation) | Allowance | Rates (Cost, Days, Total Rate) | Total
   const X = [L, 158, 245, 330, 380, 418, 462, R], GRID = [0.25, 0.25, 0.25];

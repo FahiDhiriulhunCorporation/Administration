@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.210';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.212';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -6888,7 +6888,8 @@ const DASH_QUOTES = [
   ['Perseverance is not a long race; it is many short races one after the other.', 'Walter Elliot'], ['Be kind, for everyone you meet is fighting a hard battle.', 'Ian Maclaren'] ];
 function dashQuote(){ const d = vToday(), n = Math.floor((Date.parse(d) - Date.parse(d.slice(0, 4) + '-01-01')) / 864e5) + (+d.slice(0, 4)) * 7; return DASH_QUOTES[n % DASH_QUOTES.length]; }
 const DASH_DEFAULT = { cols:[['tasks', 'approvals', 'money', 'leave'], ['notes', 'requests']], hidden:[] };
-let myDash = null, dashEdit = false, dashDragId = '';
+let myDash = null, dashEdit = false, dashDragId = '', dashSync = '';
+const dashSyncText = () => dashSync === 'ok' ? '<span class="text-emerald-600">✓ Saved to your account — shows on your phone and other computers too.</span>' : dashSync === 'saving' ? 'Saving to your account…' : dashSync === 'local' ? '<span class="text-amber-600">Saved on this device only (offline).</span>' : dashSync ? '<span class="text-rose-600">' + esc(dashSync) + '</span>' : '';
 const DASH_LS = () => 'fdc_dash_' + (authUser ? authUser.uid : 'local');
 function dashPrefs(){
   if(!myDash){ try{ myDash = JSON.parse(localStorage.getItem(DASH_LS()) || 'null'); }catch(e){} }
@@ -6899,7 +6900,8 @@ function dashPrefs(){
 }
 function dashSave(p){
   myDash = p; try{ localStorage.setItem(DASH_LS(), JSON.stringify(p)); }catch(e){}
-  if(authUser && firestoreDb) firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).set({ dash:p, updatedAt:Date.now() }, { merge:true }).catch(e => toast('Dashboard not saved: ' + e.message, true));
+  if(authUser && firestoreDb){ dashSync = 'saving'; firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).set({ dash:p, updatedAt:Date.now() }, { merge:true }).then(() => { dashSync = 'ok'; const e = document.getElementById('dash-sync'); if(e) e.innerHTML = dashSyncText(); }).catch(e => { dashSync = 'Not saved to your account: ' + e.message; toast('Dashboard ' + dashSync, true); const el = document.getElementById('dash-sync'); if(el) el.innerHTML = dashSyncText(); }); }
+  else dashSync = 'local';
 }
 function dashMove(id, dir){
   const p = dashPrefs(); const c = p.cols.findIndex(x => x.includes(id)); if(c < 0) return; const i = p.cols[c].indexOf(id);
@@ -6929,7 +6931,8 @@ function openDashBg(){
     <div class="mt-5"><label class="${VEH_LBL}">Card transparency <span class="font-normal text-slate-400" id="dash-ct-v">${p.cardT}%</span></label><input type="range" min="0" max="85" value="${p.cardT}" class="w-full" oninput="dashCardT(this.value, false)" onchange="dashCardT(this.value, true)">
       <label class="flex items-center gap-2 text-sm text-slate-600 mt-2"><input type="checkbox" ${p.cardBlur ? 'checked' : ''} onchange="dashCardBlur(this.checked)"> Blur the picture behind the cards (easier to read)</label>
       <p class="text-[11.5px] text-slate-400 mt-1">0% = solid cards. Higher lets the background show through the tasks, notes and other cards.</p></div>
-    <div class="flex justify-between gap-2.5 mt-6">${p.bg ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50" onclick="dashBgRemove()">Remove picture</button>` : '<span></span>'}<button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="closeModal()">Done</button></div>`);
+    <div id="dash-sync" class="text-[11.5px] mt-4">${dashSyncText()}</div>
+    <div class="flex justify-between gap-2.5 mt-4">${p.bg ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50" onclick="dashBgRemove()">Remove picture</button>` : '<span></span>'}<button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="closeModal()">Done</button></div>`);
 }
 async function dashBgFile(input){
   const f = input.files[0]; input.value = ''; if(!f) return; const st = document.getElementById('dash-bg-st'), say = t => { if(st) st.textContent = t; }; say('Preparing…');
@@ -6960,11 +6963,17 @@ function dashCardT(v, save){ const t = Math.max(0, Math.min(85, Math.round(+v ||
 function dashCardBlur(on){ const p = dashPrefs(); p.cardBlur = !!on; dashSave(p); const box = document.querySelector('.dash-cards'); if(box) box.classList.toggle('dash-blur', !!on); }
 function dashDim(v){ const p = dashPrefs(); p.dim = Math.max(0, Math.min(0.8, (+v || 0) / 100)); dashSave(p); rerenderMain(); openDashBg(); }
 function dashBgRemove(){ const p = dashPrefs(); p.bg = ''; dashSave(p); closeModal(); rerenderMain(); }
+// the picture sits in a fixed layer behind the page (works on phones too — iPhones ignore "fixed" page backgrounds)
 function dashApplyBg(){
   const m = document.querySelector('main'); if(!m) return; const p = ui.tab === 'my-work' && authUser ? dashPrefs() : null;
-  if(p && p.bg){ m.style.backgroundImage = `linear-gradient(rgba(0,0,0,${p.dim}),rgba(0,0,0,${p.dim})),url('${p.bg}')`; m.style.backgroundSize = 'cover'; m.style.backgroundPosition = 'center'; m.style.backgroundAttachment = 'fixed'; }
-  else if(m.style.backgroundImage){ m.style.backgroundImage = ''; m.style.backgroundSize = ''; m.style.backgroundPosition = ''; m.style.backgroundAttachment = ''; }
+  let L = document.getElementById('dash-bg-layer');
+  if(m.style.backgroundImage) m.style.backgroundImage = '';                               // older versions painted on <main>
+  if(!(p && p.bg)){ if(L) L.remove(); m.style.position = ''; m.style.zIndex = ''; window.removeEventListener('resize', dashBgPlace); return; }
+  if(!L){ L = document.createElement('div'); L.id = 'dash-bg-layer'; L.setAttribute('aria-hidden', 'true'); L.style.cssText = 'position:fixed;top:0;bottom:0;right:0;z-index:0;pointer-events:none;background-size:cover;background-position:center;background-repeat:no-repeat'; document.body.appendChild(L); window.addEventListener('resize', dashBgPlace); }
+  const img = `linear-gradient(rgba(0,0,0,${p.dim}),rgba(0,0,0,${p.dim})),url('${p.bg}')`; if(L.dataset.k !== p.bg.length + '|' + p.dim){ L.style.backgroundImage = img; L.dataset.k = p.bg.length + '|' + p.dim; }
+  m.style.position = 'relative'; m.style.zIndex = '1'; dashBgPlace();
 }
+function dashBgPlace(){ const L = document.getElementById('dash-bg-layer'), m = document.querySelector('main'); if(L && m) L.style.left = Math.max(0, Math.round(m.getBoundingClientRect().left)) + 'px'; }
 
 function viewMyWork(){
   if(!authUser) return vHead('My Dashboard', 'Sign in to see your tasks, requests and approvals.', '');
@@ -9941,7 +9950,10 @@ async function buildVehicleLogPdf(v, logs){
    (meal, pocket money, accommodation) with its memo to Finance, generated as a PDF.
 ===================================================================== */
 const TR_STATUSES = ['Open', 'Pending', 'Closed'];
-const TR_BUDGETS = ['Administrative Budget', 'Planning and Projects Budget', 'BD Budget', 'Funded by the host', 'Bureau Budget'];
+const TR_BUDGETS_OLD = ['Administrative Budget', 'Planning and Projects Budget', 'BD Budget', 'Funded by the host', 'Bureau Budget'];
+// every department's budget (the names used before are kept), then "Funded by the host"
+const trBudgetOf = n => ({ 'Administration':'Administrative Budget', 'Bureau':'Bureau Budget', 'Business Development':'BD Budget', 'Planning':'Planning and Projects Budget' })[n] || n + ' Budget';
+const trBudgets = cur => { const l = DEPARTMENTS.map(d => trBudgetOf(d.name)); TR_BUDGETS_OLD.forEach(b => { if(!l.includes(b) && b !== 'Funded by the host') l.push(b); }); l.push('Funded by the host'); if(cur && !l.includes(cur)) l.push(cur); return l; };
 const TR_SCOPES = { local:{ label:'Local Travel', one:'local trip', tab:'travel-local' }, foreign:{ label:'Foreign Travel', one:'foreign trip', tab:'travel-foreign' } };
 const TR_ALLOW = [['meal', 'Meal'], ['pocket', 'Pocket Money'], ['accom', 'Accommodation'], ['stop', 'Stop-over']];
 const TR_CATS = ['Category 1', 'Category 2'];
@@ -9997,7 +10009,7 @@ const trCur = t => (t.dsa && t.dsa.currency) || ((trRateFor(t.scope || 'local', 
 const trPRate = (t, p, k) => { const d = t.dsa || {}; return pcRound(vNum(trPCat(p) === 'Category 2' && d.cat2 ? d.cat2[k] : d[k + 'Rate'])); };
 function trDsaLines(t, p){
   const d = t.dsa || {};
-  return TR_ALLOW.map(([k]) => { const rate = trPRate(t, p, k), days = Math.max(0, Math.round(vNum(d[k + 'Days']))); return { k, label:trAllowLabel(k, t.scope), rate, days, total:pcRound(rate * days) }; }).filter(l => l.rate > 0 && l.days > 0);
+  return TR_ALLOW.map(([k]) => { const rate = trPRate(t, p, k), days = Math.max(0, Math.round(vNum(d[k + 'Days']))); return { k, label:k === 'meal' ? 'Meal' : trAllowLabel(k, t.scope), rate, days, total:pcRound(rate * days) }; }).filter(l => l.rate > 0 && l.days > 0);
 }
 const trDsaPerPerson = (t, p) => pcRound(trDsaLines(t, p).reduce((s, l) => s + l.total, 0));
 const trDsaTotal = t => trDsaOn(t) ? pcRound((trParts(t).length ? trParts(t) : [{}]).reduce((s, p) => s + trDsaPerPerson(t, p), 0)) : 0;
@@ -10039,7 +10051,7 @@ function viewTravel(scope){
       ${vTd(`${t.fromDate ? vDate(t.fromDate) + (t.toDate && t.toDate !== t.fromDate ? ' – ' + vDate(t.toDate) : '') : '—'}<div class="text-[11.5px] text-slate-400">${trDays(t.fromDate, t.toDate) || '—'} day${trDays(t.fromDate, t.toDate) === 1 ? '' : 's'}</div>`, { cls:'whitespace-nowrap' })}
       ${vTd(ps.length ? esc(ps[0].name) + (ps.length > 1 ? ` <span class="text-slate-400">+${ps.length - 1}</span>` : '') : '—')}
       ${vTd(!tk ? '<span class="text-amber-600 text-xs font-semibold">Not linked</span>' : tk.kind === 'none' ? '<span class="text-slate-400 text-xs">Not needed</span>' : `<span class="text-xs font-semibold text-slate-700">${esc(tk.label)}</span><div class="text-[11px] text-slate-400">${esc(tk.kind)}</div>`)}
-      ${vTd(!dsa ? '<span class="text-slate-400 text-xs">No DSA</span>' : `<b>${trMoney(trCur(t), trDsaTotal(t))}</b><div class="mt-0.5">${memo.memoUrl ? vPill('good', 'Memo signed') : memo.memoNo ? vPill('warn', 'Memo not signed') : vPill('', 'No memo yet')}</div>`, { cls:'whitespace-nowrap' })}
+      ${vTd(!dsa ? '<span class="text-slate-400 text-xs">No DSA</span>' : `<b>${trMoney(trCur(t), trDsaTotal(t))}</b><div class="mt-0.5">${trMemoSigned(t) ? vPill('good', 'Memo signed') : memo.memoNo ? vPill('warn', 'Memo not signed') : vPill('', 'No memo yet')}</div>`, { cls:'whitespace-nowrap' })}
       ${vTd(trStatusPill(t.status), { last:1 })}
     </tr>`; }).join('');
   return `
@@ -10066,7 +10078,7 @@ function trPersonRow(p){
 function trAddPerson(){ const box = document.getElementById('tr-people-box'); if(box){ box.insertAdjacentHTML('beforeend', trPersonRow({})); box.lastElementChild.querySelector('input').focus(); } trDsaPreview(); }
 function trProfileDesig(name){ const pr = hoFindProfile(name); return pr ? [pr.designation, pr.department].filter(Boolean).join(', ') : ''; }
 function trFillDesig(inp){ const row = inp.closest('.tr-person'), d = row.querySelector('.tr-pdesig'), c = row.querySelector('.tr-pcat'); if(d && !d.value.trim()){ const v = trProfileDesig(inp.value); if(v) d.value = v; } const k = trStaffCat(inp.value); if(c && k) c.value = k; trDsaPreview(); }
-function trFillOne(nameInp, desigName){ const f = document.getElementById('vform'); if(!f || !f[desigName] || f[desigName].value.trim()) return; const v = trProfileDesig(nameInp.value); if(v) f[desigName].value = v; }
+function trFillOne(nameInp, desigName){ const f = document.getElementById('vform'); if(!f || !f[desigName]) return; const v = trProfileDesig(nameInp.value); if(v) f[desigName].value = v; }
 function trTicketVia(v){ ['pr', 'petty'].forEach(k => { const el = document.getElementById('tr-tk-' + k); if(el) el.style.display = v === k ? '' : 'none'; }); }
 function trDsaToggle(on){ const el = document.getElementById('tr-dsa'); if(el) el.style.display = on ? '' : 'none'; trDsaPreview(); }
 function trDatesChanged(){
@@ -10125,15 +10137,15 @@ function openTravelForm(id, scope){
     <div class="mt-3.5">${vGrid(2, vF('Destination', 'destination', t ? t.destination : '', 'text', { req:1, span:'sm:col-span-2', attrs:' onchange="trDestChanged()" placeholder="K.Dhiffushi, Adh.Dhangethi & Adh.Omadhoo"' }) +
       vF('Country', 'country', country, 'text', { req:1, attrs:' list="tr-countries" onchange="trCountryChanged()" placeholder="Country"' }) + vF('Location (for the DSA rate)', 'rateLocation', rloc, 'text', { attrs:' list="tr-locations" onchange="trApplyRate()" placeholder="City / atoll / island — blank for all"' }) +
       vF('From', 'fromDate', t ? t.fromDate : '', 'date', { req:1, attrs:' onchange="trDatesChanged()"' }) + `<div><label class="${VEH_LBL}">To <span class="text-rose-500">*</span> <span id="tr-days" class="font-normal text-slate-400 ml-1">${days ? days + ' day' + (days === 1 ? '' : 's') : ''}</span></label><input type="date" name="toDate" value="${esc(t ? t.toDate || '' : '')}" onchange="trDatesChanged()" class="${VEH_FIELD}"></div>` +
-      vS('Budgeted from', 'budget', TR_BUDGETS, t ? t.budget : '', '—') + vF('Purpose of trip', 'purpose', t ? t.purpose : 'Official Trip') + vS('Status', 'status', TR_STATUSES, (t && t.status) || 'Open'))}</div>
+      vS('Budgeted from', 'budget', trBudgets(t && t.budget), t ? t.budget : '', '—') + vF('Purpose of trip', 'purpose', t ? t.purpose : 'Official Trip') + vS('Status', 'status', TR_STATUSES, (t && t.status) || 'Open'))}</div>
     ${vSec('Travellers (name, designation and DSA category)')}
     <div id="tr-people-box" class="space-y-2">${(parts.length ? parts : [{}]).map(trPersonRow).join('')}</div>
     <button type="button" onclick="trAddPerson()" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ Add traveller</button>
     <div class="mt-3.5">${vTa('Comments / additional requests', 'comments', t ? t.comments : '', { rows:2 })}</div>
     ${vSec('Requested and authorized by')}
-    ${vGrid(2, vF('Requested by', 'requestedBy', t ? t.requestedBy : me.name, 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'requestedDesig\')"' }) + vF('Designation', 'requestedDesig', t ? t.requestedDesig : me.designation) +
+    ${vGrid(2, vF('Requested by', 'requestedBy', t ? t.requestedBy : me.name, 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'requestedDesig\')"' }) + vF('Designation', 'requestedDesig', t ? t.requestedDesig : (trProfileDesig(me.name) || me.designation || '')) +
       vF('Authorized by', 'authorizedBy', t ? t.authorizedBy : '', 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'authorizedDesig\')"' }) + vF('Designation', 'authorizedDesig', t ? t.authorizedDesig : ''))}
-    <div class="mt-3.5">${vF('Link to the signed travel request form (optional)', 'formUrl', t ? t.formUrl : '', 'url')}</div>
+    <div class="mt-3.5">${vF('Link to the signed travel request form (optional)', 'formUrl', t ? t.formUrl : '', 'url')}${trAttRow('form', t && t.formFile, 'Attach the signed travel request form (PDF)')}</div>
     ${vSec('Ticket')}
     ${vGrid(2, vS('Ticket bought through', 'ticket.via', [['pr', 'Purchase Requisition (PR)'], ['petty', 'Petty Cash Request'], ['none', 'No ticket needed']], tk.via, 'Not decided yet', { attrs:' onchange="trTicketVia(this.value)"' }) +
       `<div id="tr-tk-pr" ${tk.via === 'pr' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Purchase Requisition</label><select name="ticket.prId" class="${VEH_FIELD} bg-white"><option value="">Choose a PR…</option>${prs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.prId ? 'selected' : ''}>${esc(p.prNumber || '—')}${prFirstItem(p) ? ' — ' + esc(prFirstItem(p)) : ''} — ${esc(vMoney(p.totalCost))}</option>`).join('')}</select></div>` +
@@ -10149,11 +10161,27 @@ function openTravelForm(id, scope){
       ${vGrid(2, vF('Memo number', 'dsa.memoNo', d.memoNo || trNextMemoNo(), 'text') + vF('Memo date', 'dsa.memoDate', d.memoDate || vToday(), 'date') +
         vF('From', 'dsa.memoFrom', d.memoFrom != null ? d.memoFrom : S.memoFrom) + vF('To', 'dsa.memoTo', d.memoTo != null ? d.memoTo : S.memoTo) + vF('CC', 'dsa.memoCc', d.memoCc != null ? d.memoCc : S.memoCc) + '<div></div>' +
         vF('Signed by (name)', 'dsa.signName', d.signName != null ? d.signName : S.signName, 'text', { attrs:' list="tr-people"' }) + vF('Signatory designation', 'dsa.signDesig', d.signDesig != null ? d.signDesig : S.signDesig))}
-      <div class="mt-3.5">${vF('Link to the signed memo (optional)', 'dsa.memoUrl', d.memoUrl || '', 'url')}</div>
+      <div class="mt-3.5">${vF('Link to the signed memo (optional)', 'dsa.memoUrl', d.memoUrl || '', 'url')}${trAttRow('memo', t && t.memoFile, 'Attach the signed memo (PDF)')}</div>
     </div>
     ${vFoot(t ? 'Save changes' : 'Save request', `saveTravel('${t ? t.id : ''}')`, t && canManageInventory() ? `deleteTravel('${t.id}')` : '')}`, true);
   if(!t) trApplyRate(); else trDsaPreview();
 }
+// signed travel request form / signed memo kept with the request (original PDF or photos), uploaded in the background
+const trAtt = {};
+function trAttRow(k, f, label){ delete trAtt[k];
+  return `<div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="trAttPick(this, '${k}')"><span id="tr-att-act-${k}">${f ? 'Replace the attached file' : '📎 ' + label}</span></label><span id="tr-att-info-${k}" class="text-xs text-slate-500">${f ? '📎 ' + esc(f.fileName || 'File') + ' kept' : ''}</span></div>`; }
+async function trAttPick(input, k){ const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('tr-att-info-' + k); info.textContent = 'Preparing…';
+  try{ trAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(trAtt[k]) + ' (saved with the request)'; document.getElementById('tr-att-act-' + k).textContent = 'Replace file'; }catch(e){ delete trAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
+async function trBgUpload(id, k, att){
+  const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar(); const field = k === 'memo' ? 'memoFile' : 'formFile';
+  try{ const t0 = trById(id), st = await agStore(att, (t0 && (k === 'memo' ? (t0.dsa || {}).memoNo : t0.formNumber)) || '', f => { agUploads[key].f = f; agUploadBar(); });
+    const t = trById(id); if(!t){ agFileDel(st.fileId); return; } const old = t[field] && t[field].fileId;
+    await vehSave('travelRequests', { id, [field]:st }); if(old) agFileDel(old); toast((k === 'memo' ? 'Signed memo' : 'Signed travel request form') + ' attached.'); }
+  catch(e){ toast('The file ' + att.name + ' could not be uploaded: ' + (e && e.message ? e.message : e), true); }
+  finally{ delete agUploads[key]; agUploadBar(); }
+}
+function trOpenFile(id, k){ const t = trById(id), f = t && t[k === 'memo' ? 'memoFile' : 'formFile']; if(f && f.fileId) agOpenFile(f.fileId, (k === 'memo' ? 'Signed memo' : 'Signed travel request form') + (t.destination ? ' — ' + t.destination : ''), null); }
+const trMemoSigned = t => !!((t.dsa || {}).memoUrl || (t.memoFile && t.memoFile.fileId));
 async function saveTravel(id){
   const f = document.getElementById('vform'), o = vehFormObj(f);
   const parts = [...document.querySelectorAll('#tr-people-box .tr-person')].map(row => ({ name:row.querySelector('.tr-pname').value.trim(), designation:row.querySelector('.tr-pdesig').value.trim(), category:row.querySelector('.tr-pcat').value })).filter(p => p.name);
@@ -10181,6 +10209,7 @@ async function saveTravel(id){
   if(on && rec.dsa.signName){ const s = vehSettings.travel || {}; if(!s.signName){ vehSettings = Object.assign({}, vehSettings, { travel:Object.assign({}, s, { signName:rec.dsa.signName, signDesig:rec.dsa.signDesig }) }); persistVehSettings(); } }   // remembered for the next memo
   closeModal(); if(ui.tab !== TR_SCOPES[rec.scope].tab) goTo(TR_SCOPES[rec.scope].tab); else rerenderMain();
   toast(id ? 'Travel request updated.' : 'Travel request saved.'); openTravelDetail(id || newId);
+  ['form', 'memo'].forEach(k => { if(trAtt[k]){ trBgUpload(id || newId, k, trAtt[k]); delete trAtt[k]; } });
 }
 function deleteTravel(id){
   if(!vehRequireAdmin('delete travel requests')) return;
@@ -10205,7 +10234,7 @@ function openTravelDetail(id){
     <div class="rounded-lg border border-slate-100 divide-y divide-slate-100 mb-5">${ps.map(p => `<div class="px-3.5 py-2 flex justify-between gap-3 text-sm"><span class="font-semibold text-slate-800">${esc(p.name)}${d.cat2 ? ` <span class="text-[11px] font-normal text-slate-400">${esc(trPCat(p))}</span>` : ''}</span><span class="text-slate-500 text-right">${esc(p.designation || '')}</span></div>`).join('') || '<div class="px-3.5 py-2 text-sm text-slate-400">None</div>'}</div>
     <div class="grid sm:grid-cols-2 gap-4 mb-5">
       <div class="rounded-xl border border-slate-200 p-4">${head('Ticket')}${!tk ? '<div class="text-sm text-amber-700">Not linked yet. Edit the request to link the PR or petty cash request.</div>' : tk.kind === 'none' ? '<div class="text-sm text-slate-500">No ticket needed.</div>' : `<div class="text-sm font-semibold text-slate-800">${esc(tk.label)} <span class="text-xs font-normal text-slate-400">· ${esc(tk.kind)}</span></div>${tk.sub ? `<div class="text-xs text-slate-500 mt-0.5">${esc(tk.sub)}</div>` : ''}${tk.amount ? `<div class="text-xs text-slate-500 mt-0.5">${fmtMVR(tk.amount)}</div>` : ''}${tk.url ? `<div class="mt-1 text-xs">${vLink(tk.url, 'Open PR document')}</div>` : ''}`}</div>
-      <div class="rounded-xl border border-slate-200 p-4">${head('Request form')}<div class="text-sm text-slate-700">Requested by <b>${esc(t.requestedBy || '—')}</b>${t.requestedDesig ? `<div class="text-xs text-slate-400">${esc(t.requestedDesig)}</div>` : ''}</div><div class="text-sm text-slate-700 mt-1.5">Authorized by <b>${esc(t.authorizedBy || '—')}</b>${t.authorizedDesig ? `<div class="text-xs text-slate-400">${esc(t.authorizedDesig)}</div>` : ''}</div><div class="text-xs mt-2">${t.formUrl ? vLink(t.formUrl, 'Signed travel request form') : '<span class="text-slate-400">No link to the signed form</span>'}</div></div>
+      <div class="rounded-xl border border-slate-200 p-4">${head('Request form')}<div class="text-sm text-slate-700">Requested by <b>${esc(t.requestedBy || '—')}</b>${t.requestedDesig ? `<div class="text-xs text-slate-400">${esc(t.requestedDesig)}</div>` : ''}</div><div class="text-sm text-slate-700 mt-1.5">Authorized by <b>${esc(t.authorizedBy || '—')}</b>${t.authorizedDesig ? `<div class="text-xs text-slate-400">${esc(t.authorizedDesig)}</div>` : ''}</div><div class="text-xs mt-2">${t.formUrl ? vLink(t.formUrl, 'Signed travel request form') : t.formFile ? '' : '<span class="text-slate-400">No link to the signed form</span>'}${t.formFile && t.formFile.fileId ? `<button onclick="trOpenFile('${t.id}', 'form')" class="${t.formUrl ? 'ml-3 ' : ''}font-semibold text-brand-600 hover:underline">📎 ${esc(t.formFile.fileName || 'Signed form')}</button>` : ''}</div></div>
     </div>
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
       <div class="flex items-start justify-between gap-3 flex-wrap">${head('Daily Subsistence Allowance')}${dsa ? `<div class="flex items-center gap-4">${act('Download memo (PDF)', `trMemoPdf('${t.id}', this)`)}</div>` : ''}</div>
@@ -10213,7 +10242,7 @@ function openTravelDetail(id){
       ${groups.map(([c, gp]) => { const lines = trDsaLines(t, gp[0]), per = trDsaPerPerson(t, gp[0]); return `${split ? `<div class="text-xs font-semibold text-slate-500 mt-1">${esc(c)}</div>` : ''}<table class="w-full text-sm mb-3"><thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 text-left"><th class="py-1.5">Allowance</th><th class="py-1.5 text-right">Rate (${esc(cur)})</th><th class="py-1.5 text-right">Days</th><th class="py-1.5 text-right">Total</th></tr></thead><tbody>${lines.map(l => `<tr class="border-t border-slate-100"><td class="py-1.5">${l.label}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.rate)}</td><td class="py-1.5 text-right num">${l.days}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.total)}</td></tr>`).join('')}
         <tr class="border-t border-slate-200 font-semibold"><td class="py-1.5" colspan="3">Per person${gp.length > 1 ? ' × ' + gp.length : ''}</td><td class="py-1.5 text-right num">${trMoney(cur, pcRound(per * Math.max(1, gp.length)))}</td></tr></tbody></table>`; }).join('')}
       ${split ? `<div class="text-sm font-semibold text-slate-800 text-right mb-3">Total DSA ${trMoney(cur, trDsaTotal(t))}</div>` : ''}
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${item('Memo', esc(d.memoNo || '—'))}${item('Memo date', d.memoDate ? vDate(d.memoDate) : '—')}${item('Signed memo', d.memoUrl ? vLink(d.memoUrl, 'Open') : '<span class="text-amber-600">Not linked</span>')}</div>`}
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${item('Memo', esc(d.memoNo || '—'))}${item('Memo date', d.memoDate ? vDate(d.memoDate) : '—')}${item('Signed memo', (d.memoUrl ? vLink(d.memoUrl, 'Open') : '') + (t.memoFile && t.memoFile.fileId ? `<button onclick="trOpenFile('${t.id}', 'memo')" class="${d.memoUrl ? 'ml-3 ' : ''}text-brand-600 hover:underline">📎 ${esc(t.memoFile.fileName || 'Memo')}</button>` : '') || '<span class="text-amber-600">Not linked</span>')}</div>`}
     </div>
     ${t.comments ? `<div class="text-sm text-slate-600 mb-5"><span class="text-slate-400">Comments:</span> ${esc(t.comments)}</div>` : ''}
     <div class="flex items-center justify-end gap-4 pt-3 border-t border-slate-100">${canManageInventory() ? act('Delete', `deleteTravel('${t.id}')`, 'text-slate-400 hover:text-rose-600') : ''}${act('Edit request', `openTravelForm('${t.id}')`)}</div>`, true);
@@ -10501,7 +10530,7 @@ function rhSections(){
     const dsa = {}; tr.forEach(t => { const v = trDsaTotal(t); if(v) dsa[trCur(t)] = pcRound((dsa[trCur(t)] || 0) + v); });
     const ppl = tr.reduce((a, t) => a + trParts(t).length, 0), pDays = tr.reduce((a, t) => a + trDays(t.fromDate, t.toDate) * trParts(t).length, 0);
     const all = state.travelRequests, st = k => all.filter(t => (t.status || 'Open') === k).length;
-    const unsigned = all.filter(t => trDsaOn(t) && !(t.dsa || {}).memoUrl && (t.status || 'Open') !== 'Closed').length, noTicket = all.filter(t => !trTicketInfo(t) && (t.status || 'Open') !== 'Closed').length;
+    const unsigned = all.filter(t => trDsaOn(t) && !trMemoSigned(t) && (t.status || 'Open') !== 'Closed').length, noTicket = all.filter(t => !trTicketInfo(t) && (t.status || 'Open') !== 'Closed').length;
     const byDest = {}, byPerson = {}, byTicket = {};
     tr.forEach(t => { const k = (t.scope === 'foreign' ? (t.country || 'Abroad') + ' – ' : '') + (t.rateLocation || t.destination || '—'); byDest[k] = (byDest[k] || 0) + 1;
       trParts(t).forEach(pp => { byPerson[pp.name] = (byPerson[pp.name] || 0) + trDays(t.fromDate, t.toDate); });
@@ -11896,7 +11925,7 @@ function dashboardModuleSummary(){
       const mo = all.filter(t => String(t.fromDate || '').slice(0, 7) === month), pend = all.filter(t => t.status === 'Pending').length, open = all.filter(t => (t.status || 'Open') === 'Open').length;
       const away = all.filter(t => t.fromDate && t.fromDate <= today && (t.toDate || t.fromDate) >= today && t.status !== 'Closed').reduce((a, t) => a + trParts(t).length, 0);
       const soon = all.filter(t => t.fromDate > today && t.fromDate <= wk && t.status !== 'Closed').length;
-      const unsigned = all.filter(t => trDsaOn(t) && !(t.dsa || {}).memoUrl && t.status !== 'Closed').length, noTicket = all.filter(t => !trTicketInfo(t) && t.status !== 'Closed').length;
+      const unsigned = all.filter(t => trDsaOn(t) && !trMemoSigned(t) && t.status !== 'Closed').length, noTicket = all.filter(t => !trTicketInfo(t) && t.status !== 'Closed').length;
       const dsaM = mo.filter(t => trCur(t) === 'MVR').reduce((a, t) => a + trDsaTotal(t), 0);
       return card('travel-local', 'plane', 'Travel',
         [metric(fmtNum(mo.length), 'Trips this month'), metric('MVR ' + Math.round(dsaM).toLocaleString('en-US'), 'DSA this month'), metric(fmtNum(open + pend), 'Open / pending')],

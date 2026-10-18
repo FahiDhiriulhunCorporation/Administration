@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.217';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.218';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -9953,9 +9953,10 @@ const TR_BUDGETS_OLD = ['Administrative Budget', 'Planning and Projects Budget',
 const trBudgetOf = n => ({ 'Administration':'Administrative Budget', 'Bureau':'Bureau Budget', 'Business Development':'BD Budget', 'Planning':'Planning and Projects Budget' })[n] || n + ' Budget';
 const trBudgets = cur => { const l = DEPARTMENTS.map(d => trBudgetOf(d.name)); TR_BUDGETS_OLD.forEach(b => { if(!l.includes(b) && b !== 'Funded by the host') l.push(b); }); l.push('Funded by the host'); if(cur && !l.includes(cur)) l.push(cur); return l; };
 const TR_SCOPES = { local:{ label:'Local Travel', one:'local trip', tab:'travel-local' }, foreign:{ label:'Foreign Travel', one:'foreign trip', tab:'travel-foreign' } };
-const TR_ALLOW = [['meal', 'Meal'], ['pocket', 'Pocket Money'], ['accom', 'Accommodation'], ['stop', 'Stop-over']];
+const TR_ALLOW = [['meal', 'Meal'], ['pocket', 'Pocket Money'], ['accom', 'Accommodation'], ['stop', 'Stop-over'], ['pmoney', 'Pocket Money']];
+const TR_LUMP = k => k === 'pmoney';            // pocket money abroad: one total amount per person, no days
 const TR_CATS = ['Category 1', 'Category 2'];
-const trAllowLabel = (k, scope) => k === 'pocket' ? (scope === 'foreign' ? 'Incidental Allowance' : 'Pocket Money') : k === 'stop' ? 'Stop-over (over 6 hours)' : k === 'meal' ? 'Meal / Food' : 'Accommodation';
+const trAllowLabel = (k, scope) => k === 'pocket' ? (scope === 'foreign' ? 'Incidental Allowance' : 'Pocket Money') : k === 'pmoney' ? 'Pocket Money' : k === 'stop' ? 'Stop-over (over 6 hours)' : k === 'meal' ? 'Meal / Food' : 'Accommodation';
 // the FDC rates (DSA.xlsx): local by atoll / city in MVR, foreign in USD (food and accommodation abroad follow the UNDP DSA for the city)
 const TR_FDC_LOCAL = [['Haa Alifu Atoll', 800, 800], ['Haa Dhaalu Atoll', 1000, 1000], ['Shaviyani Atoll', 800, 800], ['Noonu Atoll', 1000, 1000], ['Raa Atoll', 1000, 1000], ['Baa Atoll', 1000, 900], ['Lhaviyani Atoll', 800, 800], ['Kaafu Atoll', 1200, 1000], ['Alif Alif Atoll', 1000, 900], ['Alif Dhaalu Atoll', 1200, 900],
   ['Faafu Atoll', 800, 800], ['Dhaalu Atoll', 900, 800], ['Thaa Atoll', 1000, 900], ['Laamu Atoll', 1000, 900], ['Gaafu Atoll', 1000, 900], ['Gaafu Dhaal Atoll', 1000, 1000], ['Fuvahmulah City', 1200, 1200], ['Addu City', 1200, 1200]];
@@ -10007,7 +10008,7 @@ const trCur = t => (t.dsa && t.dsa.currency) || ((trRateFor(t.scope || 'local', 
 const trPRate = (t, p, k) => { const d = t.dsa || {}; return pcRound(vNum(trPCat(p) === 'Category 2' && d.cat2 ? d.cat2[k] : d[k + 'Rate'])); };
 function trDsaLines(t, p){
   const d = t.dsa || {};
-  return TR_ALLOW.map(([k]) => { const rate = trPRate(t, p, k), days = Math.max(0, Math.round(vNum(d[k + 'Days']))); return { k, label:k === 'meal' ? 'Meal' : trAllowLabel(k, t.scope), rate, days, total:pcRound(rate * days) }; }).filter(l => l.rate > 0 && l.days > 0);
+  return TR_ALLOW.map(([k]) => { const rate = trPRate(t, p, k), days = TR_LUMP(k) ? (t.scope === 'foreign' ? 1 : 0) : Math.max(0, Math.round(vNum(d[k + 'Days']))); return { k, label:k === 'meal' ? 'Meal' : trAllowLabel(k, t.scope), rate, days, lump:TR_LUMP(k), total:pcRound(rate * days) }; }).filter(l => l.rate > 0 && l.days > 0);
 }
 const trDsaPerPerson = (t, p) => pcRound(trDsaLines(t, p).reduce((s, l) => s + l.total, 0));
 const trDsaTotal = t => trDsaOn(t) ? pcRound((trParts(t).length ? trParts(t) : [{}]).reduce((s, p) => s + trDsaPerPerson(t, p), 0)) : 0;
@@ -10087,7 +10088,7 @@ function trDatesChanged(){
 }
 function trDsaPreview(){
   const f = document.getElementById('vform'), out = document.getElementById('tr-dsa-total'); if(!f || !out) return;
-  const days = k => Math.max(0, Math.round(vNum((f['dsa.' + k + 'Days'] || {}).value)));
+  const days = k => TR_LUMP(k) ? (f.scope.value === 'foreign' ? 1 : 0) : Math.max(0, Math.round(vNum((f['dsa.' + k + 'Days'] || {}).value)));
   const per = c => pcRound(TR_ALLOW.reduce((s, [k]) => s + vNum((f[c === 'Category 2' ? 'dsa.cat2.' + k : 'dsa.' + k + 'Rate'] || {}).value) * days(k), 0));
   const cats = [...document.querySelectorAll('#tr-people-box .tr-person')].filter(r => r.querySelector('.tr-pname').value.trim()).map(r => r.querySelector('.tr-pcat').value);
   const cur = (f['dsa.currency'] || {}).value || 'MVR', groups = TR_CATS.map(c => [c, cats.filter(x => x === c).length]).filter(g => g[1]);
@@ -10100,7 +10101,7 @@ function trLocationOpts(scope, country){ const c = trNorm(country); return [...n
 function trScopeRates(scope){                       // switching local/foreign: the home country for local, the lists for that scope, and its rates
   const f = document.getElementById('vform'); if(!f) return;
   if(scope === 'local') f.country.value = TR_HOME; else if(trNorm(f.country.value) === trNorm(TR_HOME)) f.country.value = '';
-  document.querySelectorAll('.tr-pocket-lbl').forEach(el => { el.textContent = trAllowLabel('pocket', scope); });
+  document.querySelectorAll('.tr-pocket-lbl').forEach(el => { el.textContent = trAllowLabel('pocket', scope); }); document.querySelectorAll('.tr-foreign-only').forEach(el => el.classList.toggle('hidden', scope !== 'foreign'));
   document.getElementById('tr-countries').innerHTML = trCountryOpts(scope); trCountryChanged(); trDestChanged();
 }
 function trDestChanged(){                            // a local destination such as "K.Dhiffushi" sets the atoll of the rate, if that atoll has a rate
@@ -10112,7 +10113,7 @@ function trCountryChanged(){ const f = document.getElementById('vform'); if(!f) 
 function trApplyRate(){                             // fills the rates of the country and location chosen
   const f = document.getElementById('vform'); if(!f) return;
   const r = trRateFor(f.scope.value, f.country.value, f.rateLocation.value, TR_CATS[0]), r2 = trRateFor(f.scope.value, f.country.value, f.rateLocation.value, TR_CATS[1]) || r, out = document.getElementById('tr-rate-src');
-  TR_ALLOW.forEach(([k]) => { f['dsa.' + k + 'Rate'].value = r && r[k] ? r[k] : ''; f['dsa.cat2.' + k].value = r2 && r2[k] ? r2[k] : ''; }); if(r) f['dsa.currency'].value = r.currency || 'MVR';      // no rate: the amounts are left empty to enter
+  TR_ALLOW.forEach(([k]) => { if(TR_LUMP(k) && !(r && r[k]) && !(r2 && r2[k])) return; f['dsa.' + k + 'Rate'].value = r && r[k] ? r[k] : ''; f['dsa.cat2.' + k].value = r2 && r2[k] ? r2[k] : ''; }); if(r) f['dsa.currency'].value = r.currency || 'MVR';      // no rate: the amounts are left empty to enter
   const note = [...new Set([r, r2].filter(x => x && x.note).map(x => x.note))].join(' · ');
   if(out) out.innerHTML = r ? 'Rates from <b>' + esc([...new Set([r, r2].map(trRateLabel))].join(' / ')) + '</b>' + (note ? `<div class="text-amber-700 mt-1">${esc(note)} — enter those amounts for this trip.</div>` : '') : '<span class="text-amber-600">No rate is set for this country / location. Enter the amounts, or add the rate under DSA rates.</span>';
   trDsaPreview();
@@ -10154,7 +10155,7 @@ function openTravelForm(id, scope){
     <div id="tr-dsa" ${d.enabled ? '' : 'style="display:none"'} class="mt-3">
       <div id="tr-rate-src" class="text-xs text-slate-500 mb-2.5">${t ? 'Amounts as saved with this request. Change the country or location to load its rates.' : ''}</div>
       <div class="grid grid-cols-[1fr_6.5rem_6.5rem_4.5rem] gap-2 items-end text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1"><div>Allowance</div><div>Category 1</div><div>Category 2</div><div>Days</div></div>
-      ${TR_ALLOW.map(([k]) => `<div class="grid grid-cols-[1fr_6.5rem_6.5rem_4.5rem] gap-2 items-center mb-2"><div class="text-sm text-slate-700">${k === 'pocket' ? `<span class="tr-pocket-lbl">${trAllowLabel(k, scope)}</span>` : trAllowLabel(k, scope)}${k === 'stop' ? '<div class="text-[11px] text-slate-400">days = number of stop-overs</div>' : ''}</div><input type="number" step="0.01" min="0" name="dsa.${k}Rate" value="${esc(d[k + 'Rate'] != null ? d[k + 'Rate'] : '')}" oninput="trDsaPreview()" class="${VEH_FIELD}"><input type="number" step="0.01" min="0" name="dsa.cat2.${k}" value="${esc(c2[k] != null ? c2[k] : '')}" oninput="trDsaPreview()" class="${VEH_FIELD}"><input type="number" step="1" min="0" name="dsa.${k}Days" value="${esc(d[k + 'Days'] != null && d[k + 'Days'] !== '' ? d[k + 'Days'] : (k === 'stop' ? 0 : k === 'pocket' && scope !== 'foreign' ? 1 : days || ''))}" ${k !== 'stop' && t ? 'data-auto="0"' : ''} oninput="this.dataset.auto='0'; trDsaPreview()" class="${VEH_FIELD}"></div>`).join('')}
+      ${TR_ALLOW.map(([k]) => `<div class="grid grid-cols-[1fr_6.5rem_6.5rem_4.5rem] gap-2 items-center mb-2${TR_LUMP(k) ? ' tr-foreign-only' + (scope !== 'foreign' ? ' hidden' : '') : ''}"><div class="text-sm text-slate-700">${k === 'pocket' ? `<span class="tr-pocket-lbl">${trAllowLabel(k, scope)}</span>` : trAllowLabel(k, scope)}${k === 'stop' ? '<div class="text-[11px] text-slate-400">days = number of stop-overs</div>' : TR_LUMP(k) ? '<div class="text-[11px] text-slate-400">total amount per person</div>' : ''}</div><input type="number" step="0.01" min="0" name="dsa.${k}Rate" value="${esc(d[k + 'Rate'] != null ? d[k + 'Rate'] : '')}" oninput="trDsaPreview()" class="${VEH_FIELD}"><input type="number" step="0.01" min="0" name="dsa.cat2.${k}" value="${esc(c2[k] != null ? c2[k] : '')}" oninput="trDsaPreview()" class="${VEH_FIELD}">${TR_LUMP(k) ? '<div class="text-xs text-slate-500 text-center">Total amount</div>' : `<input type="number" step="1" min="0" name="dsa.${k}Days" value="${esc(d[k + 'Days'] != null && d[k + 'Days'] !== '' ? d[k + 'Days'] : (k === 'stop' ? 0 : k === 'pocket' && scope !== 'foreign' ? 1 : days || ''))}" ${k !== 'stop' && t ? 'data-auto="0"' : ''} oninput="this.dataset.auto='0'; trDsaPreview()" class="${VEH_FIELD}">`}</div>`).join('')}
       <div class="grid grid-cols-[1fr_6.5rem_6.5rem_4.5rem] gap-2 items-center mb-3"><div class="text-sm text-slate-700">Currency</div><input type="text" name="dsa.currency" value="${esc(d.currency || r.currency)}" oninput="trDsaPreview()" class="${VEH_FIELD}"><div></div><div></div></div>
       <div class="rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600 mb-4">DSA: <span id="tr-dsa-total"></span></div>
       ${vGrid(2, vF('Memo number', 'dsa.memoNo', d.memoNo || trNextMemoNo(), 'text') + vF('Memo date', 'dsa.memoDate', d.memoDate || vToday(), 'date') +
@@ -10201,7 +10202,7 @@ async function saveTravel(id){
     budget:o.budget || '', purpose:String(o.purpose || '').trim(), status:TR_STATUSES.includes(o.status) ? o.status : 'Open', participants:parts, comments:String(o.comments || '').trim(),
     requestedBy:String(o.requestedBy || '').trim(), requestedDesig:String(o.requestedDesig || '').trim(), authorizedBy:String(o.authorizedBy || '').trim(), authorizedDesig:String(o.authorizedDesig || '').trim(), formUrl:urls.formUrl,
     ticket:{ via:tk.via || '', prId:tk.via === 'pr' ? tk.prId : '', pettyId:tk.via === 'petty' ? tk.pettyId : '', ref:(tk.via === 'pr' && !tk.prId) || (tk.via === 'petty' && !tk.pettyId) ? String(tk.ref || '').trim() : '' },
-    dsa:{ enabled:on, currency:String(dd.currency || 'MVR').trim() || 'MVR', mealRate:pcRound(vNum(dd.mealRate)), mealDays:Math.round(vNum(dd.mealDays)), pocketRate:pcRound(vNum(dd.pocketRate)), pocketDays:Math.round(vNum(dd.pocketDays)), accomRate:pcRound(vNum(dd.accomRate)), accomDays:Math.round(vNum(dd.accomDays)), stopRate:pcRound(vNum(dd.stopRate)), stopDays:Math.round(vNum(dd.stopDays)),
+    dsa:{ enabled:on, currency:String(dd.currency || 'MVR').trim() || 'MVR', mealRate:pcRound(vNum(dd.mealRate)), mealDays:Math.round(vNum(dd.mealDays)), pocketRate:pcRound(vNum(dd.pocketRate)), pocketDays:Math.round(vNum(dd.pocketDays)), accomRate:pcRound(vNum(dd.accomRate)), accomDays:Math.round(vNum(dd.accomDays)), stopRate:pcRound(vNum(dd.stopRate)), stopDays:Math.round(vNum(dd.stopDays)), pmoneyRate:pcRound(vNum(dd.pmoneyRate)), pmoneyDays:1,
       cat2:Object.fromEntries(TR_ALLOW.map(([k]) => [k, pcRound(vNum((dd.cat2 || {})[k]))])), memoNo, memoDate:dd.memoDate || '', memoFrom:String(dd.memoFrom || '').trim(), memoTo:String(dd.memoTo || '').trim(), memoCc:String(dd.memoCc || '').trim(), signName:String(dd.signName || '').trim(), signDesig:String(dd.signDesig || '').trim(), memoUrl:urls.memoUrl } };
   if(on && !trDsaTotal(rec)) return vFail('Enter the DSA amounts and days, or untick "DSA is paid for this trip".');
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
@@ -10239,7 +10240,7 @@ function openTravelDetail(id){
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
       <div class="flex items-start justify-between gap-3 flex-wrap">${head('Daily Subsistence Allowance')}${dsa ? `<div class="flex items-center gap-4">${act('Download memo (PDF)', `trMemoPdf('${t.id}', this)`)}</div>` : ''}</div>
       ${!dsa ? '<div class="text-sm text-slate-500">No DSA for this trip.</div>' : `
-      ${groups.map(([c, gp]) => { const lines = trDsaLines(t, gp[0]), per = trDsaPerPerson(t, gp[0]); return `${split ? `<div class="text-xs font-semibold text-slate-500 mt-1">${esc(c)}</div>` : ''}<table class="w-full text-sm mb-3"><thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 text-left"><th class="py-1.5">Allowance</th><th class="py-1.5 text-right">Rate (${esc(cur)})</th><th class="py-1.5 text-right">Days</th><th class="py-1.5 text-right">Total</th></tr></thead><tbody>${lines.map(l => `<tr class="border-t border-slate-100"><td class="py-1.5">${l.label}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.rate)}</td><td class="py-1.5 text-right num">${l.days}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.total)}</td></tr>`).join('')}
+      ${groups.map(([c, gp]) => { const lines = trDsaLines(t, gp[0]), per = trDsaPerPerson(t, gp[0]); return `${split ? `<div class="text-xs font-semibold text-slate-500 mt-1">${esc(c)}</div>` : ''}<table class="w-full text-sm mb-3"><thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 text-left"><th class="py-1.5">Allowance</th><th class="py-1.5 text-right">Rate (${esc(cur)})</th><th class="py-1.5 text-right">Days</th><th class="py-1.5 text-right">Total</th></tr></thead><tbody>${lines.map(l => `<tr class="border-t border-slate-100"><td class="py-1.5">${l.label}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.rate)}</td><td class="py-1.5 text-right num">${l.lump ? '—' : l.days}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.total)}</td></tr>`).join('')}
         <tr class="border-t border-slate-200 font-semibold"><td class="py-1.5" colspan="3">Per person${gp.length > 1 ? ' × ' + gp.length : ''}</td><td class="py-1.5 text-right num">${trMoney(cur, pcRound(per * Math.max(1, gp.length)))}</td></tr></tbody></table>`; }).join('')}
       ${split ? `<div class="text-sm font-semibold text-slate-800 text-right mb-3">Total DSA ${trMoney(cur, trDsaTotal(t))}</div>` : ''}
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${item('Memo', esc(d.memoNo || '—'))}${item('Memo date', d.memoDate ? vDate(d.memoDate) : '—')}${item('Signed memo', (d.memoUrl ? vLink(d.memoUrl, 'Open') : '') + (t.memoFile && t.memoFile.fileId ? `<button onclick="trOpenFile('${t.id}', 'memo')" class="${d.memoUrl ? 'ml-3 ' : ''}text-brand-600 hover:underline">📎 ${esc(t.memoFile.fileName || 'Memo')}</button>` : '') || '<span class="text-amber-600">Not linked</span>')}${item('Payment slip', trDsaPaid(t) ? `<button onclick="trOpenFile('${t.id}', 'slip')" class="text-emerald-700 hover:underline">✓ Paid · 📎 ${esc(t.slipFile.fileName || 'Slip')}</button>` : `<label class="text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="trQuickSlip(this, '${t.id}')">📎 Attach slip</label>`)}</div>`}
@@ -10383,7 +10384,7 @@ async function buildTravelMemoPdf(t){
     const b0 = y;
     const mid = (arr, x0, x1, al) => { const st = b0 + (blockH - arr.length * LH) / 2 + 8; arr.forEach((ln, i) => { if(al === 'c') center(x0, x1, st + i * LH, ln); else txt(x0 + 4, st + i * LH, ln, { size:8.5 }); }); };
     mid(nameW, X[0], X[1], 'c'); mid(desW, X[1], X[2], 'l'); mid([pcMoneyPlain(per)], X[6], X[7], 'c');
-    let yy = b0; lines.forEach((l, i) => { const hh = subH[i], b = yy + hh / 2 + 3; txt(X[2] + 4, b, l.label, { size:8.5 }); center(X[3], X[4], b, pcMoneyPlain(l.rate)); center(X[4], X[5], b, String(l.days).padStart(2, '0')); center(X[5], X[6], b, pcMoneyPlain(l.total)); yy += hh; if(i < lines.length - 1) pg.line(X[2], yy, X[6], yy, GRID, 0.5); });
+    let yy = b0; lines.forEach((l, i) => { const hh = subH[i], b = yy + hh / 2 + 3; txt(X[2] + 4, b, l.label, { size:8.5 }); center(X[3], X[4], b, pcMoneyPlain(l.rate)); center(X[4], X[5], b, l.lump ? '-' : String(l.days).padStart(2, '0')); center(X[5], X[6], b, pcMoneyPlain(l.total)); yy += hh; if(i < lines.length - 1) pg.line(X[2], yy, X[6], yy, GRID, 0.5); });
     y = b0 + blockH; pg.line(X[0], y, X[7], y, GRID, 0.5); X.forEach(x => pg.line(x, b0, x, y, GRID, 0.5));
   });
   if(ps.length > 1){ const h = 17; pg.fill(X[0], y, X[7] - X[0], h, HEAD); txt(X[0] + 4, y + 11.5, 'Total DSA (' + ps.length + ' staff)', { bold:true, size:8.5 }); center(X[6], X[7], y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(X[0], y + h, X[7], y + h, GRID, 0.5); pg.line(X[0], y, X[0], y + h, GRID, 0.5); pg.line(X[6], y, X[6], y + h, GRID, 0.5); pg.line(X[7], y, X[7], y + h, GRID, 0.5); y += h; }

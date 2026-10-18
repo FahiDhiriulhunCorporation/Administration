@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.224';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.225';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3193,6 +3193,7 @@ const PC_DEFAULT_FLOATS = [[/head\s*office/i, 10000], [/apollo/i, 5000], [/\bt[\
 function pcFuelFund(){ return { id:PC_FUEL_ID, name:'Fueling', code:'FUEL', color:'#f59e0b', pettyCashFloat: vehSettings.fuelPettyCashFloat != null ? vNum(vehSettings.fuelPettyCashFloat) : 700, pettyCashFloatSet:true, pettyCashCustodianUid: vehSettings.fuelCustodianUid || '', pettyCashCustodianName: vehSettings.fuelCustodianName || '' }; }
 const pcFund = id => id === PC_FUEL_ID ? pcFuelFund() : getLocation(id);
 const pcFundList = () => LOCATIONS.concat([pcFuelFund()]);
+const pcAssignedFunds = () => { const l = pcFundList().filter(f => pcFloatOf(f) > 0); return l.length ? l : pcFundList(); };     // the locations / funds that have a petty cash balance assigned
 function pcFloatOf(f){
   if(!f) return 0;
   if(f.id === PC_FUEL_ID || f.pettyCashFloatSet) return vNum(f.pettyCashFloat);
@@ -3350,8 +3351,9 @@ function viewPettyCash(){
   const sumOpt = (list, o) => pcRound(list.filter(r => r.option === o).reduce((s, r) => s + pcTotal(r), 0));
   const awaiting = authUser ? all.filter(r => pcCanSign(r) && !pcSigned(r)).length : 0;
   const counts = {}; all.forEach(r => { const k = pcStatus(r).key; counts[k] = (counts[k] || 0) + 1; });
-  const funds = pcFundList(); if(vehUi.pcLoc && !funds.some(f => f.id === vehUi.pcLoc)) vehUi.pcLoc = '';
-  const list = all.filter(r => (!vehUi.pcLoc || r.locationId === vehUi.pcLoc) && (!vehUi.pcOpt || r.option === vehUi.pcOpt) && (!vehUi.pcStatus || pcStatus(r).key === vehUi.pcStatus) &&
+  const funds = pcAssignedFunds(), isOther = r => !funds.some(f => f.id === r.locationId), others = all.filter(isOther).length;
+  if(vehUi.pcLoc && !funds.some(f => f.id === vehUi.pcLoc) && !(vehUi.pcLoc === 'other' && others)) vehUi.pcLoc = '';
+  const list = all.filter(r => (!vehUi.pcLoc || (vehUi.pcLoc === 'other' ? isOther(r) : r.locationId === vehUi.pcLoc)) && (!vehUi.pcOpt || r.option === vehUi.pcOpt) && (!vehUi.pcStatus || pcStatus(r).key === vehUi.pcStatus) &&
     vMatch(vehUi.pcQ, [r.number, r.purpose, r.option, r.department, pcLocName(r.locationId), pcRequester(r).name, pcHod(r).name, r.category, pcTotal(r).toFixed(2)].concat(pcItems(r).map(i => (i.name || '') + ' ' + (i.description || '')))));
   const shown = list.slice(0, vehUi.pcShown);
   const rowHtml = r => {
@@ -3370,13 +3372,13 @@ function viewPettyCash(){
   };
   // every location / fund in its own section, so requests of different petty cash floats are not mixed up
   const groupHead = (f, rs) => { const n = list.filter(x => f ? x.locationId === f.id : !funds.some(y => y.id === x.locationId)), tot = pcRound(n.reduce((s, r) => s + pcTotal(r), 0));
-    return `<tr class="bg-slate-50"><td colspan="7" class="px-4 py-2.5 border-t border-slate-200"><div class="flex flex-wrap items-center justify-between gap-2"><span class="inline-flex items-center gap-2 text-sm font-bold text-slate-800">${f ? `<i class="w-2.5 h-2.5 rounded-full" style="background:${esc(f.color || '#94a3b8')}"></i>${esc(f.name)}` : 'No location'}</span><span class="text-xs text-slate-500">${n.length} request${n.length === 1 ? '' : 's'} · <b class="text-slate-700">${fmtMVR(tot)}</b>${n.length > rs.length ? ` · showing ${rs.length}` : ''}</span></div></td></tr>`; };
+    return `<tr class="bg-slate-50"><td colspan="7" class="px-4 py-2.5 border-t border-slate-200"><div class="flex flex-wrap items-center justify-between gap-2"><span class="inline-flex items-center gap-2 text-sm font-bold text-slate-800">${f ? `<i class="w-2.5 h-2.5 rounded-full" style="background:${esc(f.color || '#94a3b8')}"></i>${esc(f.name)}` : 'Other locations <span class="text-xs font-normal text-slate-400">(no petty cash assigned)</span>'}</span><span class="text-xs text-slate-500">${n.length} request${n.length === 1 ? '' : 's'} · <b class="text-slate-700">${fmtMVR(tot)}</b>${n.length > rs.length ? ` · showing ${rs.length}` : ''}</span></div></td></tr>`; };
   const rows = vehUi.pcLoc ? shown.map(rowHtml).join('')
     : funds.map(f => { const rs = shown.filter(r => r.locationId === f.id); return rs.length ? groupHead(f, rs) + rs.map(rowHtml).join('') : ''; }).join('')
       + (() => { const rs = shown.filter(r => !funds.some(f => f.id === r.locationId)); return rs.length ? groupHead(null, rs) + rs.map(rowHtml).join('') : ''; })();
   const locCount = id => all.filter(r => r.locationId === id).length;
   const tab = (id, label, n, color) => `<button onclick="vehUi.pcLoc='${id}'; vehUi.pcShown=30; rerenderMain()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold border ${vehUi.pcLoc === id ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">${color ? `<i class="w-2.5 h-2.5 rounded-full" style="background:${esc(color)}"></i>` : ''}${esc(label)}<span class="text-xs font-medium ${vehUi.pcLoc === id ? 'text-white/80' : 'text-slate-400'}">${n}</span></button>`;
-  const locTabs = `<div class="flex flex-wrap gap-2 mb-3">${tab('', 'All locations', all.length)}${funds.map(f => tab(f.id, f.name, locCount(f.id), f.color || '#94a3b8')).join('')}</div>`;
+  const locTabs = `<div class="flex flex-wrap gap-2 mb-3">${tab('', 'All locations', all.length)}${funds.map(f => tab(f.id, f.name, locCount(f.id), f.color || '#94a3b8')).join('')}${others ? tab('other', 'Other', others, '#94a3b8') : ''}</div>`;
   return `
     ${vHead('Petty Cash Request', 'Requests for petty cash by location — a prior request, or a reimbursement of money already spent.', vBtnPlain('+ Fueling Petty Cash', "openPcForm(null,'fuel')") + vBtnPrimary('+ New Request', 'openPcForm()'))}
     ${vKpis(
@@ -3849,7 +3851,7 @@ async function openPcForm(id, mode){
       <div class="text-sm text-slate-500">Total <b id="pc-grand" class="text-slate-900 num text-base ml-1">${fmtMVR(pcTotal(d))}</b></div></div>`;
   openModal((r ? 'Edit ' : 'New ') + (mode === 'fuel' ? 'fueling petty cash' : 'petty cash request'), vFormOpen + `
     ${vGrid(3, vF('Voucher no.', 'number', d.number, 'text', { req:1, attrs:' oninput="pcNumberEdited()"' }) + vF('Date', 'date', d.date, 'date', { req:1, attrs:' onchange="pcLocationChanged()"' }) +
-      `<div><label class="${VEH_LBL}">${mode === 'fuel' ? 'Fund' : 'Location'}${vReqStar}</label>${mode === 'fuel' ? `<select name="locationId" id="pc-location" disabled class="${VEH_FIELD} bg-white"><option value="${PC_FUEL_ID}">Fueling (petty cash fund)</option></select>` : `<select name="locationId" id="pc-location" onchange="pcLocationChanged()" class="${VEH_FIELD} bg-white">${LOCATIONS.map(l => `<option value="${esc(l.id)}" ${l.id === d.locationId ? 'selected' : ''}>${esc(l.name)} (${esc(l.code)})</option>`).join('')}</select>`}</div>`)}
+      `<div><label class="${VEH_LBL}">${mode === 'fuel' ? 'Fund' : 'Location'}${vReqStar}</label>${mode === 'fuel' ? `<select name="locationId" id="pc-location" disabled class="${VEH_FIELD} bg-white"><option value="${PC_FUEL_ID}">Fueling (petty cash fund)</option></select>` : `<select name="locationId" id="pc-location" onchange="pcLocationChanged()" class="${VEH_FIELD} bg-white">${(LOCATIONS.some(l => pcFloatOf(l) > 0) ? LOCATIONS.filter(l => pcFloatOf(l) > 0 || l.id === d.locationId) : LOCATIONS).map(l => `<option value="${esc(l.id)}" ${l.id === d.locationId ? 'selected' : ''}>${esc(l.name)} (${esc(l.code)})</option>`).join('')}</select>`}</div>`)}
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-3.5">
       <div class="relative"><label class="${VEH_LBL}">Department${vReqStar}</label>
         <input type="text" id="pc-department" autocomplete="off" value="${esc(d.department || 'Administration')}" placeholder="Search by name or code…" oninput="filterDepartmentDropdown('pc')" onfocus="filterDepartmentDropdown('pc')" onblur="hideDepartmentDropdown('pc')" class="${VEH_FIELD}">

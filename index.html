@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.233';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.234';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -10122,6 +10122,12 @@ function trNoCmp(a, b){
   for(let i = 0; i < Math.max(x.length, y.length); i++){ const d = (+x[i] || 0) - (+y[i] || 0); if(d) return d; }
   return 0;
 }
+// the next request number: one after the highest of the year (FDC/TRF/2026/31 → FDC/TRF/2026/32; 27-01, 27-02 count as 27)
+function trNextFormNo(){
+  const yy = vToday().slice(0, 4); let max = 0, pre = 'FDC/TRF/' + yy + '/';
+  state.travelRequests.forEach(t => { const m = /^(.*\/)(\d{4})\/(\d+)(?:-\d+)?\s*$/.exec(String(t.formNumber || '').trim()); if(m && m[2] === yy && +m[3] >= max){ max = +m[3]; pre = m[1] + yy + '/'; } });
+  return pre + (max + 1);
+}
 const trById = id => state.travelRequests.find(t => t.id === id) || null;
 const trParts = t => (t.participants || []).filter(p => p && String(p.name || '').trim());
 const trDsaOn = t => !!(t.dsa && t.dsa.enabled);
@@ -10262,7 +10268,7 @@ function openTravelForm(id, scope){
   openModal((t ? 'Edit ' : 'New ') + TR_SCOPES[scope].one + ' request', vFormOpen + `
     <datalist id="tr-people">${people}</datalist><datalist id="tr-countries">${trCountryOpts(scope)}</datalist><datalist id="tr-locations">${trLocationOpts(scope, country)}</datalist>
     ${vSec('Travel request')}
-    ${vGrid(3, vS('Travel', 'scope', [['local', 'Local'], ['foreign', 'Foreign']], scope, null, { attrs:' onchange="trScopeRates(this.value)"' }) + vF('Form number', 'formNumber', t ? t.formNumber : '', 'text', { attrs:' placeholder="(FRM)FDCMDB/FDC/2026/21"' }) + vF('Form date', 'formDate', t ? t.formDate : vToday(), 'date'))}
+    ${vGrid(3, vS('Travel', 'scope', [['local', 'Local'], ['foreign', 'Foreign']], scope, null, { attrs:' onchange="trScopeRates(this.value)"' }) + vF('Form number', 'formNumber', t ? t.formNumber : trNextFormNo(), 'text', { attrs:' placeholder="FDC/TRF/' + vToday().slice(0, 4) + '/1"' }) + vF('Form date', 'formDate', t ? t.formDate : vToday(), 'date'))}
     <div class="mt-3.5">${vGrid(2, vF('Destination', 'destination', t ? t.destination : '', 'text', { req:1, span:'sm:col-span-2', attrs:' onchange="trDestChanged()" placeholder="K.Dhiffushi, Adh.Dhangethi & Adh.Omadhoo"' }) +
       vF('Country', 'country', country, 'text', { req:1, attrs:' list="tr-countries" onchange="trCountryChanged()" placeholder="Country"' }) + vF('Location (for the DSA rate)', 'rateLocation', rloc, 'text', { attrs:' list="tr-locations" onchange="trApplyRate()" placeholder="City / atoll / island — blank for all"' }) +
       vF('From', 'fromDate', t ? t.fromDate : '', 'date', { req:1, attrs:' onchange="trDatesChanged()"' }) + `<div><label class="${VEH_LBL}">To <span class="text-rose-500">*</span> <span id="tr-days" class="font-normal text-slate-400 ml-1">${days ? days + ' day' + (days === 1 ? '' : 's') : ''}</span></label><input type="date" name="toDate" value="${esc(t ? t.toDate || '' : '')}" onchange="trDatesChanged()" class="${VEH_FIELD}"></div>` +
@@ -10368,7 +10374,7 @@ function openTravelDetail(id){
       <div class="rounded-xl border border-slate-200 p-4">${head('Request form')}<div class="text-sm text-slate-700">Requested by <b>${esc(t.requestedBy || '—')}</b>${t.requestedDesig ? `<div class="text-xs text-slate-400">${esc(t.requestedDesig)}</div>` : ''}</div><div class="text-sm text-slate-700 mt-1.5">Authorized by <b>${esc(t.authorizedBy || '—')}</b>${t.authorizedDesig ? `<div class="text-xs text-slate-400">${esc(t.authorizedDesig)}</div>` : ''}</div><div class="text-xs mt-2">${t.formUrl ? vLink(t.formUrl, 'Signed travel request form') : t.formFile ? '' : '<span class="text-slate-400">No link to the signed form</span>'}${t.formFile && t.formFile.fileId ? `<button onclick="trOpenFile('${t.id}', 'form')" class="${t.formUrl ? 'ml-3 ' : ''}font-semibold text-brand-600 hover:underline">📎 ${esc(t.formFile.fileName || 'Signed form')}</button>` : ''}</div></div>
     </div>
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
-      <div class="flex items-start justify-between gap-3 flex-wrap">${head('Daily Subsistence Allowance')}${dsa ? `<div class="flex items-center gap-4">${act('Download memo (PDF)', `trMemoPdf('${t.id}', this)`)}</div>` : ''}</div>
+      <div class="flex items-start justify-between gap-3 flex-wrap">${head('Daily Subsistence Allowance')}${dsa ? `<div class="flex items-center gap-4 flex-wrap justify-end">${trMemoSigned(t) ? act('✉ Email to Finance', `trMailOpen('${t.id}')`) + (t.mailDraftAt ? `<span class="text-[11px] text-slate-400">Draft made ${fmtDT(new Date(t.mailDraftAt).toISOString())}</span>` : '') : ''}${act('Download memo (PDF)', `trMemoPdf('${t.id}', this)`)}</div>` : ''}</div>
       ${!dsa ? '<div class="text-sm text-slate-500">No DSA for this trip.</div>' : `
       ${groups.map(([c, gp]) => { const lines = trDsaLines(t, gp[0]), per = trDsaPerPerson(t, gp[0]); return `${split ? `<div class="text-xs font-semibold text-slate-500 mt-1">${esc(c)}</div>` : ''}<table class="w-full text-sm mb-3"><thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 text-left"><th class="py-1.5">Allowance</th><th class="py-1.5 text-right">Rate (${esc(cur)})</th><th class="py-1.5 text-right">Days</th><th class="py-1.5 text-right">Total</th></tr></thead><tbody>${lines.map(l => `<tr class="border-t border-slate-100"><td class="py-1.5">${l.label}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.rate)}</td><td class="py-1.5 text-right num">${l.lump ? '—' : l.days}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.total)}</td></tr>`).join('')}
         <tr class="border-t border-slate-200 font-semibold"><td class="py-1.5" colspan="3">Per person${gp.length > 1 ? ' × ' + gp.length : ''}</td><td class="py-1.5 text-right num">${trMoney(cur, pcRound(per * Math.max(1, gp.length)))}</td></tr></tbody></table>`; }).join('')}
@@ -10377,6 +10383,83 @@ function openTravelDetail(id){
     </div>
     ${t.comments ? `<div class="text-sm text-slate-600 mb-5"><span class="text-slate-400">Comments:</span> ${esc(t.comments)}</div>` : ''}
     <div class="flex items-center justify-end gap-4 pt-3 border-t border-slate-100">${canManageInventory() ? act('Delete', `deleteTravel('${t.id}')`, 'text-slate-400 hover:text-rose-600') : ''}${act('Edit request', `openTravelForm('${t.id}')`)}</div>`, true);
+}
+
+/* ---------- signed DSA memo → email draft to Finance (nothing is sent: it opens in Outlook to review and send) ---------- */
+const TR_MAIL_TO = () => vehSettings.trMailTo || 'Finance <finance@fdc.mv>';
+const TR_MAIL_CC = () => vehSettings.trMailCc || 'Rukham <Mohamed.Rukhaam@fdc.mv>, Administration <administration@fdc.mv>, Sama <fathimath.sama@fdc.mv>';
+function trMailText(t){
+  const dest = t.destination || '';
+  return { subject:'DSA for Travel Request (' + dest + ')',
+    body:['Dear Team,', '', 'Please find the attached Memo request for Daily Subsistence Allowance to ' + dest + '.', 'Kindly review and process the request accordingly.', '', 'Thank You', ''].join('\n') };
+}
+// the attached files of a stored attachment: the original PDF, or the photo pages as JPEGs
+async function agFileParts(fid, base){
+  const m = await pcFileLoad(fid); if(!m) throw new Error('the signed memo could not be loaded');
+  const clean = String(base || 'Signed memo').replace(/\.(pdf|jpe?g|png|heic|webp)$/i, '').replace(/[\\\/:*?"<>|]+/g, '-').slice(0, 90);
+  if(m.kind === 'pdf'){ let b64 = ''; for(let i = 0; i < m.chunks; i++){ const c = await pcFileLoad(fid + '_c' + i); if(!c) throw new Error('a part of the memo is missing'); b64 += c.data; } return [{ name:clean + '.pdf', mime:'application/pdf', b64 }]; }
+  return (m.pages || []).map((p, k, a) => ({ name:clean + (a.length > 1 ? ' - page ' + (k + 1) : '') + '.jpg', mime:'image/jpeg', b64:String(p.jpeg || '').replace(/^data:[^,]*,/, '') }));
+}
+async function trMailParts(t){
+  if(t.memoFile && t.memoFile.fileId) return agFileParts(t.memoFile.fileId, t.memoFile.fileName || ('Signed memo ' + ((t.dsa || {}).memoNo || '')));
+  return [];
+}
+function trMailOpen(id){
+  const t = trById(id); if(!t) return; const m = trMailText(t), inp = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm', d = t.dsa || {};
+  const files = t.memoFile && t.memoFile.fileId ? `<span>📎</span><span>${esc(t.memoFile.fileName || 'Signed memo')}</span>` : `<span class="text-amber-700">No signed memo file is attached${d.memoUrl ? ' — the link to it is added to the email instead' : ''}.</span>`;
+  openModal('Email draft — DSA memo', `<p class="text-xs text-slate-500 mb-3">Nothing is sent from here. Review the draft, then open it in Outlook (with the signed memo attached) and press Send there.</p>
+    <div class="grid grid-cols-[3.5rem_1fr] gap-x-3 gap-y-2 items-center text-sm mb-3">
+      <label class="text-xs font-semibold text-slate-500">To</label><input id="wm-to" value="${esc(TR_MAIL_TO())}" class="${inp}">
+      <label class="text-xs font-semibold text-slate-500">CC</label><input id="wm-cc" value="${esc(TR_MAIL_CC())}" class="${inp}">
+      <label class="text-xs font-semibold text-slate-500">Subject</label><input id="wm-subject" value="${esc(m.subject)}" class="${inp}">
+    </div>
+    <textarea id="wm-body" rows="8" class="${inp} font-[inherit] leading-relaxed">${esc(m.body + (!(t.memoFile && t.memoFile.fileId) && d.memoUrl ? '\nSigned memo: ' + d.memoUrl + '\n' : ''))}</textarea>
+    <div class="mt-3 rounded-lg border border-slate-200 p-3 overflow-x-auto" style="background:#fff"><div class="flex items-center justify-between mb-2"><span class="text-[11px] font-semibold uppercase tracking-wide" style="color:#64748b">Signature (added automatically)</span>${canManageInventory() ? `<button onclick="openSigSettings()" class="text-[11px] font-semibold text-brand-600 hover:underline">Edit signature</button>` : ''}</div><div style="zoom:.8">${sigHtml('data:image/png;base64,' + SIG_LOGO_PNG)}</div></div>
+    <div class="flex items-center gap-2 mt-2 text-xs text-slate-600">${files}</div>
+    <div class="flex flex-wrap justify-end gap-2.5 mt-5">
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="openTravelDetail('${id}')">Back</button>
+      ${navigator.canShare ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="trMailShare('${id}', this)">Share (phone)…</button>` : ''}
+      <button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="trMailDraft('${id}', this)">Open draft in Outlook</button>
+    </div>
+    <p class="text-[11px] text-slate-400 mt-3">"Open draft in Outlook" downloads the email as a draft file — open it and Outlook shows it ready to review and send, with the signed memo attached.${canManageInventory() ? ' The To/CC addresses you use become the default for next time.' : ''}</p>`, true);
+}
+async function trMailDraft(id, btn){
+  const t = trById(id); if(!t) return;
+  const to = wmVal('wm-to'), cc = wmVal('wm-cc'), subject = wmVal('wm-subject'), body = (document.getElementById('wm-body') || {}).value || '';
+  if(!to) return toast('Enter the To address.', true);
+  const label = btn.textContent; btn.disabled = true; btn.textContent = 'Preparing…';
+  try{
+    const parts = await trMailParts(t), B = 'adm-' + Date.now().toString(36);
+    const html = '<html><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt">' + esc(body).replace(/\n/g, '<br>') + '<br>' + sigHtml('cid:fdc-sig-logo') + '</body></html>', text = body + '\n' + sigText();
+    const eml = ['X-Unsent: 1', 'To: ' + to, cc ? 'Cc: ' + cc : '', 'Subject: =?UTF-8?B?' + b64utf8(subject) + '?=', 'MIME-Version: 1.0', 'Content-Type: multipart/mixed; boundary="' + B + '"', '',
+      '--' + B, 'Content-Type: multipart/related; boundary="' + B + 'r"', '',
+      '--' + B + 'r', 'Content-Type: multipart/alternative; boundary="' + B + 'a"', '',
+      '--' + B + 'a', 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', wrap76(b64utf8(text)),
+      '--' + B + 'a', 'Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', wrap76(b64utf8(html)),
+      '--' + B + 'a--', '',
+      '--' + B + 'r', 'Content-Type: image/png; name="fdc-logo.png"', 'Content-ID: <fdc-sig-logo>', 'Content-Disposition: inline; filename="fdc-logo.png"', 'Content-Transfer-Encoding: base64', '', wrap76(SIG_LOGO_PNG),
+      '--' + B + 'r--', '']
+      .concat(...parts.map(a => { const n = '=?UTF-8?B?' + b64utf8(a.name) + '?='; return ['--' + B, 'Content-Type: ' + a.mime + '; name="' + n + '"', 'Content-Disposition: attachment; filename="' + n + '"', 'Content-Transfer-Encoding: base64', '', wrap76(a.b64)]; }))
+      .concat(['--' + B + '--', '']).filter((l, i) => l !== '' || i > 3).join('\r\n');
+    downloadBlob(new Blob([eml], { type:'message/rfc822' }), ('DSA email - ' + (t.destination || t.formNumber || 'travel')).replace(/[\\\/:*?"<>|]+/g, '-').slice(0, 80) + '.eml');
+    if(canManageInventory() && (to !== TR_MAIL_TO() || cc !== TR_MAIL_CC())){ vehSettings.trMailTo = to; vehSettings.trMailCc = cc; persistVehSettings(); }
+    await vehSave('travelRequests', { id, mailDraftAt:Date.now(), mailDraftBy:authUser ? authUser.name : '' });
+    toast('Draft downloaded — open it to review and send from Outlook.');
+  }catch(e){ console.error(e); toast('Could not prepare the email: ' + (e.message || e), true); }
+  finally{ if(btn.isConnected){ btn.disabled = false; btn.textContent = label; } }
+}
+async function trMailShare(id, btn){
+  const t = trById(id); if(!t) return;
+  try{
+    btn.disabled = true;
+    const files = (await trMailParts(t)).map(a => { const bin = atob(a.b64), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new File([u], a.name, { type:a.mime }); });
+    const subject = wmVal('wm-subject'), body = ((document.getElementById('wm-body') || {}).value || '') + '\n' + sigText();
+    if(files.length && !navigator.canShare({ files })) throw new Error('this device cannot share files');
+    try{ await navigator.clipboard.writeText('To: ' + wmVal('wm-to') + '\nCC: ' + wmVal('wm-cc')); }catch(e){}
+    await navigator.share(Object.assign({ title:subject, text:body }, files.length ? { files } : {}));
+    toast('Pick Outlook (or Mail), then add To and CC — they were copied for you.');
+  }catch(e){ if(e && e.name !== 'AbortError') toast('Could not share: ' + (e.message || e), true); }
+  finally{ if(btn.isConnected) btn.disabled = false; }
 }
 
 /* ---------- the DSA amounts and memo defaults ---------- */

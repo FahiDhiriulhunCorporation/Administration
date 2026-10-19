@@ -1875,12 +1875,12 @@ function currentNav(){
   const nXfer = cntOf(() => state.itemTransfers.filter(t => t.status === 'pending' && canAcceptTransferForLocation(t.toLocationId)).length);
   const nHo = cntOf(() => state.handovers.filter(h => !hoFullySigned(h)).length);
   const nIssues = cntOf(() => state.serviceRecords.filter(r => r.kind === 'incident' && r.status !== 'Resolved').length);
-  const nPr = cntOf(() => state.purchaseRequisitions.filter(p => (p.status || 'open') === 'pending_approval').length);
+  const nPr = 0;   // PRs need no approval; 'Pending Approval' is only a status
   const nRepl = cntOf(() => pcFundList().reduce((t, f) => t + pcStatements(f.id).filter(x => pcStmtPending(x) > 0).length, 0));
   const nUnbal = cntOf(() => pcFundList().filter(f => { const rc = pcReconcile(f); return rc.counted && Math.abs(rc.diff) >= 0.005; }).length);
   const nav = [
     { id:'dashboard', label:'Dashboard', icon:'dashboard' },
-    ...(authUser ? [{ id:'my-work', label:'My Dashboard', icon:'tasks', badge:cntOf(() => (state.tasks || []).filter(t => !tkDone(t) && (t.assignees || []).some(a => a.key === 'u:' + authUser.uid)).length + (apIsApprover() ? state.purchaseRequisitions.filter(p => p.status === 'pending_approval').length + state.documents.filter(d => d.status === 'Pending approval').length : 0)), tone:'warn', hint:'My open tasks and approvals waiting for me' }] : []),
+    ...(authUser ? [{ id:'my-work', label:'My Dashboard', icon:'tasks', badge:cntOf(() => (state.tasks || []).filter(t => !tkDone(t) && (t.assignees || []).some(a => a.key === 'u:' + authUser.uid)).length + (apIsApprover() ? state.documents.filter(d => d.status === 'Pending approval').length : 0)), tone:'warn', hint:'My open tasks and approvals waiting for me' }] : []),
     { id:'reports', label:'Summary Report', icon:'statement' },
     { section:'Department' },
     { id:'staff-list', label:'Admin Staff', icon:'users' },
@@ -1916,7 +1916,7 @@ function currentNav(){
     { id:'travel-local', label:'Local Travel', icon:'plane', badge:(()=>{ try{ return state.travelRequests.filter(t => (t.scope || 'local') === 'local' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
     { id:'travel-foreign', label:'Foreign Travel', icon:'globe', badge:(()=>{ try{ return state.travelRequests.filter(t => t.scope === 'foreign' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
     { section:'Finance' },
-    { id:'purchase-requisitions', label:'Purchase Requisitions', icon:'pr', badge:nPr, tone:'warn', hint:'PRs pending approval' },
+    { id:'purchase-requisitions', label:'Purchase Requisitions', icon:'pr', badge:nPr, tone:'warn', hint:'Purchase requisitions' },
     { id:'petty-cash', label:'Petty Cash Requests', icon:'cash', badge:pcAwaiting, tone:'warn' },
     { id:'petty-statement', label:'Statements', icon:'statement', badge:nRepl, tone:'warn', hint:'Closed statements pending replenishment' },
     { id:'petty-count', label:'Cash Count', icon:'coins', badge:nUnbal, tone:'crit', hint:'Funds whose cash count does not balance' },
@@ -6832,7 +6832,7 @@ const apWaiting = () => `<span class="inline-flex items-center gap-1 text-[11px]
 function openApproversModal(){
   if(!authUser || authUser.role !== 'admin'){ toast('Only admins can choose approvers.', true); return; }
   const on = new Set(apUids()), people = (state.profiles || []).filter(p => p.role !== 'viewer').slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  openModal('Approvers', `<p class="text-sm text-slate-500 mb-3">Approvers release <b>Purchase Requisitions</b> (Pending Approval → Released) and approve <b>documents</b> (EXCO Papers, Memos, TORs…). Everyone else sees "Waiting for" the approver.</p>
+  openModal('Approvers', `<p class="text-sm text-slate-500 mb-3">Approvers approve <b>documents</b> (EXCO Papers, Memos, TORs…). Purchase requisitions need no approval.</p>
     <div class="max-h-72 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">${people.map(p => `<label class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50"><input type="checkbox" class="ap-cb" value="${esc(p.uid)}" ${on.has(p.uid) ? 'checked' : ''}><span class="text-sm text-slate-800">${esc(p.name)}</span><span class="text-[11.5px] text-slate-400">${esc([p.designation, p.department].filter(Boolean).join(' · '))}</span></label>`).join('')}</div>
     <p class="text-[11.5px] text-slate-400 mt-2">If nobody is ticked, any admin can approve.</p>
     <div class="flex justify-end gap-2.5 mt-5"><button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="closeModal()">Cancel</button><button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="saveApprovers()">Save</button></div>`, false);
@@ -6870,7 +6870,6 @@ function ntList(){
     else if(t.due === t0) add('tk-due-' + t.id + t0, '📅', 'Due today: ' + t.title, '', dayAt(t0), `goTo('tasks'); openTkView('${t.id}')`);
   }); }catch(e){}
   if(authUser && apIsApprover()){
-    try{ state.purchaseRequisitions.filter(p => p.status === 'pending_approval').forEach(p => add('pr-ap-' + p.id, '✍️', 'PR ' + (p.prNumber || '') + ' is waiting for your approval', p.requester || '', p.updatedAt || p.createdAt, `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`)); }catch(e){}
     try{ state.documents.filter(d => d.status === 'Pending approval').forEach(d => add('doc-ap-' + d.id, '✍️', (d.title || 'A document') + ' is waiting for your approval', d.refNo || '', d.updatedAt || d.createdAt, `goTo('docs-${d.type}'); openDocView('${d.id}')`)); }catch(e){}
   }
   if(authUser){
@@ -6934,7 +6933,7 @@ function digestFor(p){
   mine.filter(t => t.due && t.due > t0 && t.due <= clIsoAdd(t0, 3)).forEach(t => out.push('• Due ' + vDate(t.due) + ': ' + t.title));
   const u = apUids(), isAp = u.length ? u.includes(p.uid) : p.role === 'admin';
   if(isAp){
-    const prs = state.purchaseRequisitions.filter(x => x.status === 'pending_approval').length, docs = state.documents.filter(d => d.status === 'Pending approval').length;
+    const prs = 0, docs = state.documents.filter(d => d.status === 'Pending approval').length;
     if(prs) out.push('• ' + prs + ' Purchase Requisition' + (prs === 1 ? '' : 's') + ' waiting for your approval');
     if(docs) out.push('• ' + docs + ' document' + (docs === 1 ? '' : 's') + ' waiting for your approval');
   }
@@ -7112,7 +7111,7 @@ function viewMyWork(){
   const taskBody = tasks.map(t => row(esc(t.title), esc([t.no, t.due ? 'Due ' + vDate(t.due) : 'No due date'].filter(Boolean).join(' · ')), tkPill(t) + `<span class="text-xs text-slate-500 num w-9 text-right">${tkProg(t)}%</span>`, `goTo('tasks'); openTkView('${t.id}')`)).join('');
   let apBody = '', apN = 0;
   if(apIsApprover()){
-    const prs = state.purchaseRequisitions.filter(p => p.status === 'pending_approval'), docs = state.documents.filter(d => d.status === 'Pending approval'); apN = prs.length + docs.length;
+    const prs = [], docs = state.documents.filter(d => d.status === 'Pending approval'); apN = prs.length + docs.length;
     apBody = prs.map(p => row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requester].filter(Boolean).join(' · ')), vPill('warn', 'Pending approval'), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`)).join('') +
       docs.map(d => row(esc(d.title || 'Document'), esc([(DOC_TYPES.find(x => x.k === d.type) || {}).label, d.refNo].filter(Boolean).join(' · ')), vPill('warn', 'Pending approval'), `goTo('docs-${d.type}'); openDocView('${d.id}')`)).join('');
   }
@@ -15663,7 +15662,6 @@ function prCardHtml(pr){
       <div class="pb-who">
         <div class="pb-trunc text-[12.5px] text-slate-600" title="${esc(pr.requester)}">${esc(pr.requester)}</div>
         <div class="pb-trunc text-[11.5px] text-slate-400" title="${esc(budget)}">${budget ? esc(budget) : '—'}</div>
-        ${pr.status === 'pending_approval' ? `<div class="mt-1">${apWaiting()}</div>` : ''}
       </div>
       <div class="pb-where">
         <div class="pb-trunc text-[12.5px] text-slate-600" title="${loc?esc(loc.name):''}">${loc?esc(loc.name):'—'}</div>

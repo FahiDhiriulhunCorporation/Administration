@@ -5948,7 +5948,25 @@ function sdPerson(key){
 }
 const sdAll = () => lvStaff(+vToday().slice(0, 4), true).map(s => sdPerson(s.key)).filter(p => p.name);
 const sdYears = iso => { if(!iso) return 0; const t = vToday(); let n = +t.slice(0, 4) - +iso.slice(0, 4); if(t.slice(5) < iso.slice(5)) n--; return Math.max(0, n); };
+// staff without admin rights: the page shows their own record (not the staff list)
+function sdMyDetails(){
+  const me = authUser ? sdAll().find(p => p.key === 'u:' + authUser.uid) : null;
+  if(!me) return vHead('My details', 'Your record in Admin Staff.') + vEmpty('Your staff record is not set up yet. Ask an admin to add you under Admin Staff.');
+  const key = me.key, sc = lvType(me.schedule), rs = lvType(me.ramadanSchedule);
+  const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v || '—'}</div></div>`;
+  const personal = sdCanSeePersonal(key), card = sdCanSeeCard(key), edit = sdCanEdit(key);
+  return vHead('My details', 'Your own record in Admin Staff: contact details, shift, and your business and staff ID cards.') +
+    `<div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">${item('Name', esc(me.name))}${item('Designation', esc(me.designation))}${item('Department', esc(me.department))}${item('Level', esc(me.level))}${item('Staff no.', esc(me.staffNo))}${me.dsaCategory ? item('DSA category', esc(me.dsaCategory)) : ''}${item('Email', esc(me.email))}${item('Phone', esc(me.phone))}</div>
+      ${vSec('Shift')}<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-2">${item('Usual', esc((sc.short || sc.code) + ' · ' + lvHours(sc)))}${item('Ramadaan', esc((rs.short || rs.code) + ' · ' + lvHours(rs)))}</div>
+      ${personal ? vSec('Personal details') + `<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-2">${item('Birthday', me.birthday ? '🎂 ' + (me.birthday.length === 10 ? vDate(me.birthday) : me.birthday.slice(3) + '-' + me.birthday.slice(0, 2)) : '')}${item('Work anniversary', me.joinDate ? '★ ' + vDate(me.joinDate) : '')}${item('Emergency contact', esc([me.emergencyName, me.emergencyRelation && '(' + me.emergencyRelation + ')', me.emergencyPhone].filter(Boolean).join(' ')))}</div>` : ''}
+      ${card ? vSec('Business card') + `<div class="grid sm:grid-cols-2 gap-3 mb-3">${bcCard(me, 'back')}${bcCard(me, 'front')}</div>
+        <div class="flex flex-wrap gap-4 mb-2"><button onclick="sdCardPdf('${esc(key)}', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download business card (PDF)</button><button onclick="sdIdPdf('${esc(key)}', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download staff ID card (PDF)</button></div>` : ''}
+      ${edit ? `<div class="flex justify-end pt-4 mt-4 border-t border-slate-100"><button onclick="openSdEdit('${esc(key)}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit my details</button></div>` : ''}
+    </div>`;
+}
 function viewStaffList(){
+  if(!canManageInventory()) return sdMyDetails();
   const admin = canManageInventory(), q = String(vehUi.sdQ || '').toLowerCase().trim(), dep = vehUi.sdDept || '', lev = vehUi.sdLevel || '';
   const all = sdAll(), list = all.filter(p => (!dep || p.department === dep) && (!lev || (p.level || 'Not set') === lev) && (!q || [p.name, p.designation, p.staffNo, p.email, p.phone, p.department].join(' ').toLowerCase().includes(q)));
   const levels = sdLevels().concat(list.some(p => !p.level || !sdLevels().includes(p.level)) ? ['Not set'] : []);
@@ -15366,6 +15384,49 @@ function selectPrLineAsset(assetId, idx){
   const assetDropdown = document.getElementById('pr-asset-dropdown-'+idx);
   if(assetDropdown) assetDropdown.classList.add('hidden');
 }
+// quotation for a PR: attached, read by the AI reader (fills the item lines), saved with the requisition
+let prQuoteAtt = null;
+async function prQuotePick(input){
+  const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('pr-quote-info'); info.textContent = 'Preparing…';
+  try{ prQuoteAtt = await agPrepare(files); info.textContent = '📎 ' + agAttText(prQuoteAtt) + ' (saved when you press Save)'; document.getElementById('pr-quote-act').textContent = 'Replace file'; }
+  catch(e){ prQuoteAtt = null; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); }
+}
+async function prReadQuote(btn){
+  if(!AI_READ_URL){ toast('The AI reader is not set up yet.', true); return; }
+  if(!prQuoteAtt){ toast('Attach the quotation first.', true); return; }
+  const att = prQuoteAtt, label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Reading…';
+  try{
+    const files = att.pdf ? [{ type:'application/pdf', data:fuelB64(att.bytes) }] : att.pages.map(pg => ({ type:'image/jpeg', data:String(pg.jpeg).split(',')[1] }));
+    const res = await fetch(AI_READ_URL, { method:'POST', headers:Object.assign({ 'Content-Type':'application/json' }, AI_READ_TOKEN ? { 'X-Reader-Token':AI_READ_TOKEN } : {}), body:JSON.stringify({ files, kind:'pr-quotation' }) });
+    const j = await res.json().catch(() => ({})); if(!res.ok) throw new Error(j.error || ('HTTP ' + res.status));
+    const n = prApplyQuote(j.data || {});
+    toast(n ? n + ' item' + (n === 1 ? '' : 's') + ' filled from the quotation. Check them before saving.' : 'No priced items could be read from the quotation.', !n);
+  }catch(e){ toast('The quotation could not be read: ' + (e && e.message ? e.message : e), true); }
+  finally{ btn.disabled = false; btn.innerHTML = label; }
+}
+// fills the first empty item line, then adds lines for the rest
+function prApplyQuote(d){
+  const items = (Array.isArray(d.items) ? d.items : []).filter(x => x && String(x.description || '').trim());
+  items.forEach(it => {
+    const empty = [...document.querySelectorAll('.pr-line-wrap')].map(el => el.dataset.line).find(i => !document.getElementById('pr-item-name-' + i).value.trim() && !document.getElementById('pr-qty-' + i).value);
+    const idx = empty != null ? empty : addPrLineItem();
+    const set = (id, v) => { const el = document.getElementById(id); if(el && v != null && v !== ''){ el.value = String(v); el.classList.add('ring-2', 'ring-amber-400'); } };
+    set('pr-item-name-' + idx, String(it.description).slice(0, 200)); set('pr-item-description-' + idx, it.specification);
+    set('pr-qty-' + idx, it.quantity); set('pr-unit-cost-' + idx, it.unitCost);
+    updatePrLineTotal(idx);
+  });
+  return items.length;
+}
+async function prBgUpload(id, att){
+  const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar();
+  try{ const p0 = state.purchaseRequisitions.find(x => x.id === id);
+    const st = await agStore(att, (p0 && p0.prNumber) || '', f => { agUploads[key].f = f; agUploadBar(); });
+    const pr = state.purchaseRequisitions.find(x => x.id === id); if(!pr){ agFileDel(st.fileId); return; }
+    const old = pr.quotationFile && pr.quotationFile.fileId; pr.quotationFile = st; persistPurchaseRequisitionDoc(pr); if(old) agFileDel(old);
+    toast('Quotation attached to ' + (pr.prNumber || 'the requisition') + '.'); }
+  catch(e){ toast('The quotation could not be uploaded: ' + (e && e.message ? e.message : e), true); }
+  finally{ delete agUploads[key]; agUploadBar(); }
+}
 function openPurchaseRequisitionForm(id){
   const editing = id ? state.purchaseRequisitions.find(x=>x.id===id) : null;
   const prNumber = editing ? editing.prNumber : '';
@@ -15374,7 +15435,7 @@ function openPurchaseRequisitionForm(id){
     ? editing.lineItems.map(l=>Object.assign({}, l, { budgetCode: prLineBudgetCode(editing, l) }))
     : [{}];
   const requisitionDate = editing ? prRequisitionDate(editing) : localDateStr();
-  prLineCount = lines.length;
+  prLineCount = lines.length; prQuoteAtt = null;
   const body = `
     <div class="pr-sticky-head bg-white border-b border-slate-200 -mx-5 sm:-mx-6 px-5 sm:px-6 -mt-5 pt-5 pb-4 mb-4">
     <div id="pr-error" class="hidden bg-rose-50 text-rose-700 text-sm rounded-lg px-3.5 py-2.5 mb-4"></div>
@@ -15406,6 +15467,7 @@ function openPurchaseRequisitionForm(id){
       </div>
     </div>
     </div>
+    ${AI_READ_URL ? `<div class="mb-4 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm"><div class="font-semibold text-slate-700 mb-1.5">Quotation or proposal (optional)</div><div class="flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="prQuotePick(this)"><span id="pr-quote-act">${editing && editing.quotationFile && editing.quotationFile.fileId ? 'Replace the attached file' : '📎 Attach the quotation (PDF or photo)'}</span></label><span id="pr-quote-info" class="text-xs text-slate-500">${editing && editing.quotationFile && editing.quotationFile.fileId ? '📎 ' + esc(editing.quotationFile.fileName || 'File') + ' kept' : ''}</span><button type="button" onclick="prReadQuote(this)" class="text-xs font-semibold text-brand-600 hover:underline">✨ Read it with AI</button></div><p class="text-[11.5px] text-slate-400 mt-1.5">Fills the items below. Check them before saving.</p></div>` : ''}
     <div class="text-xs font-semibold text-slate-600 mb-2">Items</div>
     <div id="pr-lines">${lines.map((line,idx)=>prLineItemHtml(idx, line)).join('')}</div>
     <button type="button" onclick="addPrLineItem()" class="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:underline mb-5">+ Add another item</button>
@@ -15553,7 +15615,7 @@ function savePurchaseRequisition(id){
     } else {
       toast('Purchase requisition updated.');
     }
-    persistPurchaseRequisitionDoc(editing);
+    persistPurchaseRequisitionDoc(editing); if(prQuoteAtt){ prBgUpload(editing.id, prQuoteAtt); prQuoteAtt = null; }
   } else {
     const pr = {
       id: uid(), prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost,
@@ -15568,7 +15630,7 @@ function savePurchaseRequisition(id){
     } else {
       toast('Purchase requisition created.');
     }
-    persistPurchaseRequisitionDoc(pr);
+    persistPurchaseRequisitionDoc(pr); if(prQuoteAtt){ prBgUpload(pr.id, prQuoteAtt); prQuoteAtt = null; }
   }
   closeModal();
   rerenderMain();

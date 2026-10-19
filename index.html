@@ -1625,7 +1625,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.234';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.235';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -9662,8 +9662,8 @@ function clStats(locId, week){
   const S = clStruct(locId, week), sh = clSheet(locId, week), ch = (sh && sh.checks) || {};
   const total = S.rooms.reduce((t, r) => t + r.tasks.length, 0) * S.days.length;
   let done = 0; S.rooms.forEach(r => r.tasks.forEach(task => S.days.forEach(d => { if(ch[clK('t', r.name, task, d)]) done++; })));
-  const pct = total ? Math.round(done / total * 100) : 0, signed = !!(sh && sh.docUrl), complete = !!(sh && sh.complete);
-  return { total, done, pct, signed, complete, started:!!(sh && (done || sh.docUrl || Object.keys(ch).length)), status: signed ? 'Signed copy linked' : complete ? 'Completed' : done ? 'In progress' : 'Not started' };
+  const pct = total ? Math.round(done / total * 100) : 0, signed = clSigned(sh), complete = !!(sh && sh.complete);
+  return { total, done, pct, signed, complete, started:!!(sh && (done || signed || Object.keys(ch).length)), status: signed ? 'Signed copy attached' : complete ? 'Completed' : done ? 'In progress' : 'Not started' };
 }
 const clStatusPill = st => vPill(st.signed ? 'good' : st.complete ? 'good' : st.done ? 'warn' : '', st.status);
 function clLocs(){ return utCustomOrder().filter(l => clTpl(l.id)); }
@@ -9705,11 +9705,11 @@ function clWeekPanel(loc, week){
     `<tr class="border-t border-slate-100"><td colspan="2" class="py-1.5 pl-4 pr-2 text-[13px] text-slate-700">${esc(S.supervisor || 'Supervisor')} <span class="text-[11px] text-slate-400">· supervised</span></td>${S.days.map(d => `<td class="px-1 py-1 text-center ${dayCls(d)}">${box(clK('s', d), !!ch[clK('s', d)])}</td>`).join('')}</tr>`;
   return vPanel(esc(loc.name) + ' · week of ' + clWeekLabel(week), `${clStatusPill(st)} <span class="ml-1">${st.done} / ${st.total} tasks (${st.pct}%)</span>`, `
     <div class="px-5 sm:px-6 py-3.5 flex items-center justify-between gap-3 flex-wrap border-b border-slate-100">
-      <div class="text-xs text-slate-500">${esc(S.address)}${S.cleaners.length ? ' · cleaners: ' + esc(S.cleaners.join(', ')) : ''}${S.supervisor ? ' · supervisor: ' + esc(S.supervisor) : ''}${sh && sh.docUrl ? ' · ' + vLink(sh.docUrl, 'Signed copy') : ''}</div>
+      <div class="text-xs text-slate-500">${esc(S.address)}${S.cleaners.length ? ' · cleaners: ' + esc(S.cleaners.join(', ')) : ''}${S.supervisor ? ' · supervisor: ' + esc(S.supervisor) : ''}${sh && sh.docFile && sh.docFile.fileId ? ` · <button onclick="clOpenFile('${esc(sh.id)}')" class="text-brand-600 font-semibold hover:underline">📎 Signed copy</button>` : ''}${sh && sh.docUrl ? ' · ' + vLink(sh.docUrl, sh.docFile && sh.docFile.fileId ? 'Link' : 'Signed copy') : ''}</div>
       <div class="flex items-center gap-x-4 gap-y-2 flex-wrap text-xs font-semibold">
         <button onclick="clPdf('${esc(loc.id)}', '${week}', false, this)" class="text-brand-600 hover:underline">Download blank (PDF)</button>
         <button onclick="clPdf('${esc(loc.id)}', '${week}', true, this)" class="text-brand-600 hover:underline">Download filled (PDF)</button>
-        <button onclick="openClLink('${esc(loc.id)}', '${week}')" class="text-brand-600 hover:underline">${sh && sh.docUrl ? 'Change signed copy link' : 'Link signed copy'}</button>
+        <button onclick="openClLink('${esc(loc.id)}', '${week}')" class="text-brand-600 hover:underline">${clSigned(sh) ? 'Change signed copy' : '📎 Attach signed copy'}</button>
         <button onclick="clSetComplete('${esc(loc.id)}', '${week}', ${sh && sh.complete ? 'false' : 'true'})" class="${sh && sh.complete ? 'text-slate-500' : 'text-emerald-600'} hover:underline">${sh && sh.complete ? 'Reopen week' : 'Mark week complete'}</button>
         ${canManageInventory() ? `<button onclick="openClSetup('${esc(loc.id)}')" class="text-slate-500 hover:text-brand-600 hover:underline">Rooms & tasks</button>` : ''}</div></div>
     ${S.rooms.length ? `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[46rem]"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="py-2 pl-4 pr-2">Room</th><th class="py-2 px-2">Task</th>${dh}</tr></thead><tbody>
@@ -9734,17 +9734,35 @@ async function clTickDay(locId, week, day){
   await vehSave('cleaningSheets', { id:sh.id, checks:ch }); rerenderMain();
 }
 async function clSetTime(locId, week, day, f, v){ const sh = await clEnsureSheet(locId, week), at = JSON.parse(JSON.stringify(sh.attendance || {})); at[day] = Object.assign({}, at[day] || {}, { [f]:v }); await vehSave('cleaningSheets', { id:sh.id, attendance:at }); }
+const clSigned = sh => !!(sh && (sh.docUrl || (sh.docFile && sh.docFile.fileId)));
 async function clSetComplete(locId, week, on){ const sh = await clEnsureSheet(locId, week); await vehSave('cleaningSheets', { id:sh.id, complete:!!on, completedBy:on ? (authUser ? authUser.name : '') : '', completedAt:on ? Date.now() : 0 }); rerenderMain(); toast(on ? 'Week marked complete.' : 'Week reopened.'); }
 function openClLink(locId, week){
   const sh = clSheet(locId, week);
-  openModal('Signed checklist — ' + ((getLocation(locId) || {}).name || ''), vFormOpen + `<p class="text-sm text-slate-500 mb-4">Week of ${clWeekLabel(week)}. Link the scanned, signed checklist (e.g. on SharePoint).</p>` +
-    vF('Link to the signed checklist', 'docUrl', sh ? sh.docUrl : '', 'url') + `<div class="mt-3.5">${vTa('Note', 'notes', sh ? sh.notes : '', { rows:2 })}</div>` + vFoot('Save', `saveClLink('${esc(locId)}', '${week}')`));
+  openModal('Signed checklist — ' + ((getLocation(locId) || {}).name || ''), vFormOpen + `<p class="text-sm text-slate-500 mb-4">Week of ${clWeekLabel(week)}. Attach the scanned or photographed signed checklist, or link it (e.g. on SharePoint).</p>` +
+    `<label class="${VEH_LBL}">Signed checklist</label>${trAttRow('cl', sh && sh.docFile && sh.docFile.fileId ? sh.docFile : null, 'Attach the signed checklist (PDF or photo)')}` +
+    `<div class="mt-3.5">${vF('Link to the signed checklist (optional)', 'docUrl', sh ? sh.docUrl : '', 'url')}</div><div class="mt-3.5">${vTa('Note', 'notes', sh ? sh.notes : '', { rows:2 })}</div>` +
+    `<label class="mt-4 flex items-start gap-2.5 text-sm text-slate-700 cursor-pointer"><input type="checkbox" id="cl-complete" checked class="mt-1"><span><span class="font-semibold">Mark the week as completed</span><span class="block text-xs text-slate-400">The checklist is done and signed for this week.</span></span></label>` +
+    vFoot('Save', `saveClLink('${esc(locId)}', '${week}')`));
 }
 async function saveClLink(locId, week){
   const o = vehFormObj(document.getElementById('vform')), url = o.docUrl ? vSafeUrl(o.docUrl) : ''; if(o.docUrl && !url) return vFail('Enter a full web link starting with https://');
-  const sh = await clEnsureSheet(locId, week); await vehSave('cleaningSheets', { id:sh.id, docUrl:url, notes:o.notes || '', linkedBy:authUser ? authUser.name : '', linkedAt:Date.now() });
-  closeModal(); rerenderMain(); toast(url ? 'Signed checklist linked.' : 'Saved.');
+  const att = trAtt.cl;
+  const done = document.getElementById('cl-complete').checked;
+  const sh = await clEnsureSheet(locId, week); await vehSave('cleaningSheets', Object.assign({ id:sh.id, docUrl:url, notes:o.notes || '', linkedBy:authUser ? authUser.name : '', linkedAt:Date.now() },
+    done ? (sh.complete ? {} : { complete:true, completedBy:authUser ? authUser.name : '', completedAt:Date.now() }) : (sh.complete ? { complete:false } : {})));
+  delete trAtt.cl; if(att) clBgUpload(sh.id, att);
+  closeModal(); rerenderMain(); toast((att ? 'Signed checklist attached' : url ? 'Signed checklist linked' : 'Saved') + (done ? ' — week marked complete.' : '.'));
 }
+// the signed checklist kept with the week (original PDF or photos), uploaded in the background
+async function clBgUpload(id, att){
+  const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar();
+  try{ const st = await agStore(att, 'Cleaning checklist', f => { agUploads[key].f = f; agUploadBar(); });
+    const sh = state.cleaningSheets.find(x => x.id === id); if(!sh){ agFileDel(st.fileId); return; } const old = sh.docFile && sh.docFile.fileId;
+    await vehSave('cleaningSheets', { id, docFile:st }); if(old) agFileDel(old); toast('Signed checklist uploaded.'); rerenderMain(); }
+  catch(e){ toast('The file ' + att.name + ' could not be uploaded: ' + (e && e.message ? e.message : e), true); }
+  finally{ delete agUploads[key]; agUploadBar(); }
+}
+function clOpenFile(id){ const sh = state.cleaningSheets.find(x => x.id === id), f = sh && sh.docFile; if(f && f.fileId) agOpenFile(f.fileId, 'Signed checklist — ' + ((getLocation(sh.locationId) || {}).name || '') + ' · ' + clWeekLabel(sh.weekStart), null); }
 
 /* ---------- set-up: the rooms and tasks of a location ---------- */
 function clRoomBlock(r){
@@ -9795,7 +9813,7 @@ async function saveClSetup(locId){
   await vehSave('cleaningTemplates', rec);
   // weeks from the one shown, not yet completed or signed, follow the new set-up (their ticks are kept by task name)
   const from = vehUi.clWeek || clWeekStart(vToday());
-  for(const sh of state.cleaningSheets.filter(s => s.locationId === lid && s.weekStart >= from && !s.complete && !s.docUrl)) await vehSave('cleaningSheets', { id:sh.id, days:rec.days, rooms:rec.rooms, cleaners:rec.cleaners, supervisor:rec.supervisor, address:rec.address });
+  for(const sh of state.cleaningSheets.filter(s => s.locationId === lid && s.weekStart >= from && !s.complete && !clSigned(s))) await vehSave('cleaningSheets', { id:sh.id, days:rec.days, rooms:rec.rooms, cleaners:rec.cleaners, supervisor:rec.supervisor, address:rec.address });
   vehUi.clLoc = lid; closeModal(); if(ui.tab !== 'cleaning') goTo('cleaning'); else rerenderMain(); toast('Cleaning checklist saved.');
 }
 function deleteClSetup(locId){
@@ -10183,7 +10201,7 @@ function viewTravel(scope){
     </tr>`; }).join('');
   return `
     ${vHead(S.label, scope === 'local' ? 'Trips within the country: the request, the ticket and the Daily Subsistence Allowance.' : 'Trips abroad: the request, the ticket and the Daily Subsistence Allowance.',
-      `<button onclick="openTravelSettings()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">DSA rates</button>${vBtnPrimary('+ Travel request', `openTravelForm('', '${scope}')`)}`)}
+      `${vBtnPlain('Blank memo (Word)', `trBlankMemo('${scope}', 'docx', this)`)}${vBtnPlain('Blank memo (PDF)', `trBlankMemo('${scope}', 'pdf', this)`)}<button onclick="openTravelSettings()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">DSA rates</button>${vBtnPrimary('+ Travel request', `openTravelForm('', '${scope}')`)}`)}
     ${ratesMissing ? `<div class="mb-5 rounded-lg bg-amber-50 text-amber-800 text-[13px] px-4 py-3">No ${scope} DSA rates are set yet. Set them under <button onclick="openTravelSettings()" class="font-semibold underline">DSA rates</button> so new requests fill them in.</div>` : ''}
     ${kpis}
     <div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['', 'All (' + all.length + ')'], ...TR_STATUSES.map(s => [s, s + ' (' + cnt(s) + ')'])], st, 'trSetStatus')}
@@ -10308,7 +10326,7 @@ const trAtt = {}, TR_ATT = { form:{ field:'formFile', name:'Signed travel reques
 function trAttRow(k, f, label){ delete trAtt[k];
   return `<div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="trAttPick(this, '${k}')"><span id="tr-att-act-${k}">${f ? 'Replace the attached file' : '📎 ' + label}</span></label><span id="tr-att-info-${k}" class="text-xs text-slate-500">${f ? '📎 ' + esc(f.fileName || 'File') + ' kept' : ''}</span></div>`; }
 async function trAttPick(input, k){ const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('tr-att-info-' + k); info.textContent = 'Preparing…';
-  try{ trAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(trAtt[k]) + ' (saved with the request)'; document.getElementById('tr-att-act-' + k).textContent = 'Replace file'; if(k === 'pcform') pcRequesterChanged(); }catch(e){ delete trAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
+  try{ trAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(trAtt[k]) + ' (saved when you press Save)'; document.getElementById('tr-att-act-' + k).textContent = 'Replace file'; if(k === 'pcform') pcRequesterChanged(); }catch(e){ delete trAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
 async function trBgUpload(id, k, att){
   const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar(); const field = TR_ATT[k].field;
   try{ const t0 = trById(id), st = await agStore(att, (t0 && (k === 'form' ? t0.formNumber : (t0.dsa || {}).memoNo)) || '', f => { agUploads[key].f = f; agUploadBar(); });
@@ -10374,7 +10392,7 @@ function openTravelDetail(id){
       <div class="rounded-xl border border-slate-200 p-4">${head('Request form')}<div class="text-sm text-slate-700">Requested by <b>${esc(t.requestedBy || '—')}</b>${t.requestedDesig ? `<div class="text-xs text-slate-400">${esc(t.requestedDesig)}</div>` : ''}</div><div class="text-sm text-slate-700 mt-1.5">Authorized by <b>${esc(t.authorizedBy || '—')}</b>${t.authorizedDesig ? `<div class="text-xs text-slate-400">${esc(t.authorizedDesig)}</div>` : ''}</div><div class="text-xs mt-2">${t.formUrl ? vLink(t.formUrl, 'Signed travel request form') : t.formFile ? '' : '<span class="text-slate-400">No link to the signed form</span>'}${t.formFile && t.formFile.fileId ? `<button onclick="trOpenFile('${t.id}', 'form')" class="${t.formUrl ? 'ml-3 ' : ''}font-semibold text-brand-600 hover:underline">📎 ${esc(t.formFile.fileName || 'Signed form')}</button>` : ''}</div></div>
     </div>
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
-      <div class="flex items-start justify-between gap-3 flex-wrap">${head('Daily Subsistence Allowance')}${dsa ? `<div class="flex items-center gap-4 flex-wrap justify-end">${trMemoSigned(t) ? act('✉ Email to Finance', `trMailOpen('${t.id}')`) + (t.mailDraftAt ? `<span class="text-[11px] text-slate-400">Draft made ${fmtDT(new Date(t.mailDraftAt).toISOString())}</span>` : '') : ''}${act('Download memo (PDF)', `trMemoPdf('${t.id}', this)`)}</div>` : ''}</div>
+      <div class="flex items-start justify-between gap-3 flex-wrap">${head('Daily Subsistence Allowance')}${dsa ? `<div class="flex items-center gap-4 flex-wrap justify-end">${trMemoSigned(t) ? act('✉ Email to Finance', `trMailOpen('${t.id}')`) + (t.mailDraftAt ? `<span class="text-[11px] text-slate-400">Draft made ${fmtDT(new Date(t.mailDraftAt).toISOString())}</span>` : '') : ''}${act('Download memo (PDF)', `trMemoPdf('${t.id}', this)`)}${act('Download memo (Word)', `trMemoDocx('${t.id}', this)`)}</div>` : ''}</div>
       ${!dsa ? '<div class="text-sm text-slate-500">No DSA for this trip.</div>' : `
       ${groups.map(([c, gp]) => { const lines = trDsaLines(t, gp[0]), per = trDsaPerPerson(t, gp[0]); return `${split ? `<div class="text-xs font-semibold text-slate-500 mt-1">${esc(c)}</div>` : ''}<table class="w-full text-sm mb-3"><thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 text-left"><th class="py-1.5">Allowance</th><th class="py-1.5 text-right">Rate (${esc(cur)})</th><th class="py-1.5 text-right">Days</th><th class="py-1.5 text-right">Total</th></tr></thead><tbody>${lines.map(l => `<tr class="border-t border-slate-100"><td class="py-1.5">${l.label}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.rate)}</td><td class="py-1.5 text-right num">${l.lump ? '—' : l.days}</td><td class="py-1.5 text-right num">${pcMoneyPlain(l.total)}</td></tr>`).join('')}
         <tr class="border-t border-slate-200 font-semibold"><td class="py-1.5" colspan="3">Per person${gp.length > 1 ? ' × ' + gp.length : ''}</td><td class="py-1.5 text-right num">${trMoney(cur, pcRound(per * Math.max(1, gp.length)))}</td></tr></tbody></table>`; }).join('')}
@@ -10565,14 +10583,14 @@ function trMemoRow(t, p){
 }
 function trMemoForeignTable(pg, t, ps, y, cur, L, R, txt, center){
   const GRID = [0.25, 0.25, 0.25], HEAD = [0.93, 0.94, 0.96], LH = 11, FS = 8.5;
-  const people = ps.length ? ps : [{ name:'', designation:'' }], rows = people.map(p => trMemoRow(t, p)), any = k => rows.some(r => r[k] > 0);
-  const m = v => v > 0 ? pcMoneyPlain(v) : '-';
+  const people = ps.length ? ps : [{ name:'', designation:'' }], rows = people.map(p => trMemoRow(t, p)), any = k => t.blank || rows.some(r => r[k] > 0);
+  const m = v => t.blank ? '' : v > 0 ? pcMoneyPlain(v) : '-';
   const cols = [];
-  if(any('totalRate')) cols.push({ h:'DSA (' + cur + ')', v:r => m(r.rate) }, { h:'Days', v:r => r.days ? String(r.days) : '-', w:30 }, { h:'Total Rate (' + cur + ')', v:r => m(r.totalRate) });
+  if(any('totalRate')) cols.push({ h:'DSA (' + cur + ')', v:r => m(r.rate) }, { h:'Days', v:r => t.blank ? '' : r.days ? String(r.days) : '-', w:30 }, { h:'Total Rate (' + cur + ')', v:r => m(r.totalRate) });
   if(any('stop')) cols.push({ h:'Stop-over (' + cur + ')', v:r => m(r.stop) });
   if(any('inc')) cols.push({ h:'Incidental (' + cur + ')', v:r => m(r.inc) });
   if(any('pm')) cols.push({ h:'Pocket Money (' + cur + ')', v:r => m(r.pm) });
-  cols.push({ h:'Total (' + cur + ')', v:r => pcMoneyPlain(r.total), bold:true });
+  cols.push({ h:'Total (' + cur + ')', v:r => t.blank ? '' : pcMoneyPlain(r.total), bold:true });
   const x1 = L + 85, x2 = x1 + 85, fixed = cols.reduce((s, c) => s + (c.w || 0), 0), free = cols.filter(c => !c.w).length, cw = (R - x2 - fixed) / free;
   let x = x2; cols.forEach(c => { c.x0 = x; x += c.w || cw; c.x1 = x; });
   const HF = 8, hl = cols.map(c => pdfWrap(c.h, true, HF, c.x1 - c.x0 - 3)), h1 = 15, h2 = Math.max(24, Math.max(...hl.map(l => l.length)) * LH + 8), top = y;
@@ -10593,23 +10611,116 @@ function trMemoForeignTable(pg, t, ps, y, cur, L, R, txt, center){
   if(people.length > 1){ const h = 17, last = cols[cols.length - 1]; pg.fill(L, y, R - L, h, HEAD); txt(L + 4, y + 11.5, 'Total DSA (' + people.length + ' staff)', { bold:true, size:FS }); center(last.x0, last.x1, y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(L, y, R, y, GRID, 0.6); pg.line(L, y + h, R, y + h, GRID, 0.6); [L, last.x0, R].forEach(xx => pg.line(xx, y, xx, y + h, GRID, 0.6)); y += h; }
   return y;
 }
+// a blank memo: the same form with empty fields (the allowances of a local trip are listed, the amounts are left to fill in)
+function trBlankTrip(scope){
+  const S = trSettings(), s = S[scope] || S.local;
+  return { blank:true, scope, destination:'', purpose:'', fromDate:'', toDate:'', participants:[], dsa:{ enabled:true, currency:s.currency, memoNo:'', memoDate:'', memoFrom:S.memoFrom, memoTo:S.memoTo, memoCc:S.memoCc, signName:S.signName, signDesig:S.signDesig } };
+}
+const trBlankLines = () => ['Meal', 'Pocket Money', 'Accommodation'].map(label => ({ label, rate:null, days:null, total:null, lump:false }));
+// the wording of the memo, shared by the PDF and the Word file (a blank memo leaves gaps for the details)
+function trMemoBody(t, ps){
+  const gap = '______________', blank = !!t.blank;
+  const who = ps.length === 1 || blank ? 'the staff member listed below will be' : 'the staff members listed below will be';
+  const purp = String(t.purpose || '').trim(), lead = !purp || /^official trip$/i.test(purp) ? 'As part of the official trip' : 'As part of the official trip for ' + purp;
+  const dest = t.destination || (blank ? gap : ''), from = pcOrdinalDate(t.fromDate) || (blank ? gap : ''), to = pcOrdinalDate(t.toDate) || (blank ? gap : '');
+  return { subject:'Subject: Request for Daily Subsistence Allowance for ' + dest,
+    lines:[lead + ', ' + who + ' travelling to ' + dest + ' from ' + from + ' to ' + to + '.', 'Kindly arrange the Daily Subsistence Allowance for the above-mentioned trip, as detailed below, in accordance with the Travel Policy.'] };
+}
+// the DSA memo as a Word file: the same form and tables as the PDF, on the FDC letterhead (a blank memo when t.blank)
+function trMemoDocxXml(t){
+  const d = t.dsa || {}, cur = trCur(t), ps = trParts(t), blank = !!t.blank, gap = '______________', mb = trMemoBody(t, ps), TW = 9026, out = [];
+  const f = o => Object.assign({ font:'Poppins', sz:20 }, o || {});
+  const P = (inner, o) => { o = o || {}; return `<w:p><w:pPr>${o.bdr || ''}<w:spacing w:before="${o.before || 0}" w:after="${o.after || 0}" w:line="${o.line || 276}" w:lineRule="auto"/>${o.jc ? `<w:jc w:val="${o.jc}"/>` : ''}</w:pPr>${inner || ''}</w:p>`; };
+  const bdr = side => `<w:pBdr><w:${side} w:val="single" w:sz="8" w:space="4" w:color="000000"/></w:pBdr>`;
+  // a table cell: merged down (vm) or across (span) the rows and columns, shaded for the headings
+  const C = (w, inner, o) => { o = o || {}; return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${o.span ? `<w:gridSpan w:val="${o.span}"/>` : ''}${o.vm ? (o.vm === 'cont' ? '<w:vMerge/>' : '<w:vMerge w:val="restart"/>') : ''}${o.shd ? '<w:shd w:val="clear" w:color="auto" w:fill="EEF0F5"/>' : ''}<w:tcMar><w:top w:w="50" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:bottom w:w="50" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/></w:tcPr>${inner || P('')}</w:tc>`; };
+  const cp = (s, o) => { o = o || {}; return P(wR(s == null ? '' : String(s), f({ sz:17, b:!!o.b })), { jc:o.jc || 'center', line:240 }); };
+  const sum = a => a.reduce((x, y) => x + y, 0);
+  const sect = `<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1400" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/></w:sectPr>`;
+  // the memo number, then From / To / CC / Date (the line above the first and below the last)
+  const no = d.memoNo || (blank ? trSettings().memoPrefix + vToday().slice(0, 4) + '/' : '');
+  out.push(P(wR(no, f({ b:true, sz:21 })), { jc:'right', after:60 }));
+  const dp = blank ? null : mmDateParts(d.memoDate || vToday());
+  const head = [['From:', d.memoFrom], ['To:', d.memoTo], ['CC:', d.memoCc]].filter(([, v]) => v).concat([['Date:', null]]);
+  head.forEach(([l, v], i) => out.push(P(wR(l + ' ', f({ b:true })) + (l === 'Date:' ? (dp ? wR(dp.d, f()) + wR(dp.suf, f({ sup:true })) + wR(dp.rest, f()) : wR(gap, f())) : wR(v || '', f())),
+    { bdr:i === 0 ? bdr('top') : i === head.length - 1 ? bdr('bottom') : '', before:i === 0 ? 40 : 0, after:i === head.length - 1 ? 60 : 0 })));
+  out.push(P('', { after:120 }));
+  out.push(P(wR(mb.subject, f({ b:true, u:true })), { after:120, line:360 }));
+  mb.lines.forEach(l => out.push(P(wR(l, f()), { jc:'both', line:360, after:120 })));
+  if(t.scope !== 'foreign'){
+    // local: Staff Details | Allowance | Rates (Cost, Days, Total Rate) | Total
+    const W = [1600, 1700, 2000, 1000, 700, 1100, TW - 8100], people = ps.length ? ps : [{ name:'', designation:'' }];
+    let rows = wTr(C(W[0] + W[1], cp('Staff Details', { b:true }), { span:2, shd:1 }) + C(W[2], cp('Allowance', { b:true }), { vm:'restart', shd:1 }) + C(W[3] + W[4] + W[5], cp('Rates', { b:true }), { span:3, shd:1 }) + C(W[6], cp('Total (' + cur + ')', { b:true }), { vm:'restart', shd:1 }));
+    rows += wTr(C(W[0], cp('Name', { b:true }), { shd:1 }) + C(W[1], cp('Designation', { b:true }), { shd:1 }) + C(W[2], P(''), { vm:'cont', shd:1 }) + C(W[3], cp('Cost (' + cur + ')', { b:true }), { shd:1 }) + C(W[4], cp('Days', { b:true }), { shd:1 }) + C(W[5], cp('Total Rate', { b:true }), { shd:1 }) + C(W[6], P(''), { vm:'cont', shd:1 }));
+    people.forEach(p => {
+      const lines = blank ? trBlankLines() : trDsaLines(t, p), per = blank ? '' : pcMoneyPlain(trDsaPerPerson(t, p));
+      const ls = lines.length ? lines : [{ label:'', rate:null, days:null, total:null, lump:false }], n = ls.length;
+      ls.forEach((l, i) => {
+        const first = i === 0, vm = n > 1 ? (first ? 'restart' : 'cont') : null;
+        rows += wTr(C(W[0], first ? cp(p.name) : P(''), { vm }) + C(W[1], first ? cp(p.designation || '') : P(''), { vm }) + C(W[2], cp(l.label, { jc:'left' })) +
+          C(W[3], cp(l.rate == null ? '' : pcMoneyPlain(l.rate))) + C(W[4], cp(l.rate == null ? '' : l.lump ? '-' : String(l.days).padStart(2, '0'))) + C(W[5], cp(l.total == null ? '' : pcMoneyPlain(l.total))) +
+          C(W[6], first ? cp(per, { b:true }) : P(''), { vm }));
+      });
+    });
+    if(people.length > 1) rows += wTr(C(sum(W.slice(0, 6)), cp('Total DSA (' + people.length + ' staff)', { b:true, jc:'left' }), { span:6, shd:1 }) + C(W[6], cp(pcMoneyPlain(trDsaTotal(t)), { b:true }), { shd:1 }));
+    out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${W_BORDERS}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${W.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${rows}</w:tbl>`);
+  } else {
+    // abroad: Staff Details | Rates (DSA, Days, Total Rate, Stop-over, Incidental, Pocket Money) | Total
+    const people = ps.length ? ps : [{ name:'', designation:'' }], rs = people.map(p => trMemoRow(t, p)), any = k => blank || rs.some(r => r[k] > 0), m = v => blank ? '' : v > 0 ? pcMoneyPlain(v) : '-';
+    const fc = [];
+    if(any('totalRate')) fc.push({ h:'DSA (' + cur + ')', v:r => m(r.rate) }, { h:'Days', v:r => blank ? '' : r.days ? String(r.days) : '-' }, { h:'Total Rate (' + cur + ')', v:r => m(r.totalRate) });
+    if(any('stop')) fc.push({ h:'Stop-over (' + cur + ')', v:r => m(r.stop) });
+    if(any('inc')) fc.push({ h:'Incidental (' + cur + ')', v:r => m(r.inc) });
+    if(any('pm')) fc.push({ h:'Pocket Money (' + cur + ')', v:r => m(r.pm) });
+    fc.push({ h:'Total (' + cur + ')', v:r => blank ? '' : pcMoneyPlain(r.total), last:1 });
+    const NW = 1400, RW = TW - 2 * NW, base = Math.floor(RW / fc.length), fw = fc.map(() => base); fw[fw.length - 1] += RW - base * fc.length;
+    const L = fc.length - 1;
+    let rows = wTr(C(2 * NW, cp('Staff Details', { b:true }), { span:2, shd:1 }) + (L ? C(sum(fw.slice(0, L)), cp('Rates', { b:true }), { span:L, shd:1 }) : '') + C(fw[L], cp(fc[L].h, { b:true }), { vm:'restart', shd:1 }));
+    rows += wTr(C(NW, cp('Name', { b:true }), { shd:1 }) + C(NW, cp('Designation', { b:true }), { shd:1 }) + fc.slice(0, L).map((c, i) => C(fw[i], cp(c.h, { b:true }), { shd:1 })).join('') + C(fw[L], P(''), { vm:'cont', shd:1 }));
+    people.forEach((p, i) => { rows += wTr(C(NW, cp(p.name)) + C(NW, cp(p.designation || '')) + fc.map((c, j) => C(fw[j], cp(c.v(rs[i]), { b:!!c.last }))).join('')); });
+    if(people.length > 1) rows += wTr(C(2 * NW + sum(fw.slice(0, L)), cp('Total DSA (' + people.length + ' staff)', { b:true, jc:'left' }), { span:L + 2, shd:1 }) + C(fw[L], cp(pcMoneyPlain(trDsaTotal(t)), { b:true }), { shd:1 }));
+    out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${W_BORDERS}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${[NW, NW].concat(fw).map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${rows}</w:tbl>`);
+  }
+  // the sign-off, and the attachment line
+  out.push(P('', { after:120 }));
+  out.push(P(wR('Thank You', f()), { before:240 }));
+  out.push(P(wR('Best Regards,', f()), { before:600 }));
+  if(d.signName) out.push(P(wR(d.signName, f())));
+  if(d.signDesig) out.push(P(wR(d.signDesig, f())));
+  out.push(P(wR('Attachment: Travel Request Form', f({ sz:17, color:'4D4D4D' })), { before:360 }));
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}${sect}</w:body></w:document>`;
+}
+const buildTravelMemoDocx = t => lhDocx(trMemoDocxXml(t), LH_NS);
+async function trMemoDocx(id, btn){
+  const t = trById(id); if(!t || !trDsaOn(t)) return;
+  if(!t.dsa.memoNo){ toast('Enter the memo number first (Edit request).', true); return; }
+  const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ downloadBlob(await buildTravelMemoDocx(t), 'DSA_Memo_' + String(t.dsa.memoNo).replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '') + '.docx'); toast('Memo downloaded. Link the signed copy with Edit request.'); }
+  catch(e){ console.error(e); toast('Could not create the memo: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+// the blank DSA memo for local or foreign travel, as Word or PDF
+async function trBlankMemo(scope, kind, btn){
+  const t = trBlankTrip(scope), label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  const name = 'Blank_DSA_Memo_' + (scope === 'foreign' ? 'Foreign' : 'Local');
+  try{ downloadBlob(kind === 'pdf' ? await buildTravelMemoPdf(t) : await buildTravelMemoDocx(t), name + (kind === 'pdf' ? '.pdf' : '.docx')); toast('Blank DSA memo downloaded.'); }
+  catch(e){ console.error(e); toast('Could not create the memo: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
 async function buildTravelMemoPdf(t){
   const d = t.dsa || {}, cur = trCur(t), ps = trParts(t), K = [0, 0, 0], HEAD = [0.93, 0.94, 0.96];
   const pg = new PdfPage(PCA4_H), L = 75, R = 520, FS = 9.5;
   const txt = (x, b, s, o) => pg.text(x, b, s, Object.assign({ size:FS }, o || {}));
   const center = (x0, x1, b, s, o) => { o = Object.assign({ size:8.5 }, o || {}); pg.text(x0 + (x1 - x0 - pdfTextWidth(s, !!o.bold, o.size)) / 2, b, s, o); };
   let y = 112;
-  const no = d.memoNo || ''; txt(R - pdfTextWidth(no, true, 10), y, no, { bold:true, size:10 }); y += 6; pg.line(L, y, R, y, K, 0.8); y += 15;
+  const no = d.memoNo || (t.blank ? trSettings().memoPrefix + vToday().slice(0, 4) + '/' : ''); txt(R - pdfTextWidth(no, true, 10), y, no, { bold:true, size:10 }); y += 6; pg.line(L, y, R, y, K, 0.8); y += 15;
   [['From:', d.memoFrom], ['To:', d.memoTo], ['CC:', d.memoCc]].forEach(([l, v]) => { if(!v) return; txt(L, y, l, { bold:true }); txt(L + pdfTextWidth(l + ' ', true, FS), y, v); y += 15; });
   const dp = pcReplDateParts(d.memoDate || vToday()), mon = PC_MONTH_NAMES[+String(d.memoDate || vToday()).slice(5, 7) - 1] || '', yr = String(d.memoDate || vToday()).slice(0, 4);
-  txt(L, y, 'Date:', { bold:true }); pdfRuns(pg, L + pdfTextWidth('Date: ', true, FS), y, [{ t:dp.d.padStart(2, '0'), size:FS }, { t:dp.suf, size:5.8, rise:3.6 }, { t:' ' + mon + ' ' + yr, size:FS }]); y += 7; pg.line(L, y, R, y, K, 0.8); y += 22;
+  txt(L, y, 'Date:', { bold:true }); if(t.blank) txt(L + pdfTextWidth('Date: ', true, FS), y, '______________'); else pdfRuns(pg, L + pdfTextWidth('Date: ', true, FS), y, [{ t:dp.d.padStart(2, '0'), size:FS }, { t:dp.suf, size:5.8, rise:3.6 }, { t:' ' + mon + ' ' + yr, size:FS }]); y += 7; pg.line(L, y, R, y, K, 0.8); y += 22;
   // subject (bold, underlined) and the request
-  const subj = 'Subject: Request for Daily Subsistence Allowance for ' + (t.destination || '');
+  const mb = trMemoBody(t, ps), subj = mb.subject;
   pdfWrap(subj, true, 10, R - L).forEach(ln => { txt(L, y, ln, { bold:true, size:10 }); pg.line(L, y + 2, L + pdfTextWidth(ln, true, 10), y + 2, K, 0.6); y += 18; });
-  const who = ps.length === 1 ? 'the staff member listed below will be' : 'the staff members listed below will be';
-  const purp = String(t.purpose || '').trim(), lead = !purp || /^official trip$/i.test(purp) ? 'As part of the official trip' : 'As part of the official trip for ' + purp;
-  const body = [lead + ', ' + who + ' travelling to ' + (t.destination || '') + ' from ' + pcOrdinalDate(t.fromDate) + ' to ' + pcOrdinalDate(t.toDate) + '.',
-    'Kindly arrange the Daily Subsistence Allowance for the above-mentioned trip, as detailed below, in accordance with the Travel Policy.'];
+  const body = mb.lines;
   body.forEach(p => { const ls = pdfWrap(p, false, FS, R - L); ls.forEach((ln, i) => { const gaps = (ln.match(/ /g) || []).length, ws = i < ls.length - 1 && gaps ? (R - L - pdfTextWidth(ln, false, FS)) / gaps : 0; txt(L, y, ln, ws ? { ws } : {}); y += 18; }); });      // justified: every line but the last fills the width
   y += 8;
   if(t.scope === 'foreign') y = trMemoForeignTable(pg, t, ps, y, cur, L, R, txt, center);
@@ -10627,14 +10738,14 @@ async function buildTravelMemoPdf(t){
   [X[0], X[2], X[3], X[6], X[7]].forEach(x => pg.line(x, top, x, y, GRID, 0.5)); [X[1]].forEach(x => pg.line(x, top + h1, x, y, GRID, 0.5)); [X[4], X[5]].forEach(x => pg.line(x, top + h1, x, y, GRID, 0.5));
   const LH = 11;
   (ps.length ? ps : [{ name:'', designation:'' }]).forEach(p => {
-    const lines = trDsaLines(t, p), per = trDsaPerPerson(t, p);
+    const lines = t.blank ? trBlankLines() : trDsaLines(t, p), per = t.blank ? 0 : trDsaPerPerson(t, p);
     const nameW = pdfWrap(p.name, false, 8.5, X[1] - X[0] - 8), desW = pdfWrap(p.designation || '', false, 8.5, X[2] - X[1] - 8);
     const subH = lines.map(l => Math.max(15, pdfWrap(l.label, false, 8.5, X[3] - X[2] - 8).length * LH + 4));
     let blockH = subH.reduce((a, b) => a + b, 0); const need = Math.max(nameW.length, desW.length) * LH + 6; if(need > blockH){ const extra = (need - blockH) / subH.length; subH.forEach((v, i) => { subH[i] = v + extra; }); blockH = need; }
     const b0 = y;
     const mid = (arr, x0, x1, al) => { const st = b0 + (blockH - arr.length * LH) / 2 + 8; arr.forEach((ln, i) => { if(al === 'c') center(x0, x1, st + i * LH, ln); else txt(x0 + 4, st + i * LH, ln, { size:8.5 }); }); };
-    mid(nameW, X[0], X[1], 'c'); mid(desW, X[1], X[2], 'l'); mid([pcMoneyPlain(per)], X[6], X[7], 'c');
-    let yy = b0; lines.forEach((l, i) => { const hh = subH[i], b = yy + hh / 2 + 3; txt(X[2] + 4, b, l.label, { size:8.5 }); center(X[3], X[4], b, pcMoneyPlain(l.rate)); center(X[4], X[5], b, l.lump ? '-' : String(l.days).padStart(2, '0')); center(X[5], X[6], b, pcMoneyPlain(l.total)); yy += hh; if(i < lines.length - 1) pg.line(X[2], yy, X[6], yy, GRID, 0.5); });
+    mid(nameW, X[0], X[1], 'c'); mid(desW, X[1], X[2], 'l'); mid([t.blank ? '' : pcMoneyPlain(per)], X[6], X[7], 'c');
+    let yy = b0; lines.forEach((l, i) => { const hh = subH[i], b = yy + hh / 2 + 3; txt(X[2] + 4, b, l.label, { size:8.5 }); center(X[3], X[4], b, l.rate == null ? '' : pcMoneyPlain(l.rate)); center(X[4], X[5], b, l.rate == null ? '' : l.lump ? '-' : String(l.days).padStart(2, '0')); center(X[5], X[6], b, l.total == null ? '' : pcMoneyPlain(l.total)); yy += hh; if(i < lines.length - 1) pg.line(X[2], yy, X[6], yy, GRID, 0.5); });
     y = b0 + blockH; pg.line(X[0], y, X[7], y, GRID, 0.5); X.forEach(x => pg.line(x, b0, x, y, GRID, 0.5));
   });
   if(ps.length > 1){ const h = 17; pg.fill(X[0], y, X[7] - X[0], h, HEAD); txt(X[0] + 4, y + 11.5, 'Total DSA (' + ps.length + ' staff)', { bold:true, size:8.5 }); center(X[6], X[7], y + 11.5, pcMoneyPlain(trDsaTotal(t)), { bold:true }); pg.line(X[0], y, X[7], y, GRID, 0.6); pg.line(X[0], y + h, X[7], y + h, GRID, 0.6); [X[0], X[6], X[7]].forEach(xx => pg.line(xx, y, xx, y + h, GRID, 0.6)); y += h; }

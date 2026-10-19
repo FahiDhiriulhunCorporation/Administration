@@ -3010,8 +3010,8 @@ function openVehFuelForm(id){
     `<div class="sm:col-span-2"><label class="${VEH_LBL}">Vehicle${vReqStar}</label><select name="vehicleId" class="${VEH_FIELD} bg-white" onchange="vehFuelVehChanged(this)"><option value="">Select vehicle…</option>${vSorted().map(v => `<option value="${esc(v.id)}" ${v.id === r.vehicleId ? 'selected' : ''}>${esc(v.plate)}${vName(v) ? ' — ' + esc(vName(v)) : ''}</option>`).join('')}</select></div>` +
     vS('Fuel type', 'fuelType', VEH_FUELS, r.fuelType, 'Select…', { req:1, attrs:' onchange="vehRefreshReqSelect()"' }) + vF('Date', 'date', r.date, 'date', { req:1 }) +
     `<fieldset class="sm:col-span-2 border border-slate-200 rounded-lg p-4"><legend class="px-1.5 text-xs font-semibold text-slate-600">Funding</legend>${vGrid(2,
-      vS('Charge to', 'fundType', VEH_FUND_TYPES, r.fundType || 'PR', null, { req:1, attrs:' onchange="vehRefreshReqSelect()"' }) +
-      `<div><label class="${VEH_LBL}">Requisition${vReqStar}</label><select name="requisitionId" class="${VEH_FIELD} bg-white" onchange="vehUpdateReqInfo()"></select></div>` +
+      vS('Charge to', 'fundType', VEH_FUND_TYPES, r.fundType || 'PR', null, { attrs:' onchange="vehRefreshReqSelect()"' }) +
+      `<div><label class="${VEH_LBL}">Requisition</label><select name="requisitionId" class="${VEH_FIELD} bg-white" onchange="vehUpdateReqInfo()"></select></div>` +
       `<div class="sm:col-span-2" id="veh-req-info"></div><div class="sm:col-span-2"><label class="${VEH_LBL}" id="veh-po-lbl">PO no.</label><input name="poNo" value="${esc(r.poNo || r.ref || '')}" class="${VEH_FIELD}"></div>`)}</fieldset>` +
     vF('Litres', 'litres', r.litres, 'number', { req:1, attrs:' oninput="vehFuelCalc()"' }) + vF('Rate per litre (' + esc(vehSettings.currency) + ')', 'rate', r.rate, 'number', { attrs:' oninput="vehFuelCalc()"' }) +
     vF('Total cost (' + esc(vehSettings.currency) + ')', 'total', r.total, 'number', { req:1, attrs:' oninput="vehUpdateReqInfo()"' }) + vF('Odometer (km / hrs)', 'odometer', r.odometer, 'number') +
@@ -3029,7 +3029,7 @@ function vehRefreshReqSelect(pick){
   const kr = vehFuelCtx.keepReq && vReqById(vehFuelCtx.keepReq);
   const keep = (kr && kr.kind === kind && kr.vehicleId === f.vehicleId.value) ? vehFuelCtx.keepReq : null;
   const list = (f.vehicleId.value && f.fuelType.value) ? vUsableReqs(f.vehicleId.value, f.fuelType.value, kind, vehFuelCtx.id, keep) : [];
-  sel.innerHTML = list.length ? list.map(rq => `<option value="${esc(rq.id)}">${esc(rq.refNo)} — bal. ${esc(vMoney(vReqBalance(rq, vehFuelCtx.id)))}${vHasL(rq) ? ' · ' + esc(vFmtL(vReqBalanceL(rq, vehFuelCtx.id))) : ''}</option>`).join('') : '<option value="">No requisition with balance</option>';
+  sel.innerHTML = list.length ? list.map(rq => `<option value="${esc(rq.id)}">${esc(rq.refNo)} — bal. ${esc(vMoney(vReqBalance(rq, vehFuelCtx.id)))}${vHasL(rq) ? ' · ' + esc(vFmtL(vReqBalanceL(rq, vehFuelCtx.id))) : ''}</option>`).join('') + '<option value="">None (optional)</option>' : '<option value="">No requisition with balance (optional)</option>';
   if(cur && list.some(x => x.id === cur)) sel.value = cur;
   vehUpdateReqInfo();
 }
@@ -3037,6 +3037,7 @@ function vehUpdateReqInfo(){
   const f = document.getElementById('vform'), box = document.getElementById('veh-req-info'); if(!f || !box || !f.requisitionId) return;
   const kind = f.fundType.value, word = kind === 'PR' ? 'PR' : 'petty cash';
   if(!f.vehicleId.value || !f.fuelType.value){ box.innerHTML = `<span class="text-xs text-slate-400">Select the vehicle and fuel type to see the available ${word} balance.</span>`; return; }
+  if(!f.requisitionId.value){ box.innerHTML = `<span class="text-xs text-slate-400">No requisition selected. It is optional, so the entry can be saved without one.</span>`; return; }
   const rq = vReqById(f.requisitionId.value);
   if(!rq){ box.innerHTML = `<div class="bg-rose-50 text-rose-700 text-sm rounded-lg px-3.5 py-2.5">No ${word} balance for this vehicle (${esc(f.fuelType.value)}). The limit has been reached or none exists — <button type="button" onclick="vehAddReqFromFuel()" class="font-semibold underline">add a new ${kind === 'PR' ? 'PR' : 'petty cash requisition'}</button>.</div>`; return; }
   const exclude = vehFuelCtx && vehFuelCtx.id, bal = vReqBalance(rq, exclude), t = vNum(f.total.value), after = bal - t;
@@ -3052,20 +3053,21 @@ function vehAddReqFromFuel(){ const f = document.getElementById('vform'); const 
 async function saveVehFuel(id){
   const o = vehFormObj(document.getElementById('vform'));
   if(!o.vehicleId || !o.fuelType || !o.date || !vNum(o.litres) || !vNum(o.total)) return vFail('Vehicle, fuel type, date, litres and total are required.');
-  const rq = vReqById(o.requisitionId);
-  if(!rq) return vFail('Select a ' + (o.fundType === 'PR' ? 'PR' : 'petty cash') + ' requisition with balance for this vehicle.');
-  if(rq.vehicleId !== o.vehicleId || rq.fuelType !== o.fuelType || rq.kind !== o.fundType) return vFail('The requisition does not match the vehicle / fuel type.');
-  const bal = vReqBalance(rq, id);
-  if(vNum(o.total) > bal + 0.001) return vFail('This exceeds the available balance of ' + vMoney(bal) + ' on ' + vReqLabel(rq) + '.');
-  const balL = vHasL(rq) ? vReqBalanceL(rq, id) : null;
+  // the requisition is optional: when one is chosen it must match and have the balance
+  const rq = o.requisitionId ? vReqById(o.requisitionId) : null;
+  if(o.requisitionId && !rq) return vFail('The selected requisition could not be found. Choose another or select None.');
+  if(rq && (rq.vehicleId !== o.vehicleId || rq.fuelType !== o.fuelType || rq.kind !== o.fundType)) return vFail('The requisition does not match the vehicle / fuel type.');
+  const bal = rq ? vReqBalance(rq, id) : null;
+  if(rq && vNum(o.total) > bal + 0.001) return vFail('This exceeds the available balance of ' + vMoney(bal) + ' on ' + vReqLabel(rq) + '.');
+  const balL = rq && vHasL(rq) ? vReqBalanceL(rq, id) : null;
   if(balL !== null && vNum(o.litres) > balL + 0.001) return vFail('This exceeds the available litres (' + vFmtL(balL) + ') on ' + vReqLabel(rq) + '.');
   if(id) o.id = id;
   if(vNum(o.odometer)){ const v = vehById(o.vehicleId); if(v && vNum(o.odometer) > vNum(v.mileage)) await vehSave('vehicles', { id:v.id, mileage:o.odometer }); }
   await vehSave('fuelRecords', o);
   closeModal(); vehUi.fuelTab = 'log'; goTo('fueling');
   const left = bal - vNum(o.total), leftL = balL === null ? null : balL - vNum(o.litres);
-  toast('Fuel entry saved · ' + vReqLabel(rq) + ' balance ' + vMoney(left) + (leftL !== null ? ' / ' + vFmtL(leftL) : ''));
-  if(left <= 0.004 || (leftL !== null && leftL <= 0.004)) setTimeout(() => { const fresh = vReqById(rq.id); if(fresh) vehShowDepleted(fresh); }, 350);
+  toast(rq ? 'Fuel entry saved · ' + vReqLabel(rq) + ' balance ' + vMoney(left) + (leftL !== null ? ' / ' + vFmtL(leftL) : '') : 'Fuel entry saved (no requisition).');
+  if(rq && (left <= 0.004 || (leftL !== null && leftL <= 0.004))) setTimeout(() => { const fresh = vReqById(rq.id); if(fresh) vehShowDepleted(fresh); }, 350);
 }
 function vehConfirmDeleteFuel(id){ closeModal(); confirmAction('Delete this fuel entry?', async () => { await vehDelete('fuelRecords', id); toast('Deleted.'); }); }
 

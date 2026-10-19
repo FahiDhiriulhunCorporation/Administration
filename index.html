@@ -15488,8 +15488,6 @@ function savePurchaseRequisition(id){
   }
   if(torUrl === null){ errEl.textContent = 'The TOR link must be a web address (starting with https://).'; errEl.classList.remove('hidden'); return; }
 
-  { const prOld = id ? state.purchaseRequisitions.find(x => x.id === id) : null;
-    if(status === 'released' && (!prOld || prOld.status !== 'released') && !apIsApprover()){ errEl.textContent = 'Only the approver (' + apNames() + ') can release a requisition. Leave it as Pending Approval.'; errEl.classList.remove('hidden'); return; } }
   if(!prNumber){ errEl.textContent='PR Number is required.'; errEl.classList.remove('hidden'); return; }
   if(!requisitionDate){ errEl.textContent='Requisition date is required.'; errEl.classList.remove('hidden'); return; }
   if(!requester){ errEl.textContent='Requester is required.'; errEl.classList.remove('hidden'); return; }

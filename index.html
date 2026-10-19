@@ -1037,7 +1037,14 @@ async function initCloudIfConfigured(){
         listenToCloudLocations();
         listenToCloudNotificationSettings();
         listenToAllProfiles();
-        ensureOwnProfileDoc(user, pendingExtra);
+        // A signed-in account needs a member profile before it can use the app. If the profile can't be set up
+        // (e.g. a pending member whose sign-in didn't claim their entry), sign them out instead of letting them in.
+        ensureOwnProfileDoc(user, pendingExtra).then(ok => {
+          if(ok === false && firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.uid === user.uid){
+            toast('Your account is not set up for this app yet. Ask an administrator to check your access.', true);
+            firebaseAuth.signOut();
+          }
+        });
         listenToOwnProfile(user);
         loadMySignature();
       } else {
@@ -1108,7 +1115,7 @@ async function unblockUid(uid){
     tx.set(metaRef, { uids, info });
   });
 }
-async function ensureOwnProfileDoc(user, extra){ if(!firestoreProfilesRef || !firestoreDb) return; try{ if(await isUserBlocked(user.uid, user.email)) return; try{ const bd = await firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers').get(); if(bd.exists && Array.isArray(bd.data().uids) && bd.data().uids.includes(user.uid)) unblockUid(user.uid).catch(() => {}); }catch(e){} let assignedRole = null; let pm = null; try{ const pmDoc = await firestoreDb.collection('fdc_inventory_meta').doc('pendingMembers').get(); const lst = pmDoc.exists && pmDoc.data() && pmDoc.data().list; pm = lst ? (lst[pmKey(user.email)] || null) : null; }catch(e){} const metaRef = firestoreDb.collection('fdc_inventory_meta').doc('adminStatus'); await firestoreDb.runTransaction(async (tx) => { const ref = firestoreProfilesRef.doc(user.uid); const snap = await tx.get(ref); if(snap.exists) return; const metaSnap = await tx.get(metaRef); const alreadyHasAdmin = metaSnap.exists && metaSnap.data().assigned; const role = alreadyHasAdmin ? 'member' : 'admin'; const data = Object.assign({ uid:user.uid, email:user.email, name:(pm&&pm.name)||user.displayName||user.email, role, designation:(pm&&pm.designation)||'', department:(pm&&pm.department)||'', createdAt: Date.now() }, extra||{}); tx.set(ref, data); if(!alreadyHasAdmin) tx.set(metaRef, { assigned:true }); assignedRole = role; }); if(assignedRole && authUser && authUser.uid===user.uid){ authUser.role = assignedRole; renderApp(); } }catch(e){ } }
+async function ensureOwnProfileDoc(user, extra){ if(!firestoreProfilesRef || !firestoreDb) return null; try{ if(await isUserBlocked(user.uid, user.email)) return null; try{ const bd = await firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers').get(); if(bd.exists && Array.isArray(bd.data().uids) && bd.data().uids.includes(user.uid)) unblockUid(user.uid).catch(() => {}); }catch(e){} let assignedRole = null; let pm = null; try{ const pmDoc = await firestoreDb.collection('fdc_inventory_meta').doc('pendingMembers').get(); const lst = pmDoc.exists && pmDoc.data() && pmDoc.data().list; pm = lst ? (lst[pmKey(user.email)] || null) : null; }catch(e){} const metaRef = firestoreDb.collection('fdc_inventory_meta').doc('adminStatus'); await firestoreDb.runTransaction(async (tx) => { const ref = firestoreProfilesRef.doc(user.uid); const snap = await tx.get(ref); if(snap.exists && snap.data().email) return; /* a bare record (e.g. only lastActive) is completed below */ const metaSnap = await tx.get(metaRef); const alreadyHasAdmin = metaSnap.exists && metaSnap.data().assigned; const role = alreadyHasAdmin ? 'member' : 'admin'; const data = Object.assign({ uid:user.uid, email:user.email, name:(pm&&pm.name)||user.displayName||user.email, role, designation:(pm&&pm.designation)||'', department:(pm&&pm.department)||'', createdAt: Date.now() }, extra||{}); tx.set(ref, data, { merge:true }); if(!alreadyHasAdmin) tx.set(metaRef, { assigned:true }); assignedRole = role; }); if(assignedRole && authUser && authUser.uid===user.uid){ authUser.role = assignedRole; renderApp(); } return true; }catch(e){ console.error('Could not set up the member profile', e); return false; } }
 let lastCloudErrorToastAt = 0;
 function handleCloudSyncError(err, collectionLabel){
   cloudStatus = 'error';
@@ -1393,7 +1400,7 @@ async function submitSignUp(){
   }
 }
 function signOutUser(){
-  try{ if(authUser && firestoreProfilesRef) firestoreProfilesRef.doc(authUser.uid).set({ lastActive:0 }, { merge:true }).catch(() => {}); }catch(e){}
+  try{ if(authUser && firestoreProfilesRef) firestoreProfilesRef.doc(authUser.uid).update({ lastActive:0 }).catch(() => {}); }catch(e){}
   const s = unsyncedSummary({ ignoreGrace:true });
   const msg = s.total
     ? `${s.parts.map(p=>p.text).join(', ')} ${s.total===1?'is':'are'} saved only on this device and will be deleted from it when you sign out. Cancel and use "Upload to cloud" first — or sign out anyway?`
@@ -6893,7 +6900,7 @@ async function saveApprovers(){
 let presenceT = 0;
 function presenceBeat(){
   if(!authUser || !firestoreProfilesRef || document.hidden) return;
-  firestoreProfilesRef.doc(authUser.uid).set({ lastActive:Date.now() }, { merge:true }).catch(() => {});
+  firestoreProfilesRef.doc(authUser.uid).update({ lastActive:Date.now() }).catch(() => {}); // update, never create: sign-in creates the full profile
 }
 function presenceStart(){ if(presenceT) return; presenceBeat(); presenceT = setInterval(presenceBeat, 90000); }
 document.addEventListener('visibilitychange', () => { if(!document.hidden) presenceBeat(); });

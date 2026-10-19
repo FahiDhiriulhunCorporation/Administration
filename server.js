@@ -20,11 +20,19 @@ const MAX_FILES = 10;
 const PDF = 'application/pdf';
 const IMAGES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-const PROMPT = `You are reading a fuel invoice, delivery note or purchase order. Return ONLY a JSON object with these keys:
+const PROMPTS = {
+  'fuel-invoice': `You are reading a fuel invoice, delivery note or purchase order. Return ONLY a JSON object with these keys:
 supplier (string or null), invoiceNumber (string or null), invoiceDate (YYYY-MM-DD or null), deliveryNoteNo (string or null),
 poNumber (string or null), fuelType ("Petrol", "Diesel" or null), litres (number or null), ratePerLitre (number or null),
 total (number or null: the amount payable), currency (string or null), confidence ("high", "medium" or "low"), notes (string).
-Use null for anything that is not on the document. Do not guess. Numbers must be plain numbers without commas or currency symbols.`;
+Use null for anything that is not on the document. Do not guess. Numbers must be plain numbers without commas or currency symbols.`,
+  'pr-quotation': `You are reading a supplier quotation or proposal for a purchase requisition. Return ONLY a JSON object with these keys:
+supplier (string or null), quotationNumber (string or null), quotationDate (YYYY-MM-DD or null), validUntil (YYYY-MM-DD or null),
+currency (string or null), items (array), total (number or null), notes (string).
+Each item in items has: description (string: the item name), specification (string or null), quantity (number), unitCost (number, the price per unit before tax).
+List every priced line item and nothing else. Use null for anything not on the document. Do not guess. Numbers must be plain numbers.`,
+};
+const KINDS = Object.keys(PROMPTS);
 
 function send(res, code, obj, cfg) {
   res.writeHead(code, {
@@ -46,22 +54,22 @@ function readBody(req) {
 }
 
 // the files as Claude content blocks: PDFs as documents, photos as images
-function contentFor(files) {
+function contentFor(files, kind) {
   const blocks = files.map(f => {
     if (!f || typeof f.data !== 'string' || !f.data) throw Object.assign(new Error('a file is empty'), { code: 400 });
     if (f.type === PDF) return { type: 'document', source: { type: 'base64', media_type: PDF, data: f.data } };
     if (IMAGES.includes(f.type)) return { type: 'image', source: { type: 'base64', media_type: f.type, data: f.data } };
     throw Object.assign(new Error('unsupported file type: ' + f.type), { code: 400 });
   });
-  blocks.push({ type: 'text', text: PROMPT });
+  blocks.push({ type: 'text', text: PROMPTS[kind] });
   return blocks;
 }
 
-async function readInvoice(files, cfg, fetchImpl) {
+async function readInvoice(files, kind, cfg, fetchImpl) {
   const res = await fetchImpl(cfg.upstream + '/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': cfg.key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: cfg.model, max_tokens: 1024, messages: [{ role: 'user', content: contentFor(files) }] }),
+    body: JSON.stringify({ model: cfg.model, max_tokens: 1024, messages: [{ role: 'user', content: contentFor(files, kind) }] }),
   });
   if (!res.ok) throw Object.assign(new Error('the AI service returned ' + res.status), { code: 502 });
   const msg = await res.json();
@@ -83,7 +91,8 @@ function handler(fetchImpl = fetch) {
       const files = Array.isArray(body.files) ? body.files : [];
       if (!files.length) throw Object.assign(new Error('no files sent'), { code: 400 });
       if (files.length > MAX_FILES) throw Object.assign(new Error('too many files'), { code: 400 });
-      const data = await readInvoice(files, cfg, fetchImpl);
+      const kind = KINDS.includes(body.kind) ? body.kind : 'fuel-invoice';
+      const data = await readInvoice(files, kind, cfg, fetchImpl);
       send(res, 200, { data }, cfg);
     } catch (e) {
       send(res, e.code || 500, { error: e.code ? e.message : 'the invoice could not be read' }, cfg);
@@ -91,7 +100,7 @@ function handler(fetchImpl = fetch) {
   };
 }
 
-module.exports = { handler, PROMPT };
+module.exports = { handler, PROMPTS };
 
 if (require.main === module) {
   const port = +process.env.PORT || 8787;

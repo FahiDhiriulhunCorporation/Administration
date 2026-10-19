@@ -1469,7 +1469,7 @@ function profStaffHtml(){
   return `<div class="border-t border-slate-200 pt-4 mb-5">
     <div class="text-xs font-semibold text-slate-600 mb-2.5">My staff details</div>
     <div class="grid grid-cols-2 gap-3 mb-4">${item('Staff no.', me.staffNo)}${item('Designation', me.designation)}${item('Department', me.department)}${item('Phone', me.phone)}${item('Email', me.email)}${item('Level', me.level)}</div>
-    ${card ? `<div class="grid grid-cols-2 gap-3 mb-3">${bcCard(me, 'front')}${idCard(me)}</div>
+    ${card ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">${bcCard(me, 'back')}${idCard(me)}</div>
       <div class="flex flex-wrap gap-4"><button onclick="sdCardPdf('${esc(key)}', this)" class="text-xs font-semibold text-brand-600 hover:underline">Business card (PDF)</button><button onclick="sdIdPdf('${esc(key)}', this)" class="text-xs font-semibold text-brand-600 hover:underline">Staff ID card (PDF)</button></div>` : ''}
   </div>`;
 }
@@ -2861,7 +2861,25 @@ function openVehRenew(id, key){
   if(x.expiry){ const d = vParse(x.expiry); d.setDate(d.getDate() + 1); start = vIso(d); }      // the day after the old expiry
   const dur = x.duration || '12';
   openModal('Renew ' + s.label + ' · ' + (v.plate || ''), vFormOpen + `<p class="text-sm text-slate-500 mb-4">The current term (${vDate(x.start)} – ${vDate(x.expiry)}${x.cost ? ', ' + vMoney(x.cost) : ''}) will be kept in history.</p>` +
+    (AI_READ_URL ? `<div class="rounded-lg border border-dashed border-brand-300 bg-brand-50 px-4 py-3 mb-4 flex items-center justify-between gap-3 flex-wrap"><div class="text-sm text-slate-700"><b>Read from the document</b><div id="veh-doc-status" class="text-xs text-slate-500 mt-0.5">Choose the certificate or receipt (PDF or photo) and the dates, cost and policy details are filled in for you to check.</div></div><label class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700 cursor-pointer shrink-0">Choose file<input type="file" accept="application/pdf,image/*" class="hidden" onchange="vehReadDoc(this, '${key}')"></label></div>` : '') +
     vehStatFieldset(s, { start, duration:dur, expiry: dur ? vAddMonths(start, +dur) : '', cost:x.cost, provider:x.provider, policyNo:x.policyNo, docUrl:'' }) + vFoot('Save renewal', `saveVehRenew('${id}','${key}')`));
+}
+// AI reading of a vehicle certificate or receipt into the renewal form: fills only the empty boxes
+async function vehReadDoc(input, key){
+  const file = input.files && input.files[0]; input.value = ''; if(!file) return;
+  const st = document.getElementById('veh-doc-status'), f = document.getElementById('vform');
+  const say = (t, bad) => { if(st){ st.textContent = t; st.className = 'text-xs mt-0.5 ' + (bad ? 'text-rose-600' : 'text-slate-500'); } };
+  say('Reading ' + file.name + '…');
+  try{
+    const d = await utAiRead(file, 'vehicle-document');
+    if(!f || !f.isConnected) return;
+    const put = (name, v, label) => {
+      const el = f.querySelector('[name="' + name + '"]'); if(!el || v == null || v === '') return null;      // the document replaces the defaults of the renewal
+      el.value = String(v); el.classList.add('ring-2', 'ring-amber-400'); return label; };
+    const filled = [put(key + '.start', d.issueDate, 'start date'), put(key + '.expiry', d.expiryDate, 'expiry date'), put(key + '.cost', d.amount, 'cost'),
+      put(key + '.provider', d.provider, 'provider'), put(key + '.policyNo', d.policyNumber, 'policy no.')].filter(Boolean);
+    say(filled.length ? 'Filled in with AI: ' + filled.join(', ') + '. Check them before saving.' : 'Nothing new could be read from this document. Check the fields by hand.', !filled.length);
+  }catch(e){ console.error(e); say('The AI reader could not read this file: ' + (e && e.message ? e.message : e), true); }
 }
 async function saveVehRenew(id, key){
   const o = vehFormObj(document.getElementById('vform')), v = vehById(id); if(!v) return;
@@ -3059,9 +3077,7 @@ async function fuelReadInvoice(btn){
   const label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Reading the invoice…';
   try{
     const files = att.pdf ? [{ type:'application/pdf', data:fuelB64(att.bytes) }] : att.pages.map(pg => ({ type:'image/jpeg', data:String(pg.jpeg).split(',')[1] }));
-    const res = await fetch(AI_READ_URL, { method:'POST', headers:Object.assign({ 'Content-Type':'application/json' }, AI_READ_TOKEN ? { 'X-Reader-Token':AI_READ_TOKEN } : {}), body:JSON.stringify({ files }) });
-    const j = await res.json().catch(() => ({})); if(!res.ok) throw new Error(j.error || ('HTTP ' + res.status));
-    fuelApplyInvoice(document.getElementById('vform'), j.data || {});
+    fuelApplyInvoice(document.getElementById('vform'), await aiPost(files, 'fuel-invoice'));
     toast('Invoice read. Check the highlighted fields before saving.');
   }catch(e){ toast('The invoice could not be read: ' + (e && e.message ? e.message : e), true); }
   finally{ btn.disabled = false; btn.innerHTML = label; }
@@ -3074,7 +3090,8 @@ function fuelApplyInvoice(f, d){
   put('date', d.invoiceDate); put('litres', d.litres); put('rate', d.ratePerLitre); put('total', d.total);
   put('ref', d.deliveryNoteNo); put('poNo', d.poNumber); put('station', d.supplier);
   if(d.fuelType && f.fuelType && [...f.fuelType.options].some(o => o.value === d.fuelType) && !f.fuelType.value){ f.fuelType.value = d.fuelType; f.fuelType.classList.add('ring-2', 'ring-amber-400'); }
-  const note = [d.invoiceNumber && 'Invoice no. ' + d.invoiceNumber, d.currency && d.currency !== 'MVR' ? 'Currency ' + d.currency : '', d.confidence === 'low' ? 'AI reading has low confidence: check the figures' : ''].filter(Boolean).join('. ');
+  const sum = d.litres && d.ratePerLitre && d.total ? Math.abs(d.litres * d.ratePerLitre - d.total) > Math.max(1, d.total * 0.005) : false;
+  const note = [d.invoiceNumber && 'Invoice no. ' + d.invoiceNumber, d.currency && d.currency !== 'MVR' ? 'Currency ' + d.currency : '', d.confidence === 'low' ? 'AI reading has low confidence: check the figures' : '', sum ? 'Check: litres × rate does not match the total' : ''].filter(Boolean).join('. ');
   if(note && f.notes && !String(f.notes.value || '').trim()) f.notes.value = note;
 }
 // fuel attachments (delivery note and invoice, for PR-funded fuel): picked in the form, saved with the entry
@@ -3865,15 +3882,76 @@ async function pcRowFileChosen(input){
   }catch(e){ note = ' Type the details in.'; }
   st.textContent = 'File attached.' + note;
 }
+// the AI's answer for a petty cash invoice, in the shape the invoice rows use
+function pcFromAi(d){
+  const s = v => v == null ? '' : v;
+  return { supplier:s(d.supplier), number:s(d.invoiceNumber), date:s(d.invoiceDate), amount:s(d.amount), description:s(d.description), litres:s(d.litres) };
+}
+// one place that talks to the AI reader: sends the files, times out, and gives a readable error
+async function aiPost(files, kind, extra){
+  if(!AI_READ_URL) throw new Error('The AI reader is not set up yet.');
+  let res;
+  try{ res = await fetch(AI_READ_URL, { method:'POST', headers:Object.assign({ 'Content-Type':'application/json' }, AI_READ_TOKEN ? { 'X-Reader-Token':AI_READ_TOKEN } : {}), body:JSON.stringify(Object.assign({ files, kind }, extra || {})), signal:AbortSignal.timeout(100000) }); }
+  catch(e){ throw new Error(e && e.name === 'TimeoutError' ? 'The AI reader took too long. Try again.' : 'The AI reader could not be reached. Check your connection and try again.'); }
+  const j = await res.json().catch(() => ({})); if(!res.ok) throw new Error(j.error || ('HTTP ' + res.status));
+  return j.data || {};
+}
+// tidies a typed entry (spelling, capitals, line breaks) with the AI; the facts are never changed, and the user checks the result
+async function aiTidyField(btn, name){
+  const f = document.getElementById('vform'), el = f && f[name];
+  if(!el || !String(el.value).trim()){ toast('Type the details first.', true); return; }
+  const label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Tidying…';
+  try{ const d = await aiPost([], 'tidy-text', { text:el.value }); if(typeof d.text === 'string' && d.text.trim()){ el.value = d.text; el.dispatchEvent(new Event('input')); } toast('Details tidied. Check them before saving.'); }
+  catch(e){ toast('The details could not be tidied: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+// sends page images or PDFs to the reader service and returns what it reads
+async function aiPostFiles(files, kind){
+  return aiPost(files, kind);
+}
+// reads every invoice in the open statement again and compares it with what is recorded (nothing is changed)
+async function pcAiCheckStatement(){
+  if(!AI_READ_URL){ toast('The AI reader is not set up yet.', true); return; }
+  const locId = pcStLocation(), open = pcStatements(locId).find(s => !s.closed);
+  if(!open || !open.list.length){ toast('No vouchers in the open statement.', true); return; }
+  const jobs = []; open.list.forEach(r => pcInvoices(r).forEach(iv => jobs.push({ r, iv })));
+  if(!jobs.length){ toast('No invoices are recorded in the open statement.', true); return; }
+  openModal('Check statement ' + open.no, `<div class="text-sm text-slate-500 mb-3" id="pc-ai-check-status">Checking ${jobs.length} invoice${jobs.length === 1 ? '' : 's'} with AI…</div><div id="pc-ai-check-body"></div>`, true);
+  const norm = x => String(x || '').replace(/[\s\-\/]/g, '').toUpperCase(), sup = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const rows = [];
+  for(let k = 0; k < jobs.length; k++){
+    const { r, iv } = jobs[k], st = document.getElementById('pc-ai-check-status');
+    if(st) st.textContent = 'Checking invoice ' + (k + 1) + ' of ' + jobs.length + '…';
+    let res = { ok:false, msg:'no invoice file is attached' };
+    if(iv.fileId){
+      try{
+        const m = await pcFileLoad(iv.fileId);
+        if(!m || !Array.isArray(m.pages)) throw new Error('the invoice file is not stored as pages');
+        const d = await aiPostFiles(m.pages.map(p => ({ type:'image/jpeg', data:String(p.jpeg).split(',')[1] })), 'petty-cash-invoice');
+        const diffs = [];
+        if(d.amount != null && iv.amount !== '' && iv.amount != null && Math.abs(Number(d.amount) - vNum(iv.amount)) > 0.5) diffs.push('amount: ' + fmtMVR(vNum(iv.amount)) + ' recorded, ' + fmtMVR(Number(d.amount)) + ' on the invoice');
+        if(d.invoiceNumber && iv.number && norm(d.invoiceNumber) !== norm(iv.number)) diffs.push('invoice no.: ' + iv.number + ' recorded, ' + d.invoiceNumber + ' on the invoice');
+        if(d.supplier && iv.supplier && !sup(d.supplier).includes(sup(iv.supplier)) && !sup(iv.supplier).includes(sup(d.supplier))) diffs.push('supplier: ' + iv.supplier + ' recorded, ' + d.supplier + ' on the invoice');
+        res = { ok:true, diffs };
+      }catch(e){ console.error(e); res = { ok:false, msg: e && e.message ? e.message : String(e) }; }
+    }
+    rows.push({ voucher: r.number || '', invoice: iv.number || '', supplier: iv.supplier || '', res });
+  }
+  const bad = rows.filter(x => !x.res.ok || x.res.diffs.length).length, st = document.getElementById('pc-ai-check-status'), body = document.getElementById('pc-ai-check-body');
+  if(st) st.textContent = (rows.length - bad) + ' of ' + rows.length + ' invoices match' + (bad ? '. ' + bad + ' need a look. Nothing has been changed.' : '.');
+  if(body) body.innerHTML = `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Voucher' }, { t:'Invoice' }, { t:'Result' }])}<tbody>${rows.map(x => `<tr class="${vTr}">${vTd(`<span class="font-semibold">${esc(x.voucher)}</span>`, { first:1 })}${vTd(esc(x.invoice || '—') + (x.supplier ? '<div class="text-[11px] text-slate-400">' + esc(x.supplier) + '</div>' : ''))}${vTd(x.res.ok ? (x.res.diffs.length ? x.res.diffs.map(t => `<div class="text-amber-700 text-[12.5px]">${esc(t)}</div>`).join('') : vPill('good', 'Matches')) : `<span class="text-rose-600 text-[12.5px]">${esc(x.res.msg)}</span>`)}`).join('')}</tbody></table></div>`;
+}
 async function pcInvoiceFileChosen(input){
   const files = [...input.files]; if(!files.length) return; input.value = '';
   const st = document.getElementById('pc-inv-status'); st.textContent = 'Reading the invoice…';
   try{
-    const got = pcParseInvoiceText(await pcReadInvoiceFile(files[0], m => { st.textContent = m; }));
+    let got = null, how = 'the text reader', aiErr = '';
+    if(AI_READ_URL){ try{ got = pcFromAi(await utAiRead(files[0], 'petty-cash-invoice')); how = 'AI'; }catch(e){ console.error(e); aiErr = e && e.message ? e.message : String(e); } }
+    if(!got) got = pcParseInvoiceText(await pcReadInvoiceFile(files[0], m => { st.textContent = m; }));
     if(!got.number && !got.amount && !got.date){ st.textContent = 'Could not find invoice details in that file. Please type them in.'; return; }       // a supplier-looking first line alone is not proof anything was read
     const row = pcAddInvoice(got); let kept = '';
     try{ await pcAttachToRow(row, files); }catch(e){ kept = ' (The file could not be kept: ' + (e && e.message ? e.message : e) + ')'; }
-    st.textContent = 'Read from ' + files[0].name + '. Please check each field against the invoice.' + kept;
+    st.textContent = 'Read from ' + files[0].name + ' with ' + how + '. Please check each field against the invoice.' + kept + (aiErr ? ' The AI reader could not be used (' + aiErr + '), so the text reader was used.' : '');
   }catch(e){ st.textContent = 'Could not read that file: ' + (e && e.message ? e.message : e) + ' You can type the details instead.'; }
 }
 function pcLinkedReqHtml(r){
@@ -5216,6 +5294,20 @@ async function pcAddToStatement(){
   for(const id of sel) await vehSave('pettyCash', { id, statementNo:open.no, statementDate:date, statementAt:open.at });
   vehUi.stSelLoc = ''; rerenderMain(); toast(sel.length + ' voucher' + (sel.length === 1 ? '' : 's') + ' added to ' + open.no + '.');
 }
+// one action: add every ready voucher that fits in the open statement
+async function pcAddAllReady(){
+  const locId = pcStLocation(), open = pcStatements(locId).find(s => !s.closed);
+  if(!open){ toast('No statement is open. Start one first.', true); return; }
+  const room = PC_STATEMENT_ROWS - open.list.length, ids = pcEligible(locId).slice(0, Math.max(0, room)).map(r => r.id);
+  if(!ids.length){ toast(room <= 0 ? 'Statement ' + open.no + ' is full. Close it to start a new one.' : 'No vouchers are ready to add.', true); return; }
+  vehUi.stSelLoc = locId; vehUi.stSel = ids; await pcAddToStatement();
+}
+// live progress of the open statement, redrawn whenever a voucher is added or processed
+function pcStProgressHtml(open){
+  const n = open.list.length, done = open.list.filter(r => r.processedDate).length, pct = Math.min(100, Math.round(n / PC_STATEMENT_ROWS * 100));
+  const total = pcRound(open.list.reduce((s, r) => s + pcInvoiceTotal(r), 0));
+  return `<div class="flex items-center gap-3 flex-wrap text-xs text-slate-500">${AI_READ_URL ? '<button onclick="pcAiCheckStatement()" class="font-semibold text-brand-600 hover:underline">Check invoices with AI</button>' : ''}<span><b class="text-slate-800 num">${n}</b> of ${PC_STATEMENT_ROWS} added</span><span class="inline-block w-28 h-1.5 rounded bg-slate-200 overflow-hidden align-middle"><span class="block h-1.5 bg-brand-500" style="width:${pct}%"></span></span><span><b class="text-slate-800 num">${done}</b> processed</span><span><b class="text-slate-800 num">${fmtMVR(total)}</b> so far</span></div>`;
+}
 function pcCloseStatement(no){
   const locId = pcStLocation(); if(!pcCanStatement(locId)){ toast('Only ' + pcStatementWho(locId) + ' can close a statement.', true); return; }
   const s = pcStatements(locId).find(x => x.no === no); if(!s || s.closed) return;
@@ -5587,7 +5679,7 @@ function viewPcStatementsExcel(){
   const kpis = vKpis(statCard('Ready for a statement', fmtNum(elig.length), fmtMVR(pcRound(elig.reduce((s, r) => s + pcInvoiceTotal(r), 0))), 'emerald') + statCard('Waiting for an invoice', fmtNum(need.length), need.length ? 'Add the invoice to include them' : 'None', need.length ? 'amber' : 'slate') +
     statCard('Open statement', open ? open.list.length + ' / ' + PC_STATEMENT_ROWS : 'None', open ? open.no : (can ? 'Start one below' : 'None open'), open ? 'brand' : 'slate') + statCard('Cash check', !rc.counted ? 'Not counted' : (bad ? (rc.diff > 0 ? 'Short ' : 'Over ') + fmtMVR(Math.abs(rc.diff)) : 'Balanced'), !rc.counted ? 'Count the cash below' : (bad ? 'Check the vouchers and the count' : 'Cash agrees with the statement'), !rc.counted ? 'slate' : (bad ? 'rose' : 'emerald')));
   const footer = open
-    ? (!can ? `<div class="text-sm text-slate-500">Only ${esc(pcStatementWho(locId))} can add vouchers to the open statement.</div>` : room <= 0 ? `<div class="text-sm text-amber-700">Statement ${esc(open.no)} is full. Close it to start a new one.</div>` : `<div class="text-sm text-slate-500">${sel.size} voucher${sel.size === 1 ? '' : 's'} selected · <b class="text-slate-800">${fmtMVR(selTotal)}</b> · room for ${room} more</div>${vBtnPrimary('Add ' + sel.size + ' to ' + open.no, 'pcAddToStatement()')}`)
+    ? (!can ? `<div class="text-sm text-slate-500">Only ${esc(pcStatementWho(locId))} can add vouchers to the open statement.</div>` : room <= 0 ? `<div class="text-sm text-amber-700">Statement ${esc(open.no)} is full. Close it to start a new one.</div>` : `<div class="text-sm text-slate-500">${sel.size} voucher${sel.size === 1 ? '' : 's'} selected · <b class="text-slate-800">${fmtMVR(selTotal)}</b> · room for ${room} more</div>${vBtnPlain('Add all ready', 'pcAddAllReady()')}${vBtnPrimary('Add ' + sel.size + ' to ' + open.no, 'pcAddToStatement()')}`)
     : (!can ? `<div class="text-sm text-slate-500">Only ${esc(pcStatementWho(locId))} can start a statement here.</div>` : `<div class="text-sm text-slate-500">${sel.size} voucher${sel.size === 1 ? '' : 's'} selected · <b class="text-slate-800">${fmtMVR(selTotal)}</b></div><div class="flex items-end gap-3 flex-wrap"><label class="text-xs font-semibold text-slate-600">Statement number<input id="pc-st-no" type="text" maxlength="31" value="${esc(vehUi.stNo || pcNextStatementNo(locId, yy))}" oninput="vehUi.stNo = this.value" class="${VEH_INPUT} block mt-1 w-64"></label>${vBtnPrimary('Start statement' + (sel.size ? ' (Excel)' : ''), 'pcGenerateStatement(this)')}</div>`);
   return `
     ${vHead('Statement', 'The Statement of Petty Cash Reimbursed for a location, as an Excel workbook in the finance layout.', '')}
@@ -5596,7 +5688,7 @@ function viewPcStatementsExcel(){
     ${!can ? `<div class="mb-5 rounded-lg bg-slate-100 text-slate-600 text-[13px] px-4 py-3">Only ${esc(pcStatementWho(locId))} can start, add to, close or reopen statements here. You can still download them.</div>` : ''}
     ${kpis}
     ${need.length ? vPanel('Add invoice details', 'Supplier, invoice no., date, amount and description — the description is the Details on the statement', `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Voucher' }, { t:'Purpose' }, { t:'Type' }, { t:'Requested', n:1 }, { t:'' }])}<tbody>${need.map(r => `<tr class="${vTr}">${vTd(`<span class="font-semibold">${esc(r.number)}</span><div class="text-[11.5px] text-slate-400">${vDate(r.date)}</div>`, { first:1 })}${vTd(esc(r.purpose || '—'))}${vTd(vPill(r.option === 'Reimbursement' ? 'warn' : 'acc', esc(r.option)))}${vTd(fmtMVR(pcTotal(r)), { n:1 })}${vTd(pcCanInvoice(r) ? `<button onclick="openPcInvoices('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Add invoice</button>` : '', { last:1, cls:'text-right' })}</tr>`).join('')}</tbody></table></div>`) : ''}
-    ${vPanel('Open statement', open ? `<span class="text-xs text-slate-400">Vouchers are added as their invoices come in</span>` : '', open ? `
+    ${vPanel('Open statement', open ? pcStProgressHtml(open) : '', open ? `
       <div class="px-5 sm:px-6 py-4 flex items-start justify-between gap-3 flex-wrap">
         <div><div class="flex items-center gap-2.5"><div class="text-base font-bold text-slate-900 num">${esc(open.no)}</div>${can ? `<button onclick="openPcRenameStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-brand-600 hover:underline" title="Edit the statement number">Edit number</button>` : ''}</div><div class="text-xs text-slate-500 mt-0.5">${open.list.length} of ${PC_STATEMENT_ROWS} vouchers · ${fmtMVR(open.total)}${open.from ? ' · invoices ' + vDate(open.from) + (open.to !== open.from ? ' – ' + vDate(open.to) : '') : ''}</div>${unprocOpen ? `<div class="text-xs text-amber-700 mt-1">${unprocOpen} voucher${unprocOpen === 1 ? ' is' : 's are'} not processed yet</div>` : ''}</div>
         <div class="flex items-center gap-2 flex-wrap"><button onclick="pcDownloadStatements('${esc(open.no)}', this)" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Download workbook</button>${can ? `<button onclick="pcCloseStatement('${esc(open.no)}')" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700">Close statement</button><button onclick="pcReleaseStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Release</button>` : ''}</div></div>
@@ -7111,6 +7203,7 @@ const DASH_QUOTES = [
 function dashQuote(){ const d = vToday(), n = Math.floor((Date.parse(d) - Date.parse(d.slice(0, 4) + '-01-01')) / 864e5) + (+d.slice(0, 4)) * 7; return DASH_QUOTES[n % DASH_QUOTES.length]; }
 const DASH_DEFAULT = { cols:[['tasks', 'approvals', 'money', 'leave'], ['notes', 'requests']], hidden:[] };
 let myDash = null, dashEdit = false, dashDragId = '', dashSync = '';
+let dashBgSaved = null, dashBgUnsub = null, dashBgUid = '';
 const dashSyncText = () => dashSync === 'ok' ? '<span class="text-emerald-600">✓ Saved to your account — shows on your phone and other computers too.</span>' : dashSync === 'saving' ? 'Saving to your account…' : dashSync === 'local' ? '<span class="text-amber-600">Saved on this device only (offline).</span>' : dashSync ? '<span class="text-rose-600">' + esc(dashSync) + '</span>' : '';
 const DASH_LS = () => 'fdc_dash_' + (authUser ? authUser.uid : 'local');
 function dashPrefs(){
@@ -7120,9 +7213,31 @@ function dashPrefs(){
   all.filter(k => !seen.has(k)).forEach(k => cols[0].push(k));                                     // panels added later appear on the left
   return { cols:cols.map(c => c.filter(k => all.includes(k))), hidden:(d.hidden || []).filter(k => all.includes(k)), bg:d.bg || '', dim:d.dim == null ? 0.35 : +d.dim, cardT:Math.max(0, Math.min(85, +d.cardT || 0)), cardBlur:d.cardBlur !== false };
 }
+// the settings go to the account's notes document; the picture goes to its own document, so a large picture
+// cannot push the notes document over Firestore's size limit (and then it would not reach the other devices)
+function dashPersist(p){
+  const { bg, ...rest } = p, uid = authUser.uid, db = firestoreDb, ops = [db.collection('fdc_inventory_notes').doc(uid).set({ dash:rest, updatedAt:Date.now() }, { merge:true })];
+  if((bg || '') !== (dashBgSaved || '')) ops.push(db.collection('fdc_inventory_dashbg').doc(uid).set({ bg:bg || '', updatedAt:Date.now() }).then(() => { dashBgSaved = bg || ''; }));
+  return Promise.all(ops);
+}
+// the picture from its own document, so it shows on every device the person signs in on
+function dashBgStart(){
+  if(!authUser || !firestoreDb || dashBgUid === authUser.uid) return;
+  if(dashBgUnsub) dashBgUnsub();
+  const uid = authUser.uid; dashBgUid = uid;
+  dashBgUnsub = firestoreDb.collection('fdc_inventory_dashbg').doc(uid).onSnapshot(d => {
+    if(!authUser || authUser.uid !== uid || !d.exists) return;                  // nothing saved there yet
+    const bg = d.data().bg || '';
+    dashBgSaved = bg;
+    const cur = myDash || {};
+    if((cur.bg || '') === bg) return;
+    myDash = Object.assign({}, cur, { bg }); try{ localStorage.setItem(DASH_LS(), JSON.stringify(myDash)); }catch(e){}
+    if(ui.tab === 'my-work' && !dashEdit) rerenderMain();
+  }, () => {});
+}
 function dashSave(p){
   myDash = p; try{ localStorage.setItem(DASH_LS(), JSON.stringify(p)); }catch(e){}
-  if(authUser && firestoreDb){ dashSync = 'saving'; firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).set({ dash:p, updatedAt:Date.now() }, { merge:true }).then(() => { dashSync = 'ok'; const e = document.getElementById('dash-sync'); if(e) e.innerHTML = dashSyncText(); }).catch(e => { dashSync = 'Not saved to your account: ' + e.message; toast('Dashboard ' + dashSync, true); const el = document.getElementById('dash-sync'); if(el) el.innerHTML = dashSyncText(); }); }
+  if(authUser && firestoreDb){ dashSync = 'saving'; dashPersist(p).then(() => { dashSync = 'ok'; const e = document.getElementById('dash-sync'); if(e) e.innerHTML = dashSyncText(); }).catch(e => { dashSync = 'Not saved to your account: ' + e.message; toast('Dashboard ' + dashSync, true); const el = document.getElementById('dash-sync'); if(el) el.innerHTML = dashSyncText(); }); }
   else dashSync = 'local';
 }
 function dashMove(id, dir){
@@ -7257,9 +7372,10 @@ function notesStart(){
   if(notesUnsub || myNotes && !firestoreDb) return;
   try{ myNotes = JSON.parse(localStorage.getItem(NOTES_LS()) || '[]'); }catch(e){ myNotes = []; }
   if(!authUser || !firestoreDb) return;
+  dashBgStart();
   notesUnsub = firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).onSnapshot(d => {
     const list = (d.exists && d.data().list) || [];
-    if(d.exists && d.data().dash){ const nd = d.data().dash; if(JSON.stringify(nd) !== JSON.stringify(myDash)){ myDash = nd; try{ localStorage.setItem(DASH_LS(), JSON.stringify(nd)); }catch(e){} if(ui.tab === 'my-work' && !dashEdit) rerenderMain(); } }
+    if(d.exists && d.data().dash){ /* the picture lives in its own document, so it is kept here */ const nd = Object.assign({}, d.data().dash, { bg: (myDash && myDash.bg) || (dashBgSaved === null ? (d.data().dash.bg || '') : '') }); if(JSON.stringify(nd) !== JSON.stringify(myDash)){ myDash = nd; try{ localStorage.setItem(DASH_LS(), JSON.stringify(nd)); }catch(e){} if(ui.tab === 'my-work' && !dashEdit) rerenderMain(); } }
     if(Date.now() - (window._notesTyping || 0) < 2500) return;                    // don't disturb someone typing
     myNotes = list; try{ localStorage.setItem(NOTES_LS(), JSON.stringify(list)); }catch(e){}
     if(ui.tab === 'my-work') rerenderMain();
@@ -9572,7 +9688,7 @@ function openBaEntry(id, euid, type){
     vGrid(2, vS('Type', 'type', [['Transferred', 'Transferred — paid out'], ['Received', 'Received — money in']], d.type, null, { attrs:' onchange="baTypeChanged(this)"' }) + vF('Date', 'date', d.date || vToday(), 'date', { req:1 }) +
       `<div class="sm:col-span-2"><label class="${VEH_LBL}">Staff name / department (or supplier paid)${vReqStar}</label><input name="party" list="ba-parties" value="${esc(d.party || '')}" class="${VEH_FIELD}" placeholder="e.g. Sonee Hardware"></div>` +
       vF('Amount (MVR)', 'amount', d.amount == null ? '' : d.amount, 'number', { req:1, attrs:' step="0.01" min="0"' }) + vS('Invoice status', 'invoice', [['', '— Not needed'], ['Pending', 'Pending'], ['Received', 'Received']], d.invoice || '') +
-      vTa('Details', 'details', d.details || '', { rows:3, span:'sm:col-span-2', ph:'Items bought — one per line' }) + vF('Remarks (invoice no.)', 'remarks', d.remarks || '', 'text') + vF('Invoice link (optional)', 'link', d.link || '', 'text', { attrs:' placeholder="https://…"' })) +
+      vTa('Details', 'details', d.details || '', { rows:3, span:'sm:col-span-2', ph:'Items bought — one per line' }) + (AI_READ_URL ? `<div class="sm:col-span-2 -mt-2"><button type="button" onclick="aiTidyField(this, 'details')" class="text-xs font-semibold text-brand-600 hover:underline">Tidy the details with AI</button></div>` : '') + vF('Remarks (invoice no.)', 'remarks', d.remarks || '', 'text') + vF('Invoice link (optional)', 'link', d.link || '', 'text', { attrs:' placeholder="https://…"' })) +
     `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm"><div class="flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baFileChosen(this, '${id}', '${euid || ''}')"><span id="ba-att-act">${e && e.fileId ? 'Replace invoice file' : '📎 Attach the invoice (PDF or photo)'}</span></label>
       <span id="ba-att-info" class="text-slate-500 text-xs">${e && e.fileId ? '📎 ' + esc(e.fileName || 'Invoice') + ' · ' + (e.filePages || 1) + ' page' + ((e.filePages || 1) === 1 ? '' : 's') + ' kept' : ''}</span>${e && e.fileId ? `<button type="button" id="ba-att-rm" onclick="baAttRemove()" class="text-xs text-slate-400 hover:text-rose-600">Remove file</button>` : ''}</div>
       <div id="ba-att-status" class="text-[11.5px] text-slate-400 mt-1">Attaching marks the invoice as received and fills the empty boxes from it.</div></div>` +
@@ -9618,7 +9734,7 @@ async function openBaInvoice(id, euid){
   openModal('Invoice — ' + (e.party || ''), data && data.pages ? `<div class="text-xs text-slate-500 mb-3">${esc([e.remarks, fmtMVR(e.amount), baDate(e.date)].filter(Boolean).join(' · '))}</div><div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Invoice page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div>` : vEmpty('The invoice file could not be loaded.'), true);
 }
 
-/* ---------- Excel: the same sheet as finance uses, with its formulas ---------- */
+/* ---------- Excel: the business advance statement in the finance sample layout, with its formulas ---------- */
 async function baXlsxDownload(id, btn){
   const r = baById(id); if(!r) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
   try{ downloadBlob(await buildBaXlsx(r), 'Business Advance - ' + baFile(r) + '.xlsx'); }
@@ -9626,45 +9742,138 @@ async function baXlsxDownload(id, btn){
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
 async function buildBaXlsx(r){
+  // laid out like the finance sample "Business Advance - Statement": title bar, last update date, the entries table,
+  // the reconciliation panel (right), the cash-at-hand count, the totals row and the sign-off block
   try{ await loadScriptOnce(JSZIP_URL); }catch(e){ throw new Error('The document builder could not be loaded. Check your internet connection and try again.'); }
   const es = baEntries(r), t = baTotals(r), X = s => xmlEsc(String(s == null ? '' : s));
   const MVR = '[$MVR]\\ #,##0.00;\\-[$MVR]\\ #,##0.00';
-  // styles: 0 normal · 1 title · 2 header · 3 summary money · 4 summary count · 5 text · 6 money · 7 details (left, wrapped) · 8 net
-  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="${X(MVR)}"/></numFmts>
-<fonts count="4"><font><sz val="10"/><name val="Poppins"/></font><font><b/><sz val="10"/><name val="Poppins"/></font><font><b/><sz val="12"/><color rgb="FFFFFF00"/><name val="Poppins"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Poppins"/></font></fonts>
-<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF595959"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF808080"/><bgColor indexed="64"/></patternFill></fill></fills>
+  const XF = (nf, font, fill, border, align) => `<xf numFmtId="${nf}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment ${align}/></xf>`;
+  const CX = [
+    XF(0, 0, 0, 0, 'vertical="center"'),                                              // 0 plain
+    XF(0, 2, 2, 1, 'horizontal="center" vertical="center"'),                          // 1 title bar (orange)
+    XF(0, 1, 3, 1, 'horizontal="center" vertical="center" wrapText="1"'),             // 2 table header (light blue)
+    XF(164, 1, 0, 1, 'horizontal="center" vertical="center"'),                        // 3 money, bold, boxed
+    XF(0, 1, 0, 1, 'horizontal="center" vertical="center"'),                          // 4 bold, boxed
+    XF(0, 0, 0, 1, 'horizontal="left" vertical="center" wrapText="1"'),               // 5 text, left, boxed
+    XF(164, 0, 0, 1, 'horizontal="center" vertical="center"'),                        // 6 money, boxed
+    XF(0, 0, 0, 1, 'horizontal="center" vertical="center" wrapText="1"'),             // 7 text, centred, boxed
+    XF(164, 1, 7, 1, 'horizontal="center" vertical="center"'),                        // 8 total money (blue-grey)
+    XF(0, 3, 5, 1, 'horizontal="center" vertical="center"'),                          // 9 red section bar
+    XF(0, 5, 0, 1, 'horizontal="left" vertical="center" wrapText="1"'),               // 10 panel label
+    XF(0, 6, 6, 1, 'horizontal="center" vertical="center"'),                          // 11 denomination header
+    XF(0, 3, 5, 1, 'horizontal="center" vertical="center"'),                          // 12 denomination value (red)
+    XF(0, 1, 8, 1, 'horizontal="center" vertical="center"'),                          // 13 quantity to count
+    XF(165, 0, 0, 1, 'horizontal="center" vertical="center"'),                        // 14 date
+    XF(0, 1, 0, 0, 'horizontal="left" vertical="center"'),                            // 15 sign-off label
+    XF(0, 5, 4, 1, 'horizontal="center" vertical="center"'),                          // 16 last update label (green)
+    XF(166, 4, 4, 1, 'horizontal="center" vertical="center"'),                        // 17 last update date
+    XF(0, 1, 0, 0, 'horizontal="center" vertical="center"'),                          // 18 bold, centred, no box
+    XF(164, 1, 0, 0, 'horizontal="right" vertical="center"'),                         // 19 total money, no box
+  ];
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="3"><numFmt numFmtId="164" formatCode="${X(MVR)}"/><numFmt numFmtId="165" formatCode="d\\-mmm\\-yyyy"/><numFmt numFmtId="166" formatCode="d\\-mmm\\-yy"/></numFmts>
+<fonts count="7"><font><sz val="11"/><name val="Poppins"/></font><font><b/><sz val="11"/><name val="Poppins"/></font><font><b/><sz val="16"/><color rgb="FF000000"/><name val="Poppins"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Poppins"/></font><font><b/><sz val="11"/><color rgb="FFFF0000"/><name val="Poppins"/></font><font><sz val="11"/><color rgb="FF262626"/><name val="Poppins"/></font><font><b/><sz val="11"/><color rgb="FFED7D31"/><name val="Poppins"/></font></fonts>
+<fills count="9"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFED7D31"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD0EBF1"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF92D050"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE7E6E6"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>
-<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="9">
-<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-<xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-<xf numFmtId="164" fontId="1" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
-  const str = (ref, v, s) => `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${X(v)}</t></is></c>`, num = (ref, v, s) => `<c r="${ref}" s="${s}"><v>${vNum(v)}</v></c>`;
-  const fml = (ref, f, v, s) => `<c r="${ref}" s="${s}"><f>${X(f)}</f><v>${v}</v></c>`;
-  const rows = [], last = Math.max(7, 6 + es.length);
-  rows.push(`<row r="1" ht="30" customHeight="1">${str('A1', 'Business Advance' + (r.title ? ' — ' + r.title : ''), 1)}${'BCDEFGH'.split('').map(L => `<c r="${L}1" s="1"/>`).join('')}</row>`);
-  rows.push(`<row r="2" ht="20" customHeight="1">${str('A2', [r.no, r.holder && 'Held by ' + r.holder + (r.department ? ' / ' + r.department : ''), r.date && 'Issued ' + baDate(r.date), r.ref && 'Ref. ' + r.ref].filter(Boolean).join('   ·   '), 0)}</row>`);
-  rows.push(`<row r="3" ht="24" customHeight="1">${str('B3', 'Current Balance', 2)}${str('C3', 'Total Spent', 2)}${str('D3', 'Total Received', 2)}${str('E3', 'Pending Invoice', 2)}</row>`);
-  rows.push(`<row r="4" ht="24" customHeight="1">${fml('B4', 'SUM(G7:G1048576)', t.balance, 3)}${fml('C4', 'SUMIF(C7:C1048576,"Transferred",D7:D1048576)', t.spent, 3)}${fml('D4', 'SUMIF(C7:C1048576,"Received",D7:D1048576)', t.received, 3)}${fml('E4', 'COUNTIF(F7:F1048576,"Pending")', t.pending, 4)}</row>`);
-  rows.push(`<row r="6" ht="24" customHeight="1">${['Date', 'Staff Name / Department', 'Type', 'Amount', 'Details', 'Invoice Status', 'Net', 'Remarks'].map((h, i) => str('ABCDEFGH'[i] + '6', h, 2)).join('')}</row>`);
-  es.forEach((e, i) => { const n = 7 + i, lines = Math.max(String(e.details || '').split('\n').length, Math.ceil(String(e.details || '').length / 48), Math.ceil(String(e.party || '').length / 26), 1);
-    rows.push(`<row r="${n}" ht="${Math.max(24, lines * 15 + 9)}" customHeight="1">${str('A' + n, baDate(e.date), 5)}${str('B' + n, e.party, 5)}${str('C' + n, e.type, 5)}${num('D' + n, e.amount, 6)}${str('E' + n, e.details, 7)}${str('F' + n, e.invoice, 5)}${fml('G' + n, 'IF(C' + n + '="Transferred",-D' + n + ',D' + n + ')', baNet(e), 8)}${str('H' + n, e.remarks, 5)}</row>`); });
-  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:H${last}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="24" customHeight="1"/>
-<cols><col min="1" max="1" width="20.86" customWidth="1"/><col min="2" max="2" width="28.43" customWidth="1"/><col min="3" max="3" width="16.71" customWidth="1"/><col min="4" max="4" width="17.71" customWidth="1"/><col min="5" max="5" width="47.71" customWidth="1"/><col min="6" max="6" width="17.29" customWidth="1"/><col min="7" max="7" width="16" customWidth="1"/><col min="8" max="8" width="27.14" customWidth="1"/></cols>
-<sheetData>${rows.join('')}</sheetData><autoFilter ref="A6:H${last}"/><mergeCells count="2"><mergeCell ref="A1:H1"/><mergeCell ref="A2:H2"/></mergeCells>
-<dataValidations count="2"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C7:C1048576"><formula1>"Transferred,Received"</formula1></dataValidation><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="F7:F1048576"><formula1>"Pending,Received"</formula1></dataValidation></dataValidations>
-<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToHeight="0"/></worksheet>`;
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${CX.length}">${CX.join('')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+
+  // cell helpers: C holds the cell XML by reference, merges and row heights are collected alongside
+  const C = {}, merges = [], rowHt = {};
+  const colNo = L => L.split('').reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0), colL = n => { let s = ''; while(n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const rc = ref => { const m = /^([A-Z]+)(\d+)$/.exec(ref); return { c:colNo(m[1]), r:+m[2] }; };
+  const S = (ref, v, s) => { C[ref] = `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${X(v)}</t></is></c>`; };
+  const N = (ref, v, s) => { C[ref] = `<c r="${ref}" s="${s}"><v>${vNum(v)}</v></c>`; };
+  const F = (ref, f, v, s) => { C[ref] = `<c r="${ref}" s="${s}"><f>${X(f)}</f><v>${vNum(v)}</v></c>`; };
+  const B = (ref, s) => { C[ref] = `<c r="${ref}" s="${s}"/>`; };
+  const mg = (a, b, s) => { merges.push(a + ':' + b); const p = rc(a), q = rc(b); for(let rr = p.r; rr <= q.r; rr++) for(let cc = p.c; cc <= q.c; cc++){ const ref = colL(cc) + rr; if(!C[ref]) B(ref, s); } };
+  const xlDate = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? (Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 86400000 : null; };
+
+  const T0 = 5, slots = Math.max(26, es.length), last = T0 + slots - 1, TOT = last + 1, SIG = TOT + 3;
+  const pendSpent = es.filter(e => e.type === 'Transferred' && e.invoice === 'Pending').reduce((s, e) => s + vNum(e.amount), 0);
+  const received = t.received, spent = t.spent, balance = t.balance;
+
+  // title, last update date, reference
+  S('A1', 'Business Advance Statement' + (r.title ? ' — ' + r.title : ''), 1); mg('A1', 'R1', 1); rowHt[1] = 34;
+  S('B2', 'Last update date:', 16);
+  N('C2', xlDate(vToday()) || 0, 17);
+  S('F2', [r.no, r.ref && 'Ref. ' + r.ref].filter(Boolean).join('   ·   '), 18);
+  rowHt[2] = 24;
+
+  // the entries table
+  ['#', 'Supplier / Staff', 'Date', 'Type', 'Bill Number', 'Details', 'Invoice Status', 'Paid Out (MVR)', 'Received (MVR)', 'Total (MVR)'].forEach((h, i) => S('ABCDEFGHIJ'[i] + '4', h, 2));
+  rowHt[4] = 40;
+  for(let i = 0; i < slots; i++){
+    const n = T0 + i, e = es[i];
+    N('A' + n, i + 1, 7);
+    if(!e){ ['B', 'D', 'E', 'G'].forEach(L => B(L + n, L === 'B' || L === 'E' ? 5 : 7)); B('C' + n, 14); B('F' + n, 5); ['H', 'I', 'J'].forEach(L => B(L + n, 6)); continue; }
+    const det = String(e.details || ''), lines = Math.max(det.split('\n').length, Math.ceil(det.length / 46), Math.ceil(String(e.party || '').length / 28), 1);
+    rowHt[n] = Math.max(24, lines * 15 + 6);
+    S('B' + n, e.party || '', 5);
+    const d = xlDate(e.date); if(d != null) N('C' + n, d, 14); else S('C' + n, baDate(e.date), 7);
+    S('D' + n, e.type || '', 7);
+    S('E' + n, e.remarks || '', 7);
+    S('F' + n, det, 5);
+    S('G' + n, e.invoice || '', 7);
+    if(e.type === 'Transferred'){ N('H' + n, e.amount, 6); B('I' + n, 6); } else { B('H' + n, 6); N('I' + n, e.amount, 6); }
+    F('J' + n, `I${n}-H${n}`, baNet(e), 6);
+  }
+  // totals row, as in the sample
+  S('F' + TOT, 'Total', 18);
+  F('H' + TOT, `SUM(H${T0}:H${last})`, spent, 19); F('I' + TOT, `SUM(I${T0}:I${last})`, received, 19); F('J' + TOT, `SUM(J${T0}:J${last})`, balance, 19);
+
+  // reconciliation panel (right of the table)
+  S('L3', 'BUSINESS ADVANCE RECONCILIATION STATEMENT', 9); mg('L3', 'R3', 9);
+  S('L4', 'Balance B/F (advance received)', 10); mg('L4', 'M4', 10); F('N4', `I${TOT}`, received, 3);
+  S('P4', 'Cash used (spent)', 10); mg('P4', 'Q4', 10); F('R4', `H${TOT}`, spent, 3);
+  S('L5', 'Total balance C/D', 10); mg('L5', 'M5', 10); F('N5', 'N4-R4', balance, 3);
+  S('P5', 'Cash balance', 10); mg('P5', 'Q5', 10); F('R5', 'N5', balance, 3);
+  S('L6', 'CURRENT BUSINESS ADVANCE DETAILS:', 9); mg('L6', 'R6', 9);
+  S('L7', 'Advance holder', 10); mg('L7', 'M7', 10); S('N7', [r.holder, r.department].filter(Boolean).join(' / '), 5); mg('N7', 'R7', 5);
+  S('L8', 'Spent, invoice pending', 10); mg('L8', 'M8', 10); F('N8', `SUMIF(G${T0}:G${last},"Pending",H${T0}:H${last})`, pendSpent, 3);
+  S('P8', 'Pending invoices (count)', 10); mg('P8', 'Q8', 10); F('R8', `COUNTIF(G${T0}:G${last},"Pending")`, t.pending, 4);
+  S('L9', 'Cash at hand', 10); mg('L9', 'M9', 10); F('N9', 'N5', balance, 3);
+  S('P9', 'Status', 10); mg('P9', 'Q9', 10); S('R9', r.status || 'Open', 4);
+  S('L10', 'Pending replenishment', 10); mg('L10', 'M10', 10); F('N10', 'N8', pendSpent, 3);
+  S('P10', 'Total cash balance', 10); mg('P10', 'Q10', 10); F('R10', 'N5', balance, 3);
+
+  // cash at hand: count the notes and coins
+  S('L14', 'CASH AT HAND:', 9); mg('L14', 'N14', 9);
+  S('L15', 'DENOMINATION', 11); S('M15', 'QUANTITY', 11); S('N15', 'TOTAL MVR', 11);
+  PC_DENOMS.forEach((d, i) => { const n = 16 + i; N('L' + n, d, 12); B('M' + n, 13); F('N' + n, `L${n}*M${n}`, 0, 6); });
+  S('L29', 'TOTAL', 8); B('M29', 8); F('N29', 'SUM(N16:N28)', 0, 8);
+
+  // sign-off block, as in the sample
+  const b = SIG;
+  S('B' + b, 'Advance Holder:', 15); S('C' + b, r.holder || '', 5); mg('C' + b, 'D' + b, 5);
+  S('E' + b, 'Checked by (Finance):', 15);
+  S('B' + (b + 1), 'Sign:', 15); mg('B' + (b + 1), 'B' + (b + 3), 15); mg('C' + (b + 1), 'D' + (b + 3), 0);
+  S('E' + (b + 1), 'Sign:', 15); mg('E' + (b + 1), 'E' + (b + 3), 15); mg('F' + (b + 1), 'F' + (b + 3), 0);
+  S('B' + (b + 4), 'Date:', 15); mg('C' + (b + 4), 'D' + (b + 4), 0);
+  S('E' + (b + 4), 'Date:', 15); B('F' + (b + 4), 0);
+  S('B' + (b + 6), 'Checked by:', 15); S('E' + (b + 6), 'Approved by (Finance):', 15);
+  S('B' + (b + 7), 'Sign:', 15); mg('B' + (b + 7), 'B' + (b + 9), 15); mg('C' + (b + 7), 'D' + (b + 9), 0);
+  S('E' + (b + 7), 'Sign:', 15); mg('E' + (b + 7), 'E' + (b + 9), 15); mg('F' + (b + 7), 'F' + (b + 9), 0);
+  S('B' + (b + 10), 'Date:', 15); mg('C' + (b + 10), 'D' + (b + 10), 0);
+  S('E' + (b + 10), 'Date:', 15); B('F' + (b + 10), 0);
+  const maxRow = b + 10;
+
+  // rows, cells in column order
+  const byRow = {};
+  Object.keys(C).forEach(ref => { const p = rc(ref); (byRow[p.r] = byRow[p.r] || []).push([p.c, C[ref]]); });
+  const rowsXml = Object.keys(byRow).map(Number).sort((x, y) => x - y).map(n => {
+    const ht = rowHt[n] ? ` ht="${rowHt[n]}" customHeight="1"` : '';
+    return `<row r="${n}"${ht}>${byRow[n].sort((x, y) => x[0] - y[0]).map(x => x[1]).join('')}</row>`;
+  }).join('');
+  const widths = [6, 30, 15, 14, 16, 44, 16, 17, 17, 17, 3, 16, 16, 18, 3, 18, 16, 22];
+  const colsXml = widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('');
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:R${maxRow}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="22"/>
+<cols>${colsXml}</cols><sheetData>${rowsXml}</sheetData><mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>
+<dataValidations count="2"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="D${T0}:D${last}"><formula1>"Transferred,Received"</formula1></dataValidation><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G${T0}:G${last}"><formula1>"Pending,Received"</formula1></dataValidation></dataValidations>
+<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>`;
   const name = String(r.title || 'Business Advance').replace(/[\\\/?*\[\]:]/g, '-').slice(0, 31) || 'Business Advance';
   const z = new JSZip();
   z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
   z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-  z.file('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${X(name)}" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${X(name.replace(/'/g, "''"))}'!$A$6:$H$${last}</definedName></definedNames><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`);
+  z.file('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${X(name)}" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`);
   z.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
   z.file('xl/styles.xml', styles); z.file('xl/worksheets/sheet1.xml', sheet);
   return z.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE' });
@@ -11348,15 +11557,34 @@ function utParseBillText(text){
   if(due && charge && vNum(due) !== vNum(charge)) o.note = 'Total amount due on the bill: MVR ' + pcMoneyPlain(vNum(due.replace(/,/g, ''))) + (outst && vNum(outst.replace(/,/g, '')) ? ' (includes MVR ' + pcMoneyPlain(vNum(outst.replace(/,/g, ''))) + ' outstanding from earlier bills)' : '');
   return o;
 }
+// AI reading of a utility bill through the reader service (kind 'utility-bill')
+async function utAiRead(file, kind){
+  const att = await agPrepare([file]);
+  const files = att.pdf ? [{ type:'application/pdf', data:fuelB64(att.bytes) }] : att.pages.map(pg => ({ type:'image/jpeg', data:String(pg.jpeg).split(',')[1] }));
+  return aiPost(files, kind || 'utility-bill');
+}
+// the AI's answer in the same shape the text reader gives, so both fill the form the same way
+function utFromAi(d){
+  const s = v => v == null ? '' : v;
+  return { accountNo:s(d.accountNo), meterNo:s(d.meterNo), billNo:s(d.billNo), billDate:s(d.billDate), dueDate:s(d.dueDate),
+    useFrom:s(d.periodFrom), useTo:s(d.periodTo), prevReading:s(d.previousReading), currReading:s(d.currentReading), units:s(d.units), amount:s(d.amount),
+    period:String(d.billDate || d.periodTo || '').slice(0, 7), note:d.note || '' };
+}
 async function utReadInvoice(input){
   const file = input.files && input.files[0]; input.value = ''; if(!file) return;
   const st = document.getElementById('ut-read-status'), f = document.getElementById('vform'), say = (t, bad) => { if(st){ st.innerHTML = t; st.className = 'text-xs mt-0.5 ' + (bad ? 'text-rose-600' : 'text-slate-500'); } };
   say('Reading ' + esc(file.name) + '…');
-  let text = '';
-  try{ text = await pcReadInvoiceFile(file, t => say(esc(t)), { binarize:true, psm:4, width:2400 }); }      // bills are read in black and white, column by column
-  catch(e){ console.error(e); say('Could not read the file: ' + esc(e && e.message ? e.message : e), true); return; }
+  let o = null, how = 'the text reader', aiErr = '';
+  if(AI_READ_URL){ try{ o = utFromAi(await utAiRead(file)); how = 'AI'; }catch(e){ console.error(e); aiErr = e && e.message ? e.message : String(e); } }
+  if(!o){
+    let text = '';
+    try{ text = await pcReadInvoiceFile(file, t => say(esc(t)), { binarize:true, psm:4, width:2400 }); }      // bills are read in black and white, column by column
+    catch(e){ console.error(e); say('Could not read the file: ' + esc(e && e.message ? e.message : e), true); return; }
+    o = utParseBillText(text);
+  }
   if(!f || !f.isConnected) return;
-  const o = utParseBillText(text), filled = [], warn = [];
+  const filled = [], warn = [];
+  if(aiErr) warn.push('the AI reader could not be used (' + esc(aiErr) + '), so the text reader was used');
   // the account: matched by account number, then meter number
   const digits = x => String(x || '').replace(/\D/g, '');
   if(o.accountNo || o.meterNo){
@@ -11373,7 +11601,7 @@ async function utReadInvoice(input){
   if(o.note && f.notes && !f.notes.value.includes(o.note)){ f.notes.value = (f.notes.value ? f.notes.value + '\n' : '') + o.note; filled.push('note of the total due'); }
   if(f.prevReading) utBillCalc(f);
   if(!filled.length){ say('Nothing could be read from this file. Enter the details by hand.' + (warn.length ? ' Note: ' + warn.join('; ') + '.' : ''), true); return; }
-  say('Filled in: ' + filled.join(', ') + '. Check them before saving.' + (warn.length ? '<br><span class="text-amber-700">Note: ' + warn.join('; ') + '.</span>' : ''));
+  say('Filled in with ' + how + ': ' + filled.join(', ') + '. Check them before saving.' + (warn.length ? '<br><span class="text-amber-700">Note: ' + warn.join('; ') + '.</span>' : ''));
 }
 async function saveUtBill(id){
   const o = vehFormObj(document.getElementById('vform'));
@@ -15445,9 +15673,7 @@ async function prReadQuote(btn){
   const att = prQuoteAtt, label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Reading…';
   try{
     const files = att.pdf ? [{ type:'application/pdf', data:fuelB64(att.bytes) }] : att.pages.map(pg => ({ type:'image/jpeg', data:String(pg.jpeg).split(',')[1] }));
-    const res = await fetch(AI_READ_URL, { method:'POST', headers:Object.assign({ 'Content-Type':'application/json' }, AI_READ_TOKEN ? { 'X-Reader-Token':AI_READ_TOKEN } : {}), body:JSON.stringify({ files, kind:'pr-quotation' }) });
-    const j = await res.json().catch(() => ({})); if(!res.ok) throw new Error(j.error || ('HTTP ' + res.status));
-    const n = prApplyQuote(j.data || {});
+    const n = prApplyQuote(await aiPost(files, 'pr-quotation'));
     toast(n ? n + ' item' + (n === 1 ? '' : 's') + ' filled from the quotation. Check them before saving.' : 'No priced items could be read from the quotation.', !n);
   }catch(e){ toast('The quotation could not be read: ' + (e && e.message ? e.message : e), true); }
   finally{ btn.disabled = false; btn.innerHTML = label; }

@@ -1,0 +1,7 @@
+{
+  "name": "invoice-reader-functions",
+  "private": true,
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "dependencies": { "firebase-functions": "^6.0.0" }
+}

@@ -4494,8 +4494,29 @@ async function buildPettyCashPdf(r){
     by += 13.55;
   }));
   const images = sig ? { SigReq: sig } : {};
-  // the form only: invoices are kept with the voucher (Invoices window), not printed with the request
+  // the attached invoice(s) follow the form as the last page(s), one invoice page per PDF page
+  const invPages = await pcInvoicePages(r);
+  invPages.forEach((ip, k) => {
+    images['Inv' + k] = { w:ip.w, h:ip.h, jpeg:ip.jpeg };
+    const s = Math.min((PCA4_W - 72) / ip.w, (PCA4_H - 72) / ip.h), dw = ip.w * s, dh = ip.h * s;
+    pages.push({ bare:true, ops:[`q ${pdfN(dw)} 0 0 ${pdfN(dh)} ${pdfN((PCA4_W - dw) / 2)} ${pdfN((PCA4_H - dh) / 2)} cm /Inv${k} Do Q`] });
+  });
   return pcPdfFinish(pages, { title:'PETTY CASH REQUEST FORM', number: '', docTitle:'Petty Cash Request ' + (r.number || ''), images, pageNumbers:false });
+}
+// the invoice files kept with a petty cash request, as JPEG pages for the PDF (invoices are attached as pages already)
+async function pcInvoicePages(r){
+  const out = [];
+  for(const iv of pcInvoices(r)){
+    if(!iv.fileId) continue;
+    let m = null; try{ m = await pcFileLoad(iv.fileId); }catch(e){}
+    if(!m || !Array.isArray(m.pages)) continue;
+    for(const p of m.pages){
+      const bin = atob(String(p.jpeg || '').split(',')[1] || ''), bytes = new Uint8Array(bin.length);
+      for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      out.push({ w:p.w, h:p.h, jpeg:bytes });
+    }
+  }
+  return out;
 }
 async function generatePettyCashPdf(id, btn){
   const r = state.pettyCash.find(x => x.id === id); if(!r) return;
@@ -16578,7 +16599,7 @@ async function pdfSignatureImage(dataUrl){
     const img = new Image(); img.src = dataUrl; await img.decode();
     const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
     const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
-    const d = ctx.getImageData(0, 0, c.width, c.height).data, n = c.width * c.height;
+    const d = ctx.getImageData(0, 0, c.width, c.height).data, n = c.width * c.height; sigCleanPixels(d);
     const rgb = new Uint8Array(n * 3), alpha = new Uint8Array(n); let translucent = false;
     for(let i = 0, j = 0; i < n; i++){ rgb[j++] = d[i*4]; rgb[j++] = d[i*4+1]; rgb[j++] = d[i*4+2]; alpha[i] = d[i*4+3]; if(d[i*4+3] !== 255) translucent = true; }
     const zRgb = await pdfDeflate(rgb), zAlpha = translucent ? await pdfDeflate(alpha) : null;
@@ -16911,11 +16932,8 @@ function sigPadUpload(input){
     const w = Math.round(img.width * s), h = Math.round(img.height * s), x = Math.round((c.width - w) / 2), y = Math.round((c.height - h) / 2);
     ctx.drawImage(img, x, y, w, h);
     // the paper becomes see-through, so only the ink is kept
-    const data = ctx.getImageData(0, 0, c.width, c.height), d = data.data;
-    for(let i = 0; i < d.length; i += 4){
-      const lum = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-      if(lum > 235) d[i+3] = 0; else if(lum > 190) d[i+3] = Math.round(d[i+3] * (235 - lum) / 45);
-    }
+    const data = ctx.getImageData(0, 0, c.width, c.height);
+    sigCleanPixels(data.data);
     ctx.putImageData(data, 0, 0);
     sigPad.ink = true; sigPadError('');
     URL.revokeObjectURL(url);
@@ -16924,9 +16942,18 @@ function sigPadUpload(input){
   img.src = url;
   input.value = '';
 }
+// paper becomes transparent: anything light (white or off-white paper, shadows) is removed, dark ink stays opaque
+function sigCleanPixels(d){
+  for(let i = 0; i < d.length; i += 4){
+    if(d[i+3] === 0) continue;
+    const lum = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+    if(lum >= 200) d[i+3] = 0; else if(lum > 110) d[i+3] = Math.round(d[i+3] * (200 - lum) / 90);
+  }
+}
 // crop to the ink, scale to at most 600 x 200, and keep the background transparent
 function exportSignature(canvas){
-  const w = canvas.width, h = canvas.height, d = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const w = canvas.width, h = canvas.height, cx = canvas.getContext('2d'), img = cx.getImageData(0, 0, w, h), d = img.data;
+  sigCleanPixels(d); cx.putImageData(img, 0, 0);
   let x0 = w, y0 = h, x1 = -1, y1 = -1;
   for(let y = 0; y < h; y++) for(let x = 0; x < w; x++){
     if(d[(y * w + x) * 4 + 3] > 24){ if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y; }

@@ -2903,7 +2903,7 @@ function openVehFuelView(id){
   const body = vDl([['Date', vDate(r.date)], ['Vehicle', `<b>${esc(vLabel(v))}</b><div class="text-xs text-slate-400">${esc(vName(v))}</div>`, 1], ['Fuel type', r.fuelType],
       ['Litres', vFmtL(r.litres)], ['Rate per litre', r.rate ? vMoney(r.rate) : '—'], ['Total cost', `<b>${vMoney(r.total)}</b>`, 1],
       ['Odometer', r.odometer ? vNum(r.odometer).toLocaleString() + ' km' : '—'], ['Fuel station', r.station], ['Filled by', r.filledBy],
-      [r.fundType === 'Petty Cash' ? 'Voucher no.' : 'PO no.', r.poNo], ['Delivery note no.', r.ref], ['Delivery note', r.docUrl ? vLink(r.docUrl, 'Open delivery note') : '—', 1]]) +
+      [r.fundType === 'Petty Cash' ? 'Voucher no.' : 'PO no.', r.poNo], ['Delivery note no.', r.ref], ['Delivery note', r.docUrl ? vLink(r.docUrl, 'Open delivery note') : '—', 1], ['Delivery note file', fuelFileLink(r.deliveryFile, 'Delivery note'), 1], ['Invoice file', fuelFileLink(r.invoiceFile, 'Invoice'), 1]]) +
     (r.notes ? vSec('Notes') + `<div class="text-sm text-slate-600 whitespace-pre-wrap">${esc(r.notes)}</div>` : '') +
     (rq ? vSec((rq.kind === 'PR' ? 'PR' : 'Petty cash') + ' ' + esc(rq.refNo)) + vReqBalanceHtml(rq, r.id) : vSec('Funding') + '<div class="text-sm text-slate-400">Not charged to a PR or petty cash requisition.</div>') +
     `<div class="flex justify-end gap-2.5 mt-6"><button type="button" onclick="closeModal()" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Close</button><button type="button" onclick="openVehFuelForm('${r.id}')" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Edit entry</button></div>`;
@@ -3005,14 +3005,15 @@ function openVehFuelForm(id){
   const r = id ? state.fuelRecords.find(x => x.id === id) : { date:vToday(), fundType:'PR', vehicleId:vehUi.fuelVeh || '' };
   if(id && !r) return;
   if(!id && r.vehicleId){ const pv = vehById(r.vehicleId); if(pv) r.fuelType = pv.fuelType; }
-  vehFuelCtx = { id, keepReq:r.requisitionId || '' };
+  vehFuelCtx = { id, keepReq:r.requisitionId || '' }; fuelAtt = {};
   openModal(id ? 'Edit fuel entry' : 'Add fuel entry', vFormOpen + vGrid(2,
     `<div class="sm:col-span-2"><label class="${VEH_LBL}">Vehicle${vReqStar}</label><select name="vehicleId" class="${VEH_FIELD} bg-white" onchange="vehFuelVehChanged(this)"><option value="">Select vehicle…</option>${vSorted().map(v => `<option value="${esc(v.id)}" ${v.id === r.vehicleId ? 'selected' : ''}>${esc(v.plate)}${vName(v) ? ' — ' + esc(vName(v)) : ''}</option>`).join('')}</select></div>` +
     vS('Fuel type', 'fuelType', VEH_FUELS, r.fuelType, 'Select…', { req:1, attrs:' onchange="vehRefreshReqSelect()"' }) + vF('Date', 'date', r.date, 'date', { req:1 }) +
     `<fieldset class="sm:col-span-2 border border-slate-200 rounded-lg p-4"><legend class="px-1.5 text-xs font-semibold text-slate-600">Funding</legend>${vGrid(2,
       vS('Charge to', 'fundType', VEH_FUND_TYPES, r.fundType || 'PR', null, { attrs:' onchange="vehRefreshReqSelect()"' }) +
       `<div><label class="${VEH_LBL}">Requisition</label><select name="requisitionId" class="${VEH_FIELD} bg-white" onchange="vehUpdateReqInfo()"></select></div>` +
-      `<div class="sm:col-span-2" id="veh-req-info"></div><div class="sm:col-span-2"><label class="${VEH_LBL}" id="veh-po-lbl">PO no.</label><input name="poNo" value="${esc(r.poNo || r.ref || '')}" class="${VEH_FIELD}"></div>`)}</fieldset>` +
+      `<div class="sm:col-span-2" id="veh-req-info"></div><div class="sm:col-span-2"><label class="${VEH_LBL}" id="veh-po-lbl">PO no.</label><input name="poNo" value="${esc(r.poNo || r.ref || '')}" class="${VEH_FIELD}"></div>` +
+      `<div class="sm:col-span-2 ${(r.fundType || 'PR') === 'PR' ? '' : 'hidden'}" id="veh-fuel-att">${fuelAttRow('deliveryFile', r.deliveryFile, 'Attach the delivery note (PDF or photo)')}${fuelAttRow('invoiceFile', r.invoiceFile, 'Attach the invoice (PDF or photo)')}</div>`)}</fieldset>` +
     vF('Litres', 'litres', r.litres, 'number', { req:1, attrs:' oninput="vehFuelCalc()"' }) + vF('Rate per litre (' + esc(vehSettings.currency) + ')', 'rate', r.rate, 'number', { attrs:' oninput="vehFuelCalc()"' }) +
     vF('Total cost (' + esc(vehSettings.currency) + ')', 'total', r.total, 'number', { req:1, attrs:' oninput="vehUpdateReqInfo()"' }) + vF('Odometer (km / hrs)', 'odometer', r.odometer, 'number') +
     vF('Fuel station', 'station', r.station) + vF('Delivery note no.', 'ref', r.poNo ? r.ref : '') +
@@ -3022,7 +3023,16 @@ function openVehFuelForm(id){
 }
 function vehFuelVehChanged(sel){ const v = vehById(sel.value); if(v && v.fuelType) sel.form.fuelType.value = v.fuelType; vehRefreshReqSelect(); }
 function vehFuelCalc(){ const f = document.getElementById('vform'), L = vNum(f.litres.value), R = vNum(f.rate.value); if(L && R) f.total.value = (L * R).toFixed(2); vehUpdateReqInfo(); }
+// fuel attachments (delivery note and invoice, for PR-funded fuel): picked in the form, saved with the entry
+let fuelAtt = {};
+function fuelAttRow(k, f, label){ delete fuelAtt[k];
+  return `<div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="fuelAttPick(this, '${k}')"><span id="fuel-att-act-${k}">${f && f.fileId ? 'Replace the attached file' : '📎 ' + label}</span></label><span id="fuel-att-info-${k}" class="text-xs text-slate-500">${f && f.fileId ? '📎 ' + esc(f.fileName || 'File') + ' kept' : ''}</span></div>`; }
+async function fuelAttPick(input, k){ const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('fuel-att-info-' + k); info.textContent = 'Preparing…';
+  try{ fuelAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(fuelAtt[k]) + ' (saved when you press Save)'; document.getElementById('fuel-att-act-' + k).textContent = 'Replace file'; }
+  catch(e){ delete fuelAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
+const fuelFileLink = (f, label) => f && f.fileId ? `<button type="button" onclick="agOpenFile('${esc(f.fileId)}', '${esc(label)}', null)" class="text-brand-600 font-semibold hover:underline">📎 ${esc(f.fileName || label)}</button>` : '—';
 function vehRefreshReqSelect(pick){
+  { const fa = document.getElementById('veh-fuel-att'), fk = document.getElementById('vform'); if(fa && fk && fk.fundType) fa.classList.toggle('hidden', fk.fundType.value !== 'PR'); }
   const f = document.getElementById('vform'); if(!f || !vehFuelCtx || !f.requisitionId) return;
   const kind = f.fundType.value, sel = f.requisitionId, cur = pick !== undefined ? pick : sel.value;
   document.getElementById('veh-po-lbl').textContent = kind === 'PR' ? 'PO no.' : 'Petty cash voucher no.';
@@ -3061,6 +3071,9 @@ async function saveVehFuel(id){
   if(rq && vNum(o.total) > bal + 0.001) return vFail('This exceeds the available balance of ' + vMoney(bal) + ' on ' + vReqLabel(rq) + '.');
   const balL = rq && vHasL(rq) ? vReqBalanceL(rq, id) : null;
   if(balL !== null && vNum(o.litres) > balL + 0.001) return vFail('This exceeds the available litres (' + vFmtL(balL) + ') on ' + vReqLabel(rq) + '.');
+  // delivery note and invoice (PR only): uploaded now, the entry keeps the file details, the replaced file is removed
+  if(o.fundType === 'PR'){ const oldF = (id && state.fuelRecords.find(x => x.id === id)) || {};
+    for(const k of ['deliveryFile', 'invoiceFile']){ if(!fuelAtt[k]) continue; toast('Uploading ' + fuelAtt[k].name + '…'); o[k] = await agStore(fuelAtt[k], o.ref || o.poNo || ''); if(oldF[k] && oldF[k].fileId) agFileDel(oldF[k].fileId); delete fuelAtt[k]; } }
   if(id) o.id = id;
   if(vNum(o.odometer)){ const v = vehById(o.vehicleId); if(v && vNum(o.odometer) > vNum(v.mileage)) await vehSave('vehicles', { id:v.id, mileage:o.odometer }); }
   await vehSave('fuelRecords', o);

@@ -200,6 +200,9 @@ function refreshAppearanceModal(){
   @media (min-width: 1024px){ .sticky-toolbar{ top: 0; } }
   .sticky-toolbar.sticky-toolbar-card{ background: #fff; padding-top: 1rem; margin-top: 0; }
   .sticky-thead th{ position: sticky; top: 3.5rem; z-index: 15; background: #fff; box-shadow: 0 1px 0 0 rgb(var(--l-line-soft)); }
+  /* every table with a header row keeps its header fixed: the table scrolls inside a box of limited height */
+  .overflow-x-auto:has(> table > thead){ max-height: 70vh; overflow: auto; }
+  .overflow-x-auto:has(> table > thead) > table > thead th{ position: sticky; top: 0; z-index: 2; background: #fff; box-shadow: 0 1px 0 0 rgb(var(--l-line-soft)); }
   @media (min-width: 1024px){ .sticky-thead th{ top: 0; } }
 
   /* Purchase requisition form: keep the header fields pinned while scrolling a long list of items
@@ -369,6 +372,7 @@ function refreshAppearanceModal(){
   html[data-theme="dark"] .sticky-toolbar{ background-color: rgb(var(--s-bg)); }
   html[data-theme="dark"] .sticky-toolbar.sticky-toolbar-card{ background-color: rgb(var(--s-surface)); }
   html[data-theme="dark"] .sticky-thead th{ background-color: rgb(var(--s-surface)); box-shadow: 0 1px 0 0 rgb(var(--s-raised)); }
+  html[data-theme="dark"] .overflow-x-auto:has(> table > thead) > table > thead th{ background-color: rgb(var(--s-surface)); box-shadow: 0 1px 0 0 rgb(var(--s-raised)); }
   html[data-theme="dark"] ::-webkit-scrollbar-thumb{ background:rgb(var(--s-line)); }
 
   .vh-bar{ height:6px; border-radius:999px; background:#e2e8f0; overflow:hidden; }

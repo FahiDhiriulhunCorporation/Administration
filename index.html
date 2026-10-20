@@ -1650,7 +1650,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.244';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.245';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2772,8 +2772,9 @@ document.addEventListener('paste', e => {
 const attHas = f => !!(f && f.fileId);
 function attView(file, url, label){
   const a = attHas(file) ? `<button type="button" onclick="event.stopPropagation(); agOpenFile('${esc(file.fileId)}', '${esc(String(label || 'Document').replace(/'/g, ''))}', null)" class="text-brand-600 font-semibold hover:underline text-left">📎 ${esc(file.fileName || label || 'Document')}</button>` : '';
+  const d = attHas(file) ? `<button type="button" title="Download as PDF" onclick="event.stopPropagation(); attPdfGo('${esc(file.fileId)}', 'download', '${esc(String(label || 'Document').replace(/'/g, ''))}', this)" class="text-slate-500 hover:text-brand-600 font-semibold">⬇ PDF</button>` : '';
   const l = url && vSafeUrl(url) ? vLink(url, a ? 'Earlier link' : (label || 'Open')) : '';
-  return [a, l].filter(Boolean).join(' · ');
+  return [a + (d ? ' ' + d : ''), l].filter(Boolean).join(' · ');
 }
 function attRow(k, file, label, url){ return trAttRow(k, attHas(file) ? file : null, label) + (url && vSafeUrl(url) ? `<div class="text-[11px] text-slate-400 mt-1">Saved earlier as a link: ${vLink(url, 'open')}</div>` : ''); }
 const attTake = k => { const a = trAtt[k] || null; delete trAtt[k]; return a; };
@@ -3984,7 +3985,7 @@ async function openPcInvoiceView(id, k){
   const r = state.pettyCash.find(x => x.id === id), iv = r && pcInvoices(r)[k]; if(!iv || !iv.fileId) return;
   openModal('Invoice — ' + iv.supplier, '<div class="text-sm text-slate-500">Loading the invoice file…</div>', true);
   let data = null; try{ data = await pcFileLoad(iv.fileId); }catch(e){}
-  openModal('Invoice — ' + iv.supplier, data && data.pages ? `<div class="text-xs text-slate-500 mb-3">${esc(iv.number ? 'Invoice ' + iv.number + ' · ' : '')}${esc(fmtMVR(iv.amount))}</div><div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Invoice page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div><div class="flex justify-end mt-4"><button type="button" onclick="openPcDetails('${id}')" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Back</button></div>` : '<div class="text-sm text-slate-500">The invoice file could not be loaded. Check your connection and try again.</div>', true);
+  openModal('Invoice — ' + iv.supplier, data && data.pages ? `<div class="text-xs text-slate-500 mb-3">${esc(iv.number ? 'Invoice ' + iv.number + ' · ' : '')}${esc(fmtMVR(iv.amount))}</div>${attPdfBar(iv.fileId, 'Invoice ' + (iv.number || iv.supplier || ''))}<div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Invoice page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div><div class="flex justify-end mt-4"><button type="button" onclick="openPcDetails('${id}')" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Back</button></div>` : '<div class="text-sm text-slate-500">The invoice file could not be loaded. Check your connection and try again.</div>', true);
 }
 
 /* ---------- fueling petty cash: vehicles, litres and rate instead of item rows ---------- */
@@ -8393,6 +8394,49 @@ async function agBgUpload(docId, att, voucher, apply){
   finally{ delete agUploads[key]; agUploadBar(); }
 }
 async function agFileDel(fid){ if(!fid) return; try{ const m = await pcFileLoad(fid); if(m && m.kind === 'pdf') for(let i = 0; i < (m.chunks || 0); i++) pcFileDelete(fid + '_c' + i); }catch(e){} pcFileDelete(fid); }
+/* ---------- every attachment can be viewed and downloaded as a PDF: a stored PDF as it is; photos / scans become a PDF (one page each) ---------- */
+async function jpegPagesPdf(pages){
+  const enc = new TextEncoder(), parts = [], offs = []; let len = 0;
+  const push = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); len += b.length; };
+  const imgs = [];
+  for(const p of pages){
+    const b64 = String(p.jpeg || '').split(',')[1] || '', bin = atob(b64), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    let w = p.w, h = p.h; if(!w || !h){ const d = await new Promise(res => { const im = new Image(); im.onload = () => res([im.naturalWidth, im.naturalHeight]); im.onerror = () => res([1000, 1414]); im.src = p.jpeg; }); w = d[0]; h = d[1]; }
+    imgs.push({ u, w, h });
+  }
+  const n = imgs.length, obj = k => { offs[k] = len; };
+  push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  obj(1); push('1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n');
+  obj(2); push('2 0 obj<</Type/Pages/Count ' + n + '/Kids[' + imgs.map((x, i) => (3 + i * 3) + ' 0 R').join(' ') + ']>>endobj\n');
+  imgs.forEach((im, i) => {
+    const pg = 3 + i * 3, ct = pg + 1, ix = pg + 2, W = 595.28, H = 841.89, s = Math.min((W - 36) / im.w, (H - 36) / im.h), dw = im.w * s, dh = im.h * s, x = (W - dw) / 2, y = (H - dh) / 2;
+    const c = 'q ' + dw.toFixed(2) + ' 0 0 ' + dh.toFixed(2) + ' ' + x.toFixed(2) + ' ' + y.toFixed(2) + ' cm /Im0 Do Q';
+    obj(pg); push(pg + ' 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ' + W + ' ' + H + ']/Resources<</XObject<</Im0 ' + ix + ' 0 R>>>>/Contents ' + ct + ' 0 R>>endobj\n');
+    obj(ct); push(ct + ' 0 obj<</Length ' + c.length + '>>stream\n' + c + '\nendstream endobj\n');
+    obj(ix); push(ix + ' 0 obj<</Type/XObject/Subtype/Image/Width ' + im.w + '/Height ' + im.h + '/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ' + im.u.length + '>>stream\n'); push(im.u); push('\nendstream endobj\n');
+  });
+  const total = 3 + n * 3, xref = len;
+  push('xref\n0 ' + total + '\n0000000000 65535 f \n' + Array.from({ length:total - 1 }, (x, k) => String(offs[k + 1]).padStart(10, '0') + ' 00000 n \n').join('') + 'trailer<</Size ' + total + '/Root 1 0 R>>\nstartxref\n' + xref + '\n%%EOF');
+  return new Blob(parts, { type:'application/pdf' });
+}
+// the stored file as a PDF blob (a PDF as stored, or the pages made into one)
+async function attPdfBlob(fid){
+  const m = await pcFileLoad(fid); if(!m) throw new Error('the file could not be loaded');
+  if(m.kind === 'pdf'){ let b64 = ''; for(let i = 0; i < m.chunks; i++){ const c = await pcFileLoad(fid + '_c' + i); if(!c) throw new Error('a part of the file is missing'); b64 += c.data; } const bin = atob(b64), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return { blob:new Blob([u], { type:'application/pdf' }), name:m.name }; }
+  if(!m.pages || !m.pages.length) throw new Error('the file has no pages');
+  return { blob:await jpegPagesPdf(m.pages), name:m.name };
+}
+const attPdfName = (name, title) => (String(name || title || 'Attachment').replace(/\.(pdf|jpe?g|png|heic|webp|gif)(,.*)?$/i, '').replace(/[\\\/:*?"<>|]+/g, '-').trim() || 'Attachment').slice(0, 90) + '.pdf';
+async function attPdfGo(fid, how, title, btn){
+  const label = btn ? btn.textContent : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  const win = how === 'open' ? window.open('', '_blank') : null;
+  try{ const r = await attPdfBlob(fid), url = URL.createObjectURL(r.blob);
+    if(how === 'open'){ if(win) win.location.href = url; else window.open(url, '_blank'); } else downloadBlob(r.blob, attPdfName(r.name, title)); }
+  catch(e){ if(win) win.close(); toast('Could not make the PDF: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = label; } }
+}
+// the bar shown on every attachment viewer
+const attPdfBar = (fid, title, extra) => `<div class="flex items-center gap-4 mb-3 text-xs font-semibold flex-wrap">${extra || ''}<span class="flex-1"></span><button type="button" onclick="attPdfGo('${esc(fid)}', 'open', '${esc(String(title || '').replace(/'/g, ''))}', this)" class="text-brand-600 hover:underline">View as PDF ↗</button><button type="button" onclick="attPdfGo('${esc(fid)}', 'download', '${esc(String(title || '').replace(/'/g, ''))}', this)" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700">⬇ Download PDF</button></div>`;
 async function agOpenFile(fid, title, backId){
   openModal(title, '<div class="text-sm text-slate-500">Loading the file…</div>', true);
   let m = null; try{ m = await pcFileLoad(fid); }catch(e){}
@@ -8401,11 +8445,11 @@ async function agOpenFile(fid, title, backId){
     try{ let b64 = ''; for(let i = 0; i < m.chunks; i++){ const c = await pcFileLoad(fid + '_c' + i); if(!c) throw new Error('a part of the file is missing'); b64 += c.data; }
       const bin = atob(b64), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
       const url = URL.createObjectURL(new Blob([u], { type:'application/pdf' }));
-      openModal(title, `<div class="flex items-center gap-4 mb-3 text-xs font-semibold">${back}<span class="flex-1"></span><a href="${url}" target="_blank" rel="noopener" class="text-brand-600 hover:underline">Open in a new tab</a><a href="${url}" download="${esc(m.name || 'agreement.pdf')}" class="text-brand-600 hover:underline">Download PDF</a></div><iframe src="${url}" title="${esc(m.name || 'PDF')}" class="w-full rounded-lg border border-slate-200" style="height:72vh"></iframe>`, true);
+      openModal(title, `<div class="flex items-center gap-4 mb-3 text-xs font-semibold flex-wrap">${back}<span class="flex-1"></span><a href="${url}" target="_blank" rel="noopener" class="text-brand-600 hover:underline">View as PDF ↗</a><a href="${url}" download="${esc(attPdfName(m.name, title))}" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700">⬇ Download PDF</a></div><iframe src="${url}" title="${esc(m.name || 'PDF')}" class="w-full rounded-lg border border-slate-200" style="height:72vh"></iframe>`, true);
     }catch(e){ openModal(title, vEmpty('The PDF could not be loaded: ' + esc(e && e.message ? e.message : String(e))) + back, true); }
     return;
   }
-  openModal(title, m && m.pages ? `<div class="space-y-3">${m.pages.map((p, k) => `<img src="${p.jpeg}" alt="Page ${k + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div><div class="mt-4">${back}</div>` : vEmpty('The file could not be loaded.') + back, true);
+  openModal(title, m && m.pages ? `${attPdfBar(fid, title, back)}<div class="space-y-3">${m.pages.map((p, k) => `<img src="${p.jpeg}" alt="Page ${k + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div><div class="mt-4">${back}</div>` : vEmpty('The file could not be loaded.') + back, true);
 }
 // the agreement file chosen in the form (saved with the agreement)
 let agFormAtt = null;
@@ -9946,7 +9990,7 @@ async function openBaInvoice(id, euid){
   const r = baById(id), e = r && (r.entries || []).find(x => x.uid === euid); if(!e || !e.fileId) return;
   openModal('Invoice — ' + (e.party || ''), '<div class="text-sm text-slate-500">Loading the invoice file…</div>', true);
   let data = null; try{ data = await pcFileLoad(e.fileId); }catch(err){}
-  openModal('Invoice — ' + (e.party || ''), data && data.pages ? `<div class="text-xs text-slate-500 mb-3">${esc([e.remarks, fmtMVR(e.amount), baDate(e.date)].filter(Boolean).join(' · '))}</div><div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Invoice page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div>` : vEmpty('The invoice file could not be loaded.'), true);
+  openModal('Invoice — ' + (e.party || ''), data && data.pages ? `<div class="text-xs text-slate-500 mb-3">${esc([e.remarks, fmtMVR(e.amount), baDate(e.date)].filter(Boolean).join(' · '))}</div>${attPdfBar(e.fileId, 'Invoice ' + (e.remarks || e.party || ''))}<div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Invoice page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div>` : vEmpty('The invoice file could not be loaded.'), true);
 }
 
 /* ---------- Excel: the business advance statement in the finance sample layout, with its formulas ---------- */

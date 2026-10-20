@@ -1650,7 +1650,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.239';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.244';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -1936,7 +1936,7 @@ function currentNav(){
     ...UT_TYPE_LIST.map(t => ({ id:'utility-' + UT_TYPES[t].slug, label:t, icon:UT_TYPES[t].icon, badge:utAl.filter(a=>a.type===t).length, tone:utAl.some(a=>a.type===t && a.st.k==='crit') ? 'crit' : 'warn' })),
     { id:'utility-report', label:'Report', icon:'chart' },
     { section:'Maintenance' },
-    { id:'cleaning', label:'Cleaning Checklist', icon:'broom', badge:cntOf(clPendingCount), tone:'warn', hint:"Locations whose last week's checklist is not completed or linked" },
+    { id:'cleaning', label:'Cleaning Checklist', icon:'broom', badge:cntOf(clPendingCount), tone:'warn', hint:"Locations whose last week's checklist is not completed or attached" },
     { section:'Travel' },
     { id:'travel-local', label:'Local Travel', icon:'plane', badge:(()=>{ try{ return state.travelRequests.filter(t => (t.scope || 'local') === 'local' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
     { id:'travel-foreign', label:'Foreign Travel', icon:'globe', badge:(()=>{ try{ return state.travelRequests.filter(t => t.scope === 'foreign' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
@@ -2487,7 +2487,7 @@ function vStatCard(v, s){
     <div class="flex items-center justify-between gap-2"><h3 class="text-sm font-bold text-slate-900">${s.label}</h3>${vPill(st.k, esc(st.t))}</div>
     ${s.key === 'insurance' && (x.provider || x.policyNo) ? `<div class="text-xs text-slate-500 mt-1">${esc([x.provider, x.policyNo && ('Policy ' + x.policyNo)].filter(Boolean).join(' · '))}</div>` : ''}
     <div class="grid grid-cols-2 gap-3 mt-3">${vSpec('Start', vDate(x.start))}${vSpec('Expiry', vDate(x.expiry))}${vSpec('Duration', vDuration(x.start, x.expiry))}${vSpec('Cost', x.cost ? vMoney(x.cost) : '—')}</div>
-    <div class="flex items-center justify-between gap-2 mt-3">${vLink(x.docUrl)}<button onclick="openVehRenew('${v.id}','${s.key}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Renew</button></div>
+    <div class="flex items-center justify-between gap-2 mt-3"><div class="text-xs min-w-0">${attView(x.docFile, x.docUrl, s.label) || '<span class="text-slate-400">No document</span>'}</div><button onclick="openVehRenew('${v.id}','${s.key}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Renew</button></div>
     ${hist ? `<details class="mt-3"><summary class="text-xs text-slate-500 cursor-pointer">Previous terms (${x.history.length})</summary><table class="w-full text-xs mt-2"><thead><tr class="text-left text-slate-400"><th class="py-1 pr-3 font-semibold">Start</th><th class="py-1 pr-3 font-semibold">Expiry</th><th class="py-1 text-right font-semibold">Cost</th></tr></thead><tbody>${hist}</tbody></table></details>` : ''}
   </div>`;
 }
@@ -2520,12 +2520,12 @@ function viewVehicleDetail(){
         <div class="bg-white rounded-xl border border-slate-200 p-5">
           <h3 class="text-sm font-bold text-slate-900 mb-3">Details</h3>
           <div class="grid grid-cols-2 gap-3">${vSpec('Colour', v.color)}${vSpec('Odometer', v.mileage ? vNum(v.mileage).toLocaleString() + ' km' : '')}${vSpec('Assigned to', v.assignedTo)}${vSpec('Department', v.department)}${vSpec('Chassis / hull no.', v.chassisNo)}${vSpec('Engine no.', v.engineNo)}</div>
-          <div class="mt-3">${v.spFolder && vSafeUrl(v.spFolder) ? `<a href="${esc(vSafeUrl(v.spFolder))}" target="_blank" rel="noopener" class="inline-flex px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Open SharePoint documents folder ↗</a>` : '<span class="text-xs text-slate-400">No SharePoint folder linked — edit the vehicle to add one.</span>'}</div>
+          <div class="mt-3">${v.spFolder && vSafeUrl(v.spFolder) ? `<a href="${esc(vSafeUrl(v.spFolder))}" target="_blank" rel="noopener" class="inline-flex px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Open SharePoint documents folder ↗</a>` : ''}</div>
         </div>
         <div class="bg-white rounded-xl border border-slate-200 p-5">
           <h3 class="text-sm font-bold text-slate-900 mb-3">Vehicle registry</h3>
           <div class="grid grid-cols-2 gap-3">${vSpec('Registration no.', v.plate)}${vSpec('Registered', vDate(reg.date))}${vSpec('Owner', reg.owner)}${vSpec('Certificate', reg.certNo)}</div>
-          <div class="mt-3">${vLink(reg.docUrl, 'Registry document')}</div>
+          <div class="mt-3 text-xs">${attView(reg.docFile, reg.docUrl, 'Registry document')}</div>
         </div>
         ${v.notes ? `<div class="bg-white rounded-xl border border-slate-200 p-5"><h3 class="text-sm font-bold text-slate-900 mb-2">Notes</h3><div class="text-sm text-slate-600 whitespace-pre-wrap">${esc(v.notes)}</div></div>` : ''}
       </div>
@@ -2575,7 +2575,7 @@ function viewFueling(){
     const rl = reqs.filter(r => vMatch(vehUi.fuelQ, vReqHay(r)) && (!vehUi.fuelVeh || r.vehicleId === vehUi.fuelVeh) && (!vehUi.fuelFund || r.kind === vehUi.fuelFund));
     body = rl.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Type' }, { t:'Ref no.' }, { t:'Vehicle' }, { t:'Fuel' }, { t:'Date' }, { t:'Value / Litres', n:1 }, { t:'Used', n:1 }, { t:'Balance', n:1 }, { t:'Status' }, { t:'' }])}<tbody>${rl.map(rq => {
       const v = vehById(rq.vehicleId), st = vReqStatus(rq), n = state.fuelRecords.filter(f => f.requisitionId === rq.id).length;
-      return `<tr class="${vTr}">${vTd(vPill(rq.kind === 'PR' ? 'acc' : '', esc(vFundShort(rq.kind))), { first:1 })}${vTd(`<span class="font-semibold">${esc(rq.refNo || '—')}</span>${vehLinkChips(rq)}${rq.docUrl ? `<div>${vLink(rq.docUrl, 'Document')}</div>` : ''}`)}${vTd(vVehCell(v))}${vTd(esc(rq.fuelType || '—'))}${vTd(vDate(rq.date))}
+      return `<tr class="${vTr}">${vTd(vPill(rq.kind === 'PR' ? 'acc' : '', esc(vFundShort(rq.kind))), { first:1 })}${vTd(`<span class="font-semibold">${esc(rq.refNo || '—')}</span>${vehLinkChips(rq)}${attView(rq.docFile, rq.docUrl, 'Document') ? `<div class="text-xs">${attView(rq.docFile, rq.docUrl, 'Document')}</div>` : ''}`)}${vTd(vVehCell(v))}${vTd(esc(rq.fuelType || '—'))}${vTd(vDate(rq.date))}
         ${vTd(`${vMoney(rq.amount)}<div class="text-[11.5px] text-slate-400">${vHasL(rq) ? vFmtL(rq.litres) : '—'}</div>`, { n:1 })}
         ${vTd(`${vMoney(vReqUsed(rq))}<div class="text-[11.5px] text-slate-400">${vFmtL(vReqUsedL(rq))} · ${n} fill${n === 1 ? '' : 's'}</div>`, { n:1 })}
         ${vTd(`<b>${vMoney(Math.max(0, vReqBalance(rq)))}</b><div class="font-semibold text-xs">${vHasL(rq) ? vFmtL(Math.max(0, vReqBalanceL(rq))) : '<span class="text-slate-400 font-normal">no litre limit</span>'}</div><div class="mt-1.5 w-28 ml-auto">${vBar(rq)}</div>`, { n:1 })}
@@ -2609,12 +2609,12 @@ function viewServicing(){
   else if(tab === 'periodic') body = vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Vehicle' }, { t:'Service' }, { t:'Odometer', n:1 }, { t:'Vendor' }, { t:'Cost', n:1 }, { t:'Next service' }, { t:'' }])}<tbody>${rows.map(r => {
     const v = vehById(r.vehicleId), newer = state.serviceRecords.some(o => o !== r && o.kind !== 'incident' && o.vehicleId === r.vehicleId && (o.date || '') > (r.date || ''));
     const st = r.nextDate && !newer ? vExpiry(r.nextDate) : null;
-    return `<tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(esc(r.serviceType || r.type || '—') + (r.docUrl ? `<div>${vLink(r.docUrl, 'Invoice')}</div>` : ''))}${vTd(r.odometer ? vNum(r.odometer).toLocaleString() : '—', { n:1 })}${vTd(esc(r.vendor || '—'))}${vTd(r.cost ? vMoney(r.cost) : '—', { n:1 })}
+    return `<tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(esc(r.serviceType || r.type || '—') + (attView(r.docFile, r.docUrl, 'Invoice') ? `<div class="text-xs">${attView(r.docFile, r.docUrl, 'Invoice')}</div>` : ''))}${vTd(r.odometer ? vNum(r.odometer).toLocaleString() : '—', { n:1 })}${vTd(esc(r.vendor || '—'))}${vTd(r.cost ? vMoney(r.cost) : '—', { n:1 })}
       ${vTd(r.nextDate ? vDate(r.nextDate) + (st && (st.k === 'warn' || st.k === 'crit') ? ' ' + vPill(st.k, st.d < 0 ? 'Overdue' : 'Due soon') : '') + (r.nextOdometer ? `<div class="text-[11.5px] text-slate-400">or ${vNum(r.nextOdometer).toLocaleString()} km</div>` : '') : '—')}
       ${vTd(`<button onclick="openVehServiceForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right' })}</tr>`; }).join('')}</tbody></table>`);
   else body = vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Date of issue' }, { t:'Vehicle' }, { t:'Issue' }, { t:'Status' }, { t:'Vendor' }, { t:'Cost', n:1 }, { t:'' }])}<tbody>${rows.map(r => {
     const v = vehById(r.vehicleId), k = r.status === 'Resolved' ? 'good' : r.status === 'In progress' ? 'warn' : 'crit';
-    return `<tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(`<div class="max-w-xs">${esc(r.issue || '—')}</div>${r.docUrl ? `<div>${vLink(r.docUrl, 'Report / invoice')}</div>` : ''}`)}${vTd(vPill(k, esc(r.status || 'Open')) + (r.resolvedDate ? `<div class="text-[11.5px] text-slate-400 mt-1">${vDate(r.resolvedDate)}</div>` : ''))}${vTd(esc(r.vendor || '—'))}${vTd(r.cost ? vMoney(r.cost) : '—', { n:1 })}
+    return `<tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(`<div class="max-w-xs">${esc(r.issue || '—')}</div>${attView(r.docFile, r.docUrl, 'Report / invoice') ? `<div class="text-xs">${attView(r.docFile, r.docUrl, 'Report / invoice')}</div>` : ''}`)}${vTd(vPill(k, esc(r.status || 'Open')) + (r.resolvedDate ? `<div class="text-[11.5px] text-slate-400 mt-1">${vDate(r.resolvedDate)}</div>` : ''))}${vTd(esc(r.vendor || '—'))}${vTd(r.cost ? vMoney(r.cost) : '—', { n:1 })}
       ${vTd(`<button onclick="openVehServiceForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right' })}</tr>`; }).join('')}</tbody></table>`);
   return `
     ${vHead('Servicing', 'Periodic maintenance and incidental repairs.', admin ? vBtnPlain('+ Report Issue', "openVehServiceForm(null,'incident')") + vBtnPrimary('+ Periodic Service', "openVehServiceForm(null,'periodic')") : '')}
@@ -2767,6 +2767,25 @@ document.addEventListener('paste', e => {
 });
 
 /* ---------- Vehicle ---------- */
+/* ---------- attachments in place of web links: a file is attached in the form, uploaded in the background after saving, and opened in the in-app viewer.
+   Links saved before (SharePoint etc.) are kept and still shown. ---------- */
+const attHas = f => !!(f && f.fileId);
+function attView(file, url, label){
+  const a = attHas(file) ? `<button type="button" onclick="event.stopPropagation(); agOpenFile('${esc(file.fileId)}', '${esc(String(label || 'Document').replace(/'/g, ''))}', null)" class="text-brand-600 font-semibold hover:underline text-left">📎 ${esc(file.fileName || label || 'Document')}</button>` : '';
+  const l = url && vSafeUrl(url) ? vLink(url, a ? 'Earlier link' : (label || 'Open')) : '';
+  return [a, l].filter(Boolean).join(' · ');
+}
+function attRow(k, file, label, url){ return trAttRow(k, attHas(file) ? file : null, label) + (url && vSafeUrl(url) ? `<div class="text-[11px] text-slate-400 mt-1">Saved earlier as a link: ${vLink(url, 'open')}</div>` : ''); }
+const attTake = k => { const a = trAtt[k] || null; delete trAtt[k]; return a; };
+// after a record is saved: uploads the file attached under key k to record id's field (vehSave collections)
+function attSaveTo(col, id, field, k, hint){ const att = attTake(k); if(!att || !id) return; attBg(att, hint, async st => { const cur = ((state[col] || []).find(x => x.id === id) || {})[field]; await vehSave(col, { id, [field]:st }); return cur && cur.fileId; }); }
+// uploads one attachment; apply(stored) saves it on the record and returns the file id it replaces (removed afterwards)
+async function attBg(att, hint, apply){
+  if(!att) return; const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar();
+  try{ const st = await agStore(att, hint || '', f => { agUploads[key].f = f; agUploadBar(); }); const old = await apply(st); if(old && old !== st.fileId) agFileDel(old); toast((att.name || 'File') + ' attached.'); rerenderMain(); }
+  catch(e){ toast('The file ' + att.name + ' could not be uploaded: ' + (e && e.message ? e.message : e), true); }
+  finally{ delete agUploads[key]; agUploadBar(); }
+}
 let vehPendingImage = '';
 function vehStatFieldset(s, x){
   const k = s.key;
@@ -2776,7 +2795,7 @@ function vehStatFieldset(s, x){
       vS('Duration', k + '.duration', VEH_DURATIONS, x.duration || '', null, { attrs:' data-dur onchange="vehDurChanged(this)"' }) +
       vF('Expiry date', k + '.expiry', x.expiry, 'date', { attrs:' data-dur-end onchange="vehDurChanged(this)"' }))}
     <div class="h-3.5"></div>
-    ${vGrid(3, vF('Cost (' + esc(vehSettings.currency) + ')', k + '.cost', x.cost, 'number') + vF('Document (SharePoint link)', k + '.docUrl', x.docUrl, 'url', { span:'sm:col-span-2' }))}
+    ${vGrid(3, vF('Cost (' + esc(vehSettings.currency) + ')', k + '.cost', x.cost, 'number') + `<div class="sm:col-span-2"><label class="${VEH_LBL}">Document</label>${attRow('vd-' + k, x.docFile, 'Attach the document (PDF or photo)', x.docUrl)}</div>`)}
     <div class="text-[11.5px] text-slate-400 mt-2.5">A reminder shows ${vehSettings.remindDays} days before expiry and again once it has expired.</div></fieldset>`;
 }
 function vehDurChanged(el){
@@ -2797,11 +2816,9 @@ function vehicleFormHtml(v){
       vF('Colour', 'color', v.color) + vF('Chassis / hull no.', 'chassisNo', v.chassisNo) + vF('Engine no.', 'engineNo', v.engineNo) +
       vF('Assigned to (driver)', 'assignedTo', v.assignedTo) + vF('Department', 'department', v.department) + vS('Status', 'status', VEH_STATUSES, v.status || 'Active') +
       vF('Odometer (km / hrs)', 'mileage', v.mileage, 'number'))}
-    ${vSec('Statutory documents · Microsoft SharePoint')}
-    <div class="mb-3.5"><label class="${VEH_LBL}">SharePoint documents folder for this vehicle</label><input type="text" name="spFolder" value="${esc(v.spFolder || '')}" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://yourcompany.sharepoint.com/sites/…/Vehicles/P1234" class="veh-link ${VEH_FIELD}">
-      ${vehSettings.spBase && vSafeUrl(vehSettings.spBase) ? `<a href="${esc(vSafeUrl(vehSettings.spBase))}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-600 hover:underline">Open SharePoint to copy a link ↗</a>` : ''}</div>
-    <fieldset class="border border-slate-200 rounded-lg p-4 mb-3.5"><legend class="px-1.5 text-xs font-semibold text-slate-600">Vehicle registry</legend>
-      ${vGrid(3, vF('Registration date', 'registry.date', reg.date, 'date') + vF('Registered owner', 'registry.owner', reg.owner) + vF('Certificate no.', 'registry.certNo', reg.certNo) + vF('Registry document (SharePoint link)', 'registry.docUrl', reg.docUrl, 'url', { span:'sm:col-span-3' }))}</fieldset>
+    ${vSec('Statutory documents')}
+        <fieldset class="border border-slate-200 rounded-lg p-4 mb-3.5"><legend class="px-1.5 text-xs font-semibold text-slate-600">Vehicle registry</legend>
+      ${vGrid(3, vF('Registration date', 'registry.date', reg.date, 'date') + vF('Registered owner', 'registry.owner', reg.owner) + vF('Certificate no.', 'registry.certNo', reg.certNo) + `<div class="sm:col-span-3"><label class="${VEH_LBL}">Registry document</label>${attRow('vd-registry', reg.docFile, 'Attach the registry certificate (PDF or photo)', reg.docUrl)}</div>`)}</fieldset>
     ${VEH_STATUTORY.map(s => vehStatFieldset(s, v[s.key] || {})).join('')}
     ${vSec('Notes')}${vTa('', 'notes', v.notes, { ph:'Any other information' })}
     ${vFoot(v.id ? 'Save changes' : 'Add vehicle', `saveVehicleForm('${v.id || ''}')`, v.id && canManageInventory() ? `vehConfirmDelete('${v.id}')` : '')}`;
@@ -2840,11 +2857,14 @@ async function saveVehicleForm(id){
     const x = o[s.key] = o[s.key] || {};
     if(x.start && x.expiry && x.expiry < x.start) return vFail(s.label + ': the expiry date is before the start date.');
     if(old && old[s.key] && old[s.key].history) x.history = old[s.key].history;
+    if(old && old[s.key]){ if(old[s.key].docUrl) x.docUrl = old[s.key].docUrl; if(old[s.key].docFile) x.docFile = old[s.key].docFile; }
   }
+  o.registry = o.registry || {}; if(old && old.registry){ if(old.registry.docUrl) o.registry.docUrl = old.registry.docUrl; if(old.registry.docFile) o.registry.docFile = old.registry.docFile; }
   o.image = vehPendingImage || '';
   if(id) o.id = id;
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
-  const nid = await vehSave('vehicles', o);
+  const nid = await vehSave('vehicles', o), vid = nid || id;
+  VEH_STATUTORY.map(x => x.key).concat(['registry']).forEach(k => { const att = attTake('vd-' + k); if(att) attBg(att, (o.plate || '') + ' ' + k, async st => { const v = vehById(vid), cur = Object.assign({}, (v && v[k]) || {}), was = cur.docFile && cur.docFile.fileId; cur.docFile = st; await vehSave('vehicles', { id:vid, [k]:cur }); return was; }); });
   closeModal(); toast(id ? 'Vehicle updated.' : 'Vehicle added.');
   openVehicle(nid || id);
 }
@@ -2886,9 +2906,10 @@ async function saveVehRenew(id, key){
   const o = vehFormObj(document.getElementById('vform')), v = vehById(id); if(!v) return;
   const x = v[key] || {}, n = o[key];
   if(!n.expiry) return vFail('The expiry date is required.');
-  const hist = (x.history || []).slice(); if(x.expiry) hist.unshift({ start:x.start || '', expiry:x.expiry, cost:x.cost || '', docUrl:x.docUrl || '' });
-  n.history = hist;
+  const hist = (x.history || []).slice(); if(x.expiry) hist.unshift({ start:x.start || '', expiry:x.expiry, cost:x.cost || '', docUrl:x.docUrl || '', docFile:x.docFile || null });
+  n.history = hist; n.docUrl = ''; n.docFile = null;
   await vehSave('vehicles', { id, [key]: n });
+  const att = attTake('vd-' + key); if(att) attBg(att, (v.plate || '') + ' ' + key, async st => { const vv = vehById(id), cur = Object.assign({}, (vv && vv[key]) || {}); cur.docFile = st; await vehSave('vehicles', { id, [key]:cur }); return ''; });
   closeModal(); toast('Renewal saved.');
 }
 
@@ -2912,7 +2933,7 @@ function vReqBalanceHtml(rq, highlightId){
 function vehOpenReqView(id){
   const rq = vReqById(id); if(!rq) return; const v = vehById(rq.vehicleId);
   const body = vDl([['Type', rq.kind === 'PR' ? 'PR (Purchase Requisition)' : 'Petty Cash'], [rq.kind === 'PR' ? 'PR no.' : 'Petty cash no.', `<b>${esc(rq.refNo)}</b>`, 1], ['Date', vDate(rq.date)],
-      ['Vehicle', `<b>${esc(vLabel(v))}</b><div class="text-xs text-slate-400">${esc(vName(v))}</div>`, 1], ['Fuel type', rq.fuelType], ['Document', rq.docUrl ? vLink(rq.docUrl, 'Open document') : '—', 1]]) +
+      ['Vehicle', `<b>${esc(vLabel(v))}</b><div class="text-xs text-slate-400">${esc(vName(v))}</div>`, 1], ['Fuel type', rq.fuelType], ['Document', attView(rq.docFile, rq.docUrl, 'Open document') || '—', 1]]) +
     (rq.notes ? vSec('Notes') + `<div class="text-sm text-slate-600 whitespace-pre-wrap">${esc(rq.notes)}</div>` : '') + vSec('Balance') + vReqBalanceHtml(rq) +
     `<div class="flex justify-end gap-2.5 mt-6"><button type="button" onclick="closeModal()" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Close</button><button type="button" onclick="openVehReqForm('${rq.id}')" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Edit requisition</button></div>`;
   openModal((rq.kind === 'PR' ? 'PR ' : 'Petty cash ') + rq.refNo, body, true);
@@ -2947,7 +2968,7 @@ function openVehFuelView(id){
   const body = vDl([['Date', vDate(r.date)], ['Vehicle', `<b>${esc(vLabel(v))}</b><div class="text-xs text-slate-400">${esc(vName(v))}</div>`, 1], ['Fuel type', r.fuelType],
       ['Litres', vFmtL(r.litres)], ['Rate per litre', r.rate ? vMoney(r.rate) : '—'], ['Total cost', `<b>${vMoney(r.total)}</b>`, 1],
       ['Odometer', r.odometer ? vNum(r.odometer).toLocaleString() + ' km' : '—'], ['Fuel station', r.station], ['Filled by', r.filledBy],
-      [r.fundType === 'Petty Cash' ? 'Voucher no.' : 'PO no.', r.poNo], ['Delivery note no.', r.ref], ['Delivery note', r.docUrl ? vLink(r.docUrl, 'Open delivery note') : '—', 1], ['Delivery note file', fuelFileLink(r.deliveryFile, 'Delivery note'), 1], ['Invoice file', fuelFileLink(r.invoiceFile, 'Invoice'), 1], ['PO file', fuelFileLink(r.poFile, 'PO'), 1]]) +
+      [r.fundType === 'Petty Cash' ? 'Voucher no.' : 'PO no.', r.poNo], ['Delivery note no.', r.ref], ['PO file', fuelFileLink(r.poFile, 'PO'), 1], ['Delivery note file', fuelFileLink(r.deliveryFile, 'Delivery note'), 1], ['Invoice file', fuelFileLink(r.invoiceFile, 'Invoice'), 1]]) +
     (r.notes ? vSec('Notes') + `<div class="text-sm text-slate-600 whitespace-pre-wrap">${esc(r.notes)}</div>` : '') +
     (rq ? vSec((rq.kind === 'PR' ? 'PR' : 'Petty cash') + ' ' + esc(rq.refNo)) + vReqBalanceHtml(rq, r.id) : vSec('Funding') + '<div class="text-sm text-slate-400">Not charged to a PR or petty cash requisition.</div>') +
     `<div class="flex justify-end gap-2.5 mt-6"><button type="button" onclick="closeModal()" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Close</button><button type="button" onclick="openVehFuelForm('${r.id}')" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Edit entry</button></div>`;
@@ -2977,7 +2998,7 @@ function openVehReqForm(id, preset){
     vS('Fuel type', 'fuelType', VEH_FUELS, r.fuelType, 'Select…', { req:1 }) +
     `<div><label class="${VEH_LBL}"><span id="veh-ref-lbl">${r.kind === 'PR' ? 'PR no.' : 'Petty cash no.'}</span>${vReqStar}</label><input name="refNo" value="${esc(r.refNo || '')}" class="${VEH_FIELD}"></div>` +
     vF('Date', 'date', r.date, 'date', { req:1 }) + vF('Total value (' + esc(vehSettings.currency) + ')', 'amount', r.amount, 'number', { req:1 }) + vF('Total litres', 'litres', r.litres, 'number', { req:1 }) +
-    vF('Document (SharePoint link)', 'docUrl', r.docUrl, 'url') + vTa('Notes', 'notes', r.notes, { span:'sm:col-span-2', rows:2 }) +
+    `<div><label class="${VEH_LBL}">Document</label>${attRow('vdoc', r.docFile, 'Attach the PR / voucher (PDF or photo)', r.docUrl)}</div>` + vTa('Notes', 'notes', r.notes, { span:'sm:col-span-2', rows:2 }) +
     (id ? `<div class="sm:col-span-2 text-xs text-slate-500">Used so far: <b>${vMoney(used)}</b> / <b>${vFmtL(vReqUsedL(r))}</b> · Balance: <b>${vMoney(vReqBalance(r))}</b>${vHasL(r) ? ' / <b>' + vFmtL(vReqBalanceL(r)) + '</b>' : ''}</div>
       <label class="sm:col-span-2 flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="closed" ${r.closed ? 'checked' : ''}> Close this requisition (no more fuel can be charged to it)</label>`
       : '<div class="sm:col-span-2 text-xs text-slate-500">Each fuel entry charged to this requisition is deducted from the total value and the total litres. When either balance runs out, add a new requisition for the vehicle.</div>')) +
@@ -2993,13 +3014,13 @@ function vehReqKindChanged(sel){
   document.getElementById('veh-link-pr').style.display = pr ? '' : 'none'; document.getElementById('veh-link-pc').style.display = pr ? 'none' : '';
   // what the old link filled in goes with it (only values that still match it, so anything you typed stays)
   const p = state.purchaseRequisitions.find(x => x.id === f.prId.value), v = state.pettyCash.find(x => x.id === f.pettyCashId.value);
-  if(p){ if(f.refNo.value === (p.prNumber || '')) f.refNo.value = ''; if(vNum(f.amount.value) === vNum(p.totalCost)) f.amount.value = ''; if(p.prUrl && f.docUrl.value === p.prUrl) f.docUrl.value = ''; }
+  if(p){ if(f.refNo.value === (p.prNumber || '')) f.refNo.value = ''; if(vNum(f.amount.value) === vNum(p.totalCost)) f.amount.value = ''; }
   if(v){ if(f.refNo.value === (v.number || '')) f.refNo.value = ''; if(vNum(f.amount.value) === pcTotal(v) || (v.fuelRows || []).some(x => vNum(f.amount.value) === pcFuelAmt(x))){ f.amount.value = ''; f.litres.value = ''; } }
   f.prId.value = ''; f.pettyCashId.value = '';                                    // a link belongs to one type only
 }
 function vehReqPickPR(sel){
   const p = state.purchaseRequisitions.find(x => x.id === sel.value), f = sel.form; if(!p) return;
-  f.refNo.value = p.prNumber || ''; if(vNum(p.totalCost)) f.amount.value = vNum(p.totalCost); if(p.prUrl && !f.docUrl.value.trim()) f.docUrl.value = p.prUrl;
+  f.refNo.value = p.prNumber || ''; if(vNum(p.totalCost)) f.amount.value = vNum(p.totalCost);
 }
 function vehReqPickPC(sel){
   const v = state.pettyCash.find(x => x.id === sel.value), f = sel.form; if(!v) return;
@@ -3033,7 +3054,7 @@ async function saveVehReq(id){
     o.id = id;
     if((old.pettyCashId || '') !== o.pettyCashId) o.pettyCashRow = null;      // linked to a different voucher: no longer one of a voucher's own rows
   }
-  await vehSave('fuelRequisitions', o);
+  const rqId = await vehSave('fuelRequisitions', o); attSaveTo('fuelRequisitions', rqId || id, 'docFile', 'vdoc', o.refNo);
   closeModal(); vehUi.fuelTab = 'req'; goTo('fueling'); toast(id ? 'Requisition updated.' : 'Requisition added.');
 }
 function vehConfirmDeleteReq(id){
@@ -3057,11 +3078,11 @@ function openVehFuelForm(id){
       vS('Charge to', 'fundType', VEH_FUND_TYPES, r.fundType || 'PR', null, { attrs:' onchange="vehRefreshReqSelect()"' }) +
       `<div><label class="${VEH_LBL}">Requisition</label><select name="requisitionId" class="${VEH_FIELD} bg-white" onchange="vehUpdateReqInfo()"></select></div>` +
       `<div class="sm:col-span-2" id="veh-req-info"></div><div class="sm:col-span-2"><label class="${VEH_LBL}" id="veh-po-lbl">PO no.</label><input name="poNo" value="${esc(r.poNo || r.ref || '')}" class="${VEH_FIELD}"></div>` +
-      `<div class="sm:col-span-2 ${(r.fundType || 'PR') === 'PR' ? '' : 'hidden'}" id="veh-fuel-att">${fuelAttRow('deliveryFile', r.deliveryFile, 'Attach the delivery note (PDF or photo)')}${fuelAttRow('invoiceFile', r.invoiceFile, 'Attach the invoice (PDF or photo)')}${AI_READ_URL ? `<div class="mt-2"><button type="button" onclick="fuelReadInvoice(this)" class="text-xs font-semibold text-brand-600 hover:underline">✨ Read the attached invoice with AI</button> <span class="text-[11px] text-slate-400">Fills the empty fields only. Check them before saving.</span></div>` : ''}${fuelAttRow('poFile', r.poFile, 'Attach the PO (PDF or photo)')}</div>`)}</fieldset>` +
+      `<div class="sm:col-span-2 ${(r.fundType || 'PR') === 'PR' ? '' : 'hidden'}" id="veh-fuel-att"><div class="text-[11px] text-slate-400 mt-1">In the order they come: the PO is issued, the vehicle is fuelled and the vendor gives the delivery note, then the invoice is mailed later — add it when it arrives (Edit).</div>${fuelAttRow('poFile', r.poFile, 'Attach the PO (PDF or photo)', '1 · Purchase order', 'issued before fuelling')}${fuelAttRow('deliveryFile', r.deliveryFile, 'Attach the delivery note (PDF or photo)', '2 · Delivery note', 'from the vendor, after fuelling')}${fuelAttRow('invoiceFile', r.invoiceFile, 'Attach the invoice (PDF or photo)', '3 · Invoice', 'mailed by the vendor later')}${AI_READ_URL ? `<div class="mt-2"><button type="button" onclick="fuelReadInvoice(this)" class="text-xs font-semibold text-brand-600 hover:underline">✨ Read the attached invoice with AI</button> <span class="text-[11px] text-slate-400">Fills the empty fields only. Check them before saving.</span></div>` : ''}</div>`)}</fieldset>` +
     vF('Litres', 'litres', r.litres, 'number', { req:1, attrs:' oninput="vehFuelCalc()"' }) + vF('Rate per litre (' + esc(vehSettings.currency) + ')', 'rate', r.rate, 'number', { attrs:' oninput="vehFuelCalc()"' }) +
     vF('Total cost (' + esc(vehSettings.currency) + ')', 'total', r.total, 'number', { req:1, attrs:' oninput="vehUpdateReqInfo()"' }) + vF('Odometer (km / hrs)', 'odometer', r.odometer, 'number') +
     vF('Fuel station', 'station', r.station) + vF('Delivery note no.', 'ref', r.poNo ? r.ref : '') +
-    vF('Filled by', 'filledBy', r.filledBy || (authUser ? authUser.name : '')) + vF('Delivery note (SharePoint link)', 'docUrl', r.docUrl, 'url') +
+    vF('Filled by', 'filledBy', r.filledBy || (authUser ? authUser.name : '')) +
     vTa('Notes', 'notes', r.notes, { span:'sm:col-span-2', rows:2 })) + vFoot(id ? 'Save changes' : 'Add fuel entry', `saveVehFuel('${id || ''}')`, id && canManageInventory() ? `vehConfirmDeleteFuel('${id}')` : ''), true);
   vehRefreshReqSelect(r.requisitionId);
 }
@@ -3097,10 +3118,10 @@ function fuelApplyInvoice(f, d){
 }
 // fuel attachments (delivery note and invoice, for PR-funded fuel): picked in the form, saved with the entry
 let fuelAtt = {};
-function fuelAttRow(k, f, label){ delete fuelAtt[k];
-  return `<div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="fuelAttPick(this, '${k}')"><span id="fuel-att-act-${k}">${f && f.fileId ? 'Replace the attached file' : '📎 ' + label}</span></label><span id="fuel-att-info-${k}" class="text-xs text-slate-500">${f && f.fileId ? '📎 ' + esc(f.fileName || 'File') + ' kept' : ''}</span></div>`; }
+function fuelAttRow(k, f, label, step, when){ delete fuelAtt[k];
+  return `${step ? `<div class="mt-3 text-xs font-semibold text-slate-600">${esc(step)} <span class="font-normal text-slate-400">— ${esc(when || '')}</span>${f && f.fileId ? ' <span class="text-emerald-600">✓</span>' : ''}</div>` : ''}<div class="mt-1 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="fuelAttPick(this, '${k}')"><span id="fuel-att-act-${k}">${f && f.fileId ? 'Replace the attached file' : '📎 ' + label}</span></label><span id="fuel-att-info-${k}" class="text-xs text-slate-500">${f && f.fileId ? '📎 ' + esc(f.fileName || 'File') + ' kept' : ''}</span></div>`; }
 async function fuelAttPick(input, k){ const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('fuel-att-info-' + k); info.textContent = 'Preparing…';
-  try{ fuelAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(fuelAtt[k]) + ' (saved when you press Save)'; document.getElementById('fuel-att-act-' + k).textContent = 'Replace file'; }
+  try{ fuelAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(fuelAtt[k]) + ' (saved when you press Save)'; document.getElementById('fuel-att-act-' + k).textContent = 'Replace file'; attReadInto(k === 'invoiceFile' ? 'vfuel' : 'vfuel-dn', files[0], info); }
   catch(e){ delete fuelAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
 const fuelFileLink = (f, label) => f && f.fileId ? `<button type="button" onclick="agOpenFile('${esc(f.fileId)}', '${esc(label)}', null)" class="text-brand-600 font-semibold hover:underline">📎 ${esc(f.fileName || label)}</button>` : '—';
 function vehRefreshReqSelect(pick){
@@ -3166,10 +3187,10 @@ function openVehServiceForm(id, kind){
   const vehSel = `<div class="sm:col-span-2"><label class="${VEH_LBL}">Vehicle${vReqStar}</label><select name="vehicleId" class="${VEH_FIELD} bg-white"><option value="">Select vehicle…</option>${vSorted().map(v => `<option value="${esc(v.id)}" ${v.id === r.vehicleId ? 'selected' : ''}>${esc(v.plate)}${vName(v) ? ' — ' + esc(vName(v)) : ''}</option>`).join('')}</select></div>`;
   const body = kind === 'periodic'
     ? vGrid(2, vehSel + vF('Service date', 'date', r.date, 'date', { req:1 }) + vS('Service type', 'serviceType', VEH_SERVICE_TYPES, r.serviceType || r.type) + vF('Odometer (km / hrs)', 'odometer', r.odometer, 'number') + vF('Workshop / vendor', 'vendor', r.vendor) +
-        vF('Cost (' + esc(vehSettings.currency) + ')', 'cost', r.cost, 'number') + vF('Invoice (SharePoint link)', 'docUrl', r.docUrl, 'url') + vF('Next service date', 'nextDate', r.nextDate, 'date') + vF('Next service odometer', 'nextOdometer', r.nextOdometer, 'number') + vTa('Work done / notes', 'notes', r.notes, { span:'sm:col-span-2' }))
+        vF('Cost (' + esc(vehSettings.currency) + ')', 'cost', r.cost, 'number') + `<div><label class="${VEH_LBL}">Invoice</label>${attRow('vdoc', r.docFile, 'Attach the invoice (PDF or photo)', r.docUrl)}</div>` + vF('Next service date', 'nextDate', r.nextDate, 'date') + vF('Next service odometer', 'nextOdometer', r.nextOdometer, 'number') + vTa('Work done / notes', 'notes', r.notes, { span:'sm:col-span-2' }))
     : vGrid(2, vehSel + vF('Date of the issue', 'date', r.date, 'date', { req:1 }) + vS('Status', 'status', VEH_ISSUE_STATUSES, r.status || 'Open') + vTa('Issue', 'issue', r.issue, { span:'sm:col-span-2', req:1, ph:'Describe what happened / what is wrong' }) +
         vF('Reported by', 'reportedBy', r.reportedBy || (authUser ? authUser.name : '')) + vF('Resolved date', 'resolvedDate', r.resolvedDate, 'date') + vF('Workshop / vendor', 'vendor', r.vendor) + vF('Repair cost (' + esc(vehSettings.currency) + ')', 'cost', r.cost, 'number') +
-        vF('Report / invoice (SharePoint link)', 'docUrl', r.docUrl, 'url', { span:'sm:col-span-2' }) + vTa('Action taken', 'notes', r.notes, { span:'sm:col-span-2' }));
+        `<div class="sm:col-span-2"><label class="${VEH_LBL}">Report / invoice</label>${attRow('vdoc', r.docFile, 'Attach the report or invoice (PDF or photo)', r.docUrl)}</div>` + vTa('Action taken', 'notes', r.notes, { span:'sm:col-span-2' }));
   openModal((id ? 'Edit ' : '') + (kind === 'periodic' ? 'periodic service' : 'incidental issue'), vFormOpen + body + vFoot(id ? 'Save changes' : 'Save record', `saveVehService('${id || ''}','${kind}')`, id && canManageInventory() ? `vehConfirmDeleteService('${id}')` : ''), true);
 }
 async function saveVehService(id, kind){
@@ -3180,7 +3201,7 @@ async function saveVehService(id, kind){
   if(id) o.id = id;
   if(vNum(o.odometer)){ const v = vehById(o.vehicleId); if(v && vNum(o.odometer) > vNum(v.mileage)) await vehSave('vehicles', { id:v.id, mileage:o.odometer }); }
   vehUi.svcTab = kind;
-  await vehSave('serviceRecords', o);
+  const srId = await vehSave('serviceRecords', o); attSaveTo('serviceRecords', srId || id, 'docFile', 'vdoc', kind);
   closeModal(); goTo('servicing'); toast('Record saved.');
 }
 function vehConfirmDeleteService(id){ closeModal(); confirmAction('Delete this service record?', async () => { await vehDelete('serviceRecords', id); toast('Deleted.'); }); }
@@ -3190,7 +3211,7 @@ function openVehSettings(){
   if(!vehRequireAdmin('change vehicle settings')) return;
   const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
   openModal('Vehicle settings', vFormOpen + vGrid(2, vF('Reminder window (days before expiry)', 'remindDays', vehSettings.remindDays, 'number', { attrs:' step="1" min="1"' }) + vF('Currency label', 'currency', vehSettings.currency) +
-    vF('SharePoint site / library URL', 'spBase', vehSettings.spBase, 'url', { span:'sm:col-span-2' }) + vF('Fueling petty cash balance (MVR)', 'fuelFloat', vehSettings.fuelPettyCashFloat != null ? vehSettings.fuelPettyCashFloat : 700, 'number') + vS('Fueling petty cash custodian', 'fuelCustodian', state.profiles.map(p => [p.uid, p.name || p.email]), vehSettings.fuelCustodianUid || '', 'Not assigned')) +
+    vF('Fueling petty cash balance (MVR)', 'fuelFloat', vehSettings.fuelPettyCashFloat != null ? vehSettings.fuelPettyCashFloat : 700, 'number') + vS('Fueling petty cash custodian', 'fuelCustodian', state.profiles.map(p => [p.uid, p.name || p.email]), vehSettings.fuelCustodianUid || '', 'Not assigned')) +
     `<div class="mt-4 text-sm text-slate-600">Desktop notifications on this device: <b>${perm}</b> ${perm === 'default' ? `<button type="button" onclick="vehEnableNotif()" class="ml-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Enable</button>` : ''}</div>
      <div class="mt-4 pt-4 border-t border-slate-100"><button type="button" onclick="openVehMigration()" class="text-sm font-semibold text-brand-600 hover:underline">Import data from the old Vehicle Management app…</button></div>` +
     vFoot('Save settings', 'saveVehSettings()'));
@@ -3204,7 +3225,7 @@ function vehEnableNotif(){
 }
 async function saveVehSettings(){
   const o = vehFormObj(document.getElementById('vform'));
-  const sp = o.spBase ? normalizeWebUrl(o.spBase) : '';
+  const sp = vehSettings.spBase || '';
   if(sp === null) return vFail('The SharePoint address must be a web address (starting with https://).');
   const fc = state.profiles.find(p => p.uid === o.fuelCustodian);
   vehSettings = Object.assign({}, vehSettings, { remindDays:Math.max(1, Math.round(vNum(o.remindDays)) || 30), currency:o.currency || 'MVR', spBase:sp, fuelPettyCashFloat:vNum(o.fuelFloat), fuelCustodianUid:o.fuelCustodian || '', fuelCustodianName:fc ? (fc.name || fc.email) : '' });     // other settings (DSA rates) are kept
@@ -3580,7 +3601,7 @@ function pcRequesterChanged(){
   pcToggleCustom(sel, 'pc-req-custom');
   const oldR = pcEditingId ? state.pettyCash.find(x => x.id === pcEditingId) : null;
   if((linked && linked.value.trim()) || trAtt.pcform || (oldR && oldR.formFile && oldR.formFile.fileId)){ box.innerHTML = '<div class="text-sm text-slate-500">The signed form is attached, so no signature is needed here.</div>'; return; }
-  if(sel.value === PC_OTHER){ box.innerHTML = '<div class="text-sm text-slate-500">This requester isn\'t a user of the app, so they sign the printed form. Attach the signed form (or add its link) above once it is signed.</div>'; return; }
+  if(sel.value === PC_OTHER){ box.innerHTML = '<div class="text-sm text-slate-500">This requester isn\'t a user of the app, so they sign the printed form. Attach the signed form above once it is signed.</div>'; return; }
   const mine = authUser && sel.value === authUser.uid;
   const old = pcEditingId ? state.pettyCash.find(x => x.id === pcEditingId) : null;       // when editing, signing again is a choice, not a default
   const signedNote = old && pcSigned(old) ? '<div class="text-[11.5px] text-amber-700 mt-2">This request is already signed. Changing it removes the signature unless you tick the box to sign it again.</div>' : '';
@@ -3791,7 +3812,7 @@ async function pcPrepareAttachment(files){
 let pcInvFuelVehs = null;                                                     // set while the Invoices window of a fueling voucher is open: [[vehicleId, label], …]
 function pcInvoiceRowHtml(inv){
   inv = inv || {}; const key = 'k' + (++pcRowCounter);
-  return `<div class="pc-irow grid grid-cols-1 sm:grid-cols-[1.6fr_1.2fr_8.25rem_6.25rem_1.5rem] gap-2 items-start mb-3" data-key="${key}" data-uid="${esc(inv.uid || '')}" data-fid="${esc(inv.fileId || '')}" data-pages="${esc(inv.filePages || 0)}" data-fname="${esc(inv.fileName || '')}">
+  return `<div class="pc-irow grid grid-cols-1 sm:grid-cols-[1.6fr_1.2fr_8.25rem_6.25rem_1.5rem] gap-2 items-start mb-3" data-key="${key}" data-uid="${esc(inv.uid || '')}" data-fid="${esc(inv.fileId || '')}" data-pages="${esc(inv.filePages || 0)}" data-fname="${esc(inv.fileName || '')}" data-link="${esc(inv.link || '')}">
     <input type="text" data-f="supplier" value="${esc(inv.supplier || '')}" placeholder="Supplier" class="${VEH_FIELD}">
     <input type="text" data-f="number" value="${esc(inv.number || '')}" placeholder="Invoice no." class="${VEH_FIELD}">
     <input type="date" data-f="date" value="${esc(inv.date || '')}" class="${VEH_FIELD}">
@@ -3799,7 +3820,7 @@ function pcInvoiceRowHtml(inv){
     <button type="button" onclick="pcRemoveInvoice(this)" class="text-slate-400 hover:text-rose-600 pt-2.5" title="Remove this invoice">✕</button>
     ${pcInvFuelVehs ? `<div class="sm:col-span-5 grid gap-x-2 gap-y-1" style="grid-template-columns:minmax(0,1fr) 7.5rem 6.5rem"><div class="text-[11px] font-semibold text-slate-500">Vehicle</div><div class="text-[11px] font-semibold text-slate-500">Rate / L (MVR)</div><div class="text-[11px] font-semibold text-slate-500">Litres</div><select data-f="vehicleId" class="${VEH_FIELD} bg-white"><option value="">Vehicle fueled…</option>${pcInvFuelVehs.map(([id, lab]) => `<option value="${esc(id)}" ${(inv.vehicleId || (pcInvFuelVehs.length === 1 ? pcInvFuelVehs[0][0] : '')) === id ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select><input type="number" data-f="rate" value="${esc(inv.rate ? inv.rate : '')}" min="0" step="any" placeholder="Rate / L (MVR)" title="Price of 1 litre in MVR" oninput="pcFuelCalc(this, 'rate')" class="${VEH_FIELD}"><input type="number" data-f="litres" value="${esc(inv.litres == null ? '' : inv.litres)}" min="0" step="any" placeholder="Litres" oninput="pcFuelCalc(this, 'litres')" class="${VEH_FIELD}"><div class="pc-fuel-calc text-xs text-slate-500 -mt-0.5" style="grid-column:1 / -1"></div></div>` : ''}
     <textarea data-f="description" rows="${Math.max(1, String(inv.description || '').split('\n').length)}" placeholder="Description for the statement — press Enter for another line, e.g. PETROL 3.577 Lt, 13.98 MVR/Lt (50.00)" oninput="this.rows = Math.max(1, this.value.split(String.fromCharCode(10)).length);${pcInvFuelVehs ? ' pcInvDescLitres(this)' : ''}" class="sm:col-span-5 resize-y ${VEH_FIELD}">${esc(inv.description || '')}</textarea>
-    <input type="text" data-f="link" value="${esc(inv.link || '')}" placeholder="Link to the invoice document, e.g. SharePoint (optional)" inputmode="url" autocomplete="off" class="veh-link sm:col-span-5 ${VEH_FIELD}">
+${inv.link && vSafeUrl(inv.link) ? `<div class="sm:col-span-5 text-[11px] text-slate-400">Saved earlier as a link: ${vLink(inv.link, 'open')}</div>` : ''}
     <div class="sm:col-span-5 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs -mt-0.5"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcRowFileChosen(this)"><span class="pc-att-act">📎 Attach the invoice file (PDF or photo)</span></label><span class="pc-att-info text-slate-500"></span><button type="button" onclick="pcRowReadAttached(this)" class="pc-att-read font-semibold text-brand-600 hover:underline hidden">Fill the boxes from this file</button><button type="button" onclick="pcRowAttachRemove(this)" class="pc-att-rm text-slate-400 hover:text-rose-600 hidden">Remove file</button></div></div>`;
 }
 function pcAttachRefresh(row){
@@ -3812,7 +3833,7 @@ function pcAttachRefresh(row){
 function pcRowAttachRemove(btn){ const row = btn.closest('.pc-irow'); delete pcAttach[row.dataset.key]; row.dataset.fid = ''; row.dataset.pages = '0'; row.dataset.fname = ''; pcAttachRefresh(row); }
 function pcReadInvoices(){
   return [...document.querySelectorAll('#pc-invoices .pc-irow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); const go = f => { const e = row.querySelector(`[data-f="${f}"]`); return e ? e.value.trim() : ''; };
-    return { key:row.dataset.key, uid:row.dataset.uid || '', vehicleId:go('vehicleId'), litres:go('litres'), rate:go('rate'), supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), link:g('link'), fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
+    return { key:row.dataset.key, uid:row.dataset.uid || '', vehicleId:go('vehicleId'), litres:go('litres'), rate:go('rate'), supplier:g('supplier'), number:g('number'), date:g('date'), amount:g('amount'), description:g('description').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), link:row.dataset.link || '', fileId:row.dataset.fid || '', filePages:+row.dataset.pages || 0, fileName:row.dataset.fname || '' }; })
     .filter(i => i.supplier || i.number || i.date || i.amount || i.description || i.link || i.fileId || pcAttach[i.key]);
 }
 function pcInvoiceRecalc(){ const el = document.getElementById('pc-inv-total'); if(el) el.textContent = fmtMVR(pcRound(pcReadInvoices().reduce((s, i) => s + vNum(i.amount), 0))); }
@@ -4088,7 +4109,7 @@ async function openPcForm(id, mode, preset){
       ${vF('Change / balance received (MVR)', 'changeAmount', d.processedDate ? (d.balanceReturned != null ? d.balanceReturned : '') : d.changeAmount, 'number')}
       <div class="text-[11.5px] text-slate-400 self-end pb-2.5" id="pc-change-hint">Printed as "Amount Handed Over" and "Balance Received" on the form.</div>
     </div>
-    <div class="mt-3.5"><label class="${VEH_LBL}">Signed petty cash request <span class="font-normal text-slate-400">(optional — attach the file or add its link)</span></label><input type="text" id="pc-form-link" name="formLink" value="${esc(d.formLink || '')}" data-has="${d.formLink ? '1' : '0'}" oninput="pcFormLinkChanged()" inputmode="url" autocomplete="off" placeholder="Link to the signed form, e.g. SharePoint" class="veh-link ${VEH_FIELD}">${trAttRow('pcform', d.formFile && d.formFile.fileId ? d.formFile : null, 'Attach the signed petty cash request (PDF or photo)')}<div class="text-[11px] text-slate-400 mt-1">If you attach or link the signed form, the requester doesn't need to sign here.</div></div>
+    <div class="mt-3.5"><label class="${VEH_LBL}">Signed petty cash request <span class="font-normal text-slate-400">(optional)</span></label><input type="hidden" id="pc-form-link" name="formLink" value="${esc(d.formLink || '')}">${d.formLink && vSafeUrl(d.formLink) ? `<div class="text-[11px] text-slate-400 mb-1">Saved earlier as a link: ${vLink(d.formLink, 'open')}</div>` : ''}${trAttRow('pcform', d.formFile && d.formFile.fileId ? d.formFile : null, 'Attach the signed petty cash request (PDF or photo)')}<div class="text-[11px] text-slate-400 mt-1">If you attach the signed form, the requester doesn't need to sign here.</div></div>
     <div class="mt-3.5"><label class="${VEH_LBL}">Requester's signature</label><div id="pc-sign-box" class="rounded-lg border border-slate-200 px-4 py-3"></div></div>
     ${vFoot(r ? 'Save changes' : 'Create request', `savePcForm('${id || ''}')`)}`, true);
   if(pcIntake && pcIntake.att){ trAtt.pcform = pcIntake.att; const inf = document.getElementById('tr-att-info-pcform'), ac = document.getElementById('tr-att-act-pcform'); if(inf) inf.textContent = '📎 ' + agAttText(pcIntake.att) + ' (the approved request — saved when you press Save)'; if(ac) ac.textContent = 'Replace file'; }
@@ -5336,19 +5357,18 @@ function pcCcRecordLoad(fundId, recId){
 }
 function openPcCcLink(fundId, recId){
   const rec = pcCcRecords(fundId).find(x => x.id === recId); if(!rec) return;
-  openModal('Document link — cash count ' + pcCcDmy(rec.date), vFormOpen + `
-    <p class="text-sm text-slate-500 mb-4">Link to the signed cash count (for example on SharePoint, OneDrive or Google Drive).</p>
-    ${vF('Document link', 'docUrl', rec.docUrl || '', 'url')}
-    ${vFoot('Save link', `savePcCcLink('${esc(fundId)}','${esc(recId)}')`)}`);
+  openModal('Signed cash count — ' + pcCcDmy(rec.date), vFormOpen + `
+    <p class="text-sm text-slate-500 mb-4">Attach the signed cash count (PDF or photo).</p>
+    ${attRow('pccc', rec.docFile, 'Attach the signed cash count (PDF or photo)', rec.docUrl)}
+    ${vFoot('Save', `savePcCcLink('${esc(fundId)}','${esc(recId)}')`)}`);
 }
 async function savePcCcLink(fundId, recId){
   if(!pcCanCount(fundId)) return vFail('Only the petty cash custodian (or an admin) can change this.');
-  const o = vehFormObj(document.getElementById('vform')), url = o.docUrl ? vSafeUrl(o.docUrl) : '';
-  if(o.docUrl && !url) return vFail('Enter a full web link starting with https://');
-  const cnt = pcCountOf(fundId); if(!cnt) return;
-  const records = (cnt.records || []).map(r => r.id === recId ? Object.assign({}, r, { docUrl: url, docLinkedBy: authUser ? authUser.name : '', docLinkedAt: Date.now() }) : r);
-  await vehSave('pettyCounts', { id: fundId, records });
-  closeModal(); rerenderMain(); toast(url ? 'Document linked.' : 'Link removed.');
+  const att = attTake('pccc'); if(!att){ closeModal(); return; }
+  closeModal(); toast('Uploading the signed cash count…');
+  attBg(att, 'Cash count', async st => { const cnt = pcCountOf(fundId); if(!cnt) return ''; let was = '';
+    const records = (cnt.records || []).map(r => { if(r.id !== recId) return r; was = r.docFile && r.docFile.fileId; return Object.assign({}, r, { docFile:st, docLinkedBy: authUser ? authUser.name : '', docLinkedAt: Date.now() }); });
+    await vehSave('pettyCounts', { id: fundId, records }); return was; });
 }
 function pcCcDeleteRecord(fundId, recId){
   if(!pcCanCount(fundId)) return;
@@ -5362,13 +5382,13 @@ function pcCcRecordsHtml(f){
   const list = pcCcRecords(f.id), can = pcCanCount(f.id);
   const rows = list.map(r => {
     const sh = r.sheet || {}, bal = Math.abs(vNum(r.diff)) < 0.005;
-    const link = r.docUrl ? vLink(r.docUrl, 'Open document') : '<span class="text-xs text-slate-400">No document</span>';
+    const link = attView(r.docFile, r.docUrl, 'Signed cash count') || '<span class="text-xs text-slate-400">No document</span>';
     return `<tr class="${vTr}">
       ${vTd(`<span class="font-semibold">${esc(isoToDmy(r.date))}</span><div class="text-[11px] text-slate-400">saved ${esc(fmtDT(r.savedAt))}${r.savedBy ? ' · ' + esc(r.savedBy) : ''}</div>`, { first:1 })}
       ${vTd(fmtMVR(r.total), { n:1 })}
       ${vTd(r.diff == null ? '—' : bal ? '<span class="text-emerald-600 text-xs font-semibold">Balanced ✓</span>' : vPill('crit', (r.diff > 0 ? 'Short ' : 'Over ') + fmtMVR(Math.abs(r.diff))))}
       ${vTd(`<div class="text-xs">${esc(sh.pName || '—')}</div><div class="text-[11px] text-slate-400">Checked: ${esc(sh.cName || '—')}</div>`)}
-      ${vTd(link + (can ? `<button onclick="openPcCcLink('${esc(f.id)}','${esc(r.id)}')" class="block text-[11px] text-brand-600 hover:underline mt-0.5">${r.docUrl ? 'Change link' : 'Add link'}</button>` : ''))}
+      ${vTd(link + (can ? `<button onclick="openPcCcLink('${esc(f.id)}','${esc(r.id)}')" class="block text-[11px] text-brand-600 hover:underline mt-0.5">${attHas(r.docFile) || r.docUrl ? 'Replace file' : '📎 Attach'}</button>` : ''))}
       ${vTd(`<button onclick="pcCcRecordPdf('${esc(f.id)}','${esc(r.id)}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><button onclick="pcCcRecordLoad('${esc(f.id)}','${esc(r.id)}')" class="text-xs font-semibold text-slate-500 hover:text-brand-600 hover:underline mr-3">Open</button>${can ? `<button onclick="pcCcDeleteRecord('${esc(f.id)}','${esc(r.id)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Delete</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}
     </tr>`;
   }).join('');
@@ -5586,7 +5606,7 @@ function openPcReplRequest(no){
     ${vGrid(2, vF('Approved by', 'hodName', r.hodName != null ? r.hodName : pcLastReplApprover().name, 'text', { attrs:' list="pr-people"' }) + vF('Approval date', 'hodDate', r.hodDate || '', 'date') + vF('Approved amount (MVR)', 'hodAmount', r.hodAmount != null ? r.hodAmount : '', 'number') + vF('Remarks', 'hodRemarks', r.hodRemarks || ''))}
     <p class="text-[11.5px] text-slate-400 mt-2">Leave the approval empty if the HOD will fill it in by hand. The Finance sections stay blank on the form.</p>
     ${vSec('Signed form')}
-    ${vF('Link to the signed form (optional)', 'docUrl', r.docUrl || '', 'url')}${trAttRow('repl', r.docFile && r.docFile.fileId ? r.docFile : null, 'Attach the signed form (PDF or photo)')}
+    ${attRow('repl', r.docFile, 'Attach the signed form (PDF or photo)', r.docUrl)}
     ${vFoot('Save request', `savePcReplRequest('${esc(no)}')`, r.number ? `deletePcReplRequest('${esc(no)}')` : '')}`, true);
 }
 async function savePcReplRequest(no){
@@ -5597,7 +5617,7 @@ async function savePcReplRequest(no){
   if(!o.date) return vFail('Enter the request date.');
   if(!String(o.reqName || '').trim()) return vFail('Enter who is requesting.');
   if(!(vNum(o.amount) > 0)) return vFail('Enter the amount.');
-  const url = o.docUrl ? vSafeUrl(o.docUrl) : ''; if(o.docUrl && !url) return vFail('Enter a full web link starting with https://');
+  const url = ((s.rec.replRequest || {}).docUrl) || '';
   const dup = state.pettyStatements.find(x => x.id !== s.rec.id && x.replRequest && pcReplNo({ no:x.no, rec:x }).toLowerCase() === String(o.number).trim().toLowerCase());
   if(dup) return vFail('Form number ' + o.number + ' is already used on statement ' + dup.no + '.');
   const prev = s.rec.replRequest || {};
@@ -6591,13 +6611,13 @@ function sdExportCsv(){
 function openSdTor(name){
   if(!canManageInventory()) return; const d = sdDesigs().find(x => x.name === name); if(!d) return;
   const who = sdAll().filter(p => String(p.designation).toLowerCase() === name.toLowerCase());
-  openModal('TOR — ' + d.name, `<div class="text-xs text-slate-400 mb-3">${esc(d.level || '')}${d.level ? ' · ' : ''}${who.length} staff: ${esc(who.map(p => p.name).join(', ') || '—')}</div>${d.tor ? `<div class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">${esc(d.tor)}</div>` : '<div class="text-sm text-slate-400">No TOR text yet.</div>'}${d.link ? `<div class="mt-4 text-sm">${vLink(d.link, 'Open the TOR document')}</div>` : ''}${(() => { const docs = state.documents.filter(x => x.type === 'tor' && String((x.extra || {}).designation || '').toLowerCase() === d.name.toLowerCase()); return docs.length ? `<div class="mt-4 text-xs text-slate-500">In Documentation: ${docs.map(x => `<button onclick="openDocView('${x.id}')" class="font-semibold text-brand-600 hover:underline">${esc(x.refNo || x.title)}${(x.extra || {}).version ? ' v' + esc(x.extra.version) : ''}</button>`).join(', ')}</div>` : ''; })()}<div class="flex justify-end mt-5"><button onclick="openSdTorList()" class="text-xs font-semibold text-brand-600 hover:underline">Edit designations & TOR</button></div>`, true);
+  openModal('TOR — ' + d.name, `<div class="text-xs text-slate-400 mb-3">${esc(d.level || '')}${d.level ? ' · ' : ''}${who.length} staff: ${esc(who.map(p => p.name).join(', ') || '—')}</div>${d.tor ? `<div class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">${esc(d.tor)}</div>` : '<div class="text-sm text-slate-400">No TOR text yet.</div>'}${attView(d.file, d.link, 'Open the TOR document') ? `<div class="mt-4 text-sm">${attView(d.file, d.link, 'Open the TOR document')}</div>` : ''}${(() => { const docs = state.documents.filter(x => x.type === 'tor' && String((x.extra || {}).designation || '').toLowerCase() === d.name.toLowerCase()); return docs.length ? `<div class="mt-4 text-xs text-slate-500">In Documentation: ${docs.map(x => `<button onclick="openDocView('${x.id}')" class="font-semibold text-brand-600 hover:underline">${esc(x.refNo || x.title)}${(x.extra || {}).version ? ' v' + esc(x.extra.version) : ''}</button>`).join(', ')}</div>` : ''; })()}<div class="flex justify-end mt-5"><button onclick="openSdTorList()" class="text-xs font-semibold text-brand-600 hover:underline">Edit designations & TOR</button></div>`, true);
 }
 function openSdTorList(){
   if(!canManageInventory()){ toast('Only admins can see the TOR.', true); return; }
   const used = [...new Set(sdAll().map(p => p.designation).filter(Boolean))], list = sdDesigs().slice(); used.forEach(u => { if(!list.some(d => d.name.toLowerCase() === u.toLowerCase())) list.push({ name:u, level:'', tor:'', link:'' }); });
-  const row = d => `<div class="sd-d rounded-lg border border-slate-200 p-3"><div class="grid grid-cols-1 sm:grid-cols-[1fr_11rem_auto] gap-2"><input value="${esc(d.name || '')}" placeholder="Designation, e.g. Senior Officer" class="sd-d-name ${VEH_FIELD} !py-1.5 font-semibold"><select class="sd-d-level ${VEH_FIELD} !py-1.5 bg-white"><option value="">Level…</option>${sdLevels().map(l => `<option ${l === d.level ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select><button type="button" onclick="this.closest('.sd-d').remove()" class="px-1.5 text-slate-400 hover:text-rose-600 text-lg leading-none">×</button></div>
-    <textarea rows="3" placeholder="Terms of reference — duties and responsibilities" class="sd-d-tor ${VEH_FIELD} text-sm mt-2">${esc(d.tor || '')}</textarea><input value="${esc(d.link || '')}" placeholder="Link to the TOR document (optional)" class="sd-d-link veh-link ${VEH_FIELD} !py-1.5 text-sm mt-2"></div>`;
+  const row = d => { const key = 'sdd' + Math.random().toString(36).slice(2, 8); return `<div class="sd-d rounded-lg border border-slate-200 p-3" data-key="${key}" data-file="${esc(d.file ? JSON.stringify(d.file) : '')}"><div class="grid grid-cols-1 sm:grid-cols-[1fr_11rem_auto] gap-2"><input value="${esc(d.name || '')}" placeholder="Designation, e.g. Senior Officer" class="sd-d-name ${VEH_FIELD} !py-1.5 font-semibold"><select class="sd-d-level ${VEH_FIELD} !py-1.5 bg-white"><option value="">Level…</option>${sdLevels().map(l => `<option ${l === d.level ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select><button type="button" onclick="this.closest('.sd-d').remove()" class="px-1.5 text-slate-400 hover:text-rose-600 text-lg leading-none">×</button></div>
+    <textarea rows="3" placeholder="Terms of reference — duties and responsibilities" class="sd-d-tor ${VEH_FIELD} text-sm mt-2">${esc(d.tor || '')}</textarea><input type="hidden" value="${esc(d.link || '')}" class="sd-d-link">${attRow(key, d.file, 'Attach the TOR document (PDF or photo)', d.link)}</div>`; };
   window.__sdRow = row;
   openModal('Designations & TOR', vFormOpen + `<p class="text-sm text-slate-500 mb-3">Visible to admins only. Each designation has a level and its terms of reference; staff with that designation take its level.</p>` +
     vSec('Staff levels (one per line, in order)') + `<textarea name="levels" rows="5" class="${VEH_FIELD}">${esc(sdLevels().join('\n'))}</textarea>` +
@@ -6605,10 +6625,11 @@ function openSdTorList(){
 }
 async function saveSdTorList(){
   const f = document.getElementById('vform'), levels = f.levels.value.split('\n').map(x => x.trim()).filter(Boolean);
-  const ds = [...f.querySelectorAll('.sd-d')].map(b => ({ name:b.querySelector('.sd-d-name').value.trim(), level:b.querySelector('.sd-d-level').value, tor:b.querySelector('.sd-d-tor').value.trim(), link:b.querySelector('.sd-d-link').value.trim() })).filter(d => d.name);
-  for(const d of ds){ if(d.link){ const u = vSafeUrl(d.link); if(!u) return vFail('The TOR link of ' + d.name + ' must start with https://'); d.link = u; } }
+  const ds = [...f.querySelectorAll('.sd-d')].map(b => ({ name:b.querySelector('.sd-d-name').value.trim(), level:b.querySelector('.sd-d-level').value, tor:b.querySelector('.sd-d-tor').value.trim(), link:b.querySelector('.sd-d-link').value.trim(), file:(() => { try{ return b.dataset.file ? JSON.parse(b.dataset.file) : null; }catch(e){ return null; } })(), _key:b.dataset.key })).filter(d => d.name);
   if(new Set(ds.map(d => d.name.toLowerCase())).size !== ds.length) return vFail('A designation is listed twice.');
+  const ups = ds.map(d => [d.name, attTake(d._key)]).filter(x => x[1]); ds.forEach(d => { delete d._key; if(!d.file) delete d.file; });
   vehSettings = Object.assign({}, vehSettings, { staffLevels:levels.length ? levels : null, designations:ds }); await persistVehSettings(); closeModal(); rerenderMain(); toast('Designations saved.');
+  ups.forEach(([name, att]) => attBg(att, 'TOR ' + name, async st => { let was = ''; vehSettings.designations = (vehSettings.designations || []).map(d => { if(d.name !== name) return d; was = d.file && d.file.fileId; return Object.assign({}, d, { file:st }); }); await persistVehSettings(); return was; }));
 }
 
 /* =====================================================================
@@ -7769,25 +7790,24 @@ function openCpEdit(id){
     vGrid(2, vF('Complaint', 'title', c ? c.title : '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="e.g. Water leakage in the 3rd floor pantry"' }) +
       `<div><label class="${VEH_LBL}">Raised by (department)${vReqStar}</label><input name="department" list="cp-depts" value="${esc(c ? c.department : (authUser && authUser.department) || '')}" class="${VEH_FIELD}"></div>` + vF('Raised by (person)', 'raisedBy', c ? c.raisedBy : (authUser ? authUser.name : ''), 'text', { attrs:' list="cp-people"' }) +
       vF('Date raised', 'date', c ? c.date : vToday(), 'date', { req:1 }) + vF('Location', 'location', c ? c.location : '', 'text') + vF('Assigned to', 'assignedTo', c ? c.assignedTo : '', 'text', { attrs:' list="cp-people"' }) + vS('Status', 'status', CP_STATUS, c ? c.status || 'Open' : 'Open') +
-      vTa('Details', 'description', c ? c.description : '', { span:'sm:col-span-2', rows:3 }) + vF('Link (photos, email…)', 'link', c ? c.link : '', 'url', { span:'sm:col-span-2' })) +
+      vTa('Details', 'description', c ? c.description : '', { span:'sm:col-span-2', rows:3 }) + `<div class="sm:col-span-2"><label class="${VEH_LBL}">Attachment (photos, email…)</label>${attRow('cpdoc', c && c.docFile, 'Attach photos or a document (PDF or images)', c && c.link)}</div>`) +
     vFoot(c ? 'Save' : 'Record complaint', `saveCpEdit('${id || ''}')`, c && canManageInventory() ? `deleteCp('${id}')` : ''), true);
 }
 async function saveCpEdit(id){
   const o = vehFormObj(document.getElementById('vform')); if(!String(o.title || '').trim()) return vFail('Enter the complaint.'); if(!String(o.department || '').trim()) return vFail('Enter the department that raised it.'); if(!o.date) return vFail('Enter the date.');
-  const url = o.link ? vSafeUrl(o.link) : ''; if(o.link && !url) return vFail('Enter a full web link starting with https://');
-  const c = id ? cpById(id) : null, status = CP_STATUS.includes(o.status) ? o.status : 'Open';
+  const c = id ? cpById(id) : null, url = (c && c.link) || '', status = CP_STATUS.includes(o.status) ? o.status : 'Open';
   if(cpDone(status) && !(c && c.resolution && c.resolution.text)) return vFail('Write the final resolution first — open the complaint and use "Resolve".');
   const rec = { id:id || undefined, title:o.title.trim(), department:o.department.trim(), raisedBy:String(o.raisedBy || '').trim(), date:o.date, location:String(o.location || '').trim(), assignedTo:String(o.assignedTo || '').trim(), status, description:String(o.description || '').trim(), link:url };
   if(!id){ rec.no = cpNextNo(); rec.processing = []; rec.history = [{ at:Date.now(), by:authUser ? authUser.name : '', text:'Raised' }]; }
   else if(c.status !== status){ rec.history = (c.history || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:'Status: ' + status }]); rec.implemented = status === 'Implemented' ? (c.implemented || { date:vToday(), by:authUser ? authUser.name : '', note:'' }) : null; }
-  const nid = await vehSave('complaints', rec); closeModal(); rerenderMain(); toast(id ? 'Saved.' : 'Complaint ' + rec.no + ' recorded.'); openCpView(id || nid);
+  const nid = await vehSave('complaints', rec); attSaveTo('complaints', nid || id, 'docFile', 'cpdoc', rec.no || (c && c.no) || 'Complaint'); closeModal(); rerenderMain(); toast(id ? 'Saved.' : 'Complaint ' + rec.no + ' recorded.'); openCpView(id || nid);
 }
 function openCpView(id, editIdx){
   const c = cpById(id); if(!c) return; const sol = c.processing || [], res = c.resolution || {}, admin = canManageInventory();
   const canEd = s => admin || !authUser || !s.by || s.by === authUser.name;                 // the person who wrote it, or an admin
   openModal((c.no ? c.no + ' · ' : '') + (c.title || ''), `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2">${cpPill(c.status)}<span class="text-xs text-slate-400">Raised ${c.date ? vDate(c.date) : ''} by ${esc(c.department || '')}${c.raisedBy ? ' (' + esc(c.raisedBy) + ')' : ''}${c.location ? ' · ' + esc(c.location) : ''}</span></div>
       <div class="inline-flex rounded-lg bg-slate-100 p-1 gap-1">${CP_STATUS.filter(s => s !== 'Resolved').map(s => `<button onclick="${s === 'Implemented' ? `cpImplemented('${c.id}')` : `cpSetCpStatus('${c.id}', '${s}')`}" class="px-3 py-1 rounded-md text-xs font-semibold ${(c.status || 'Open') === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${s}</button>`).join('')}</div></div>
-    ${c.description ? `<div class="text-sm text-slate-700 whitespace-pre-wrap mb-3">${esc(c.description)}</div>` : ''}${c.assignedTo ? `<div class="text-xs text-slate-500 mb-3">Assigned to <b>${esc(c.assignedTo)}</b></div>` : ''}${c.link ? `<div class="text-xs mb-3">${vLink(c.link, 'Attachment / link')}</div>` : ''}
+    ${c.description ? `<div class="text-sm text-slate-700 whitespace-pre-wrap mb-3">${esc(c.description)}</div>` : ''}${c.assignedTo ? `<div class="text-xs text-slate-500 mb-3">Assigned to <b>${esc(c.assignedTo)}</b></div>` : ''}${attView(c.docFile, c.link, 'Attachment') ? `<div class="text-xs mb-3">${attView(c.docFile, c.link, 'Attachment')}</div>` : ''}
     ${vSec('Processing — suggested solutions')}
     <div class="space-y-2 mb-3">${sol.length ? sol.map((s, i) => editIdx === i || editIdx === 'ch' + i ? `<div class="rounded-lg border border-brand-300 px-3.5 py-2.5">${editIdx === i ? `<label class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Suggestion</label><textarea id="cp-edit" rows="${Math.max(3, String(s.text).split('\n').length + 1)}" class="${VEH_FIELD} text-sm mt-1">${esc(s.text)}</textarea>` : `<div class="text-sm text-slate-800 whitespace-pre-wrap mb-2">${esc(s.text)}</div>`}
         <label class="block text-[11px] font-semibold uppercase tracking-wide text-amber-600 mt-2">Challenges / concerns</label><textarea id="cp-edit-ch" rows="${Math.max(2, String(s.challenge || '').split('\n').length + 1)}" placeholder="What could go wrong with this solution, risks, open questions…" class="${VEH_FIELD} text-sm mt-1">${esc(s.challenge || '')}</textarea><div class="flex justify-end gap-3 mt-2"><button onclick="openCpView('${c.id}')" class="text-xs font-semibold text-slate-500 hover:underline">Cancel</button><button onclick="cpSaveSuggestion('${c.id}', ${i}, ${editIdx === i})" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700 !py-1.5">Save</button></div></div>`
@@ -7956,7 +7976,7 @@ function viewDocs(k){
       ${noRef ? '' : vTd(`<span class="font-semibold text-slate-800 num whitespace-nowrap">${smp ? '—' : esc(d.refNo || '—')}</span>${k ? '' : `<div class="text-[11px] text-slate-400">${esc(ty.label)}</div>`}`, { first:1 })}
       ${vTd(`<div class="font-semibold text-slate-800">${esc(d.title || '—')}</div><div class="text-[11.5px] text-slate-400">${esc(docSub(d))}</div>${a ? `<div class="text-[11.5px] font-semibold mt-0.5 ${a.k === 'crit' ? 'text-rose-600' : 'text-amber-600'}">${esc(a.t)}</div>` : ''}`, noRef ? { first:1 } : undefined)}
       ${noRef ? '' : vTd(d.type === 'agreement' && k === 'agreement' ? ((d.extra || {}).startDate ? vDate(d.extra.startDate) : d.date ? vDate(d.date) : '—') + (agEffEnd(d).end ? `<div class="text-[11px] text-slate-400">to ${vDate(agEffEnd(d).end)}</div>` : '') : smp || !d.date ? '—' : vDate(d.date), { cls:'whitespace-nowrap' })}${vTd(esc(d.department || (d.type === 'tor' ? torDeptOf(d.title) : '') || '—'))}${vTd(docIsSample(d) ? vPill('', 'Sample') : docStatusPill(d.status))}
-      ${vTd(d.link ? `<a href="${esc(d.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : d.track && d.track.fileId ? '<span class="text-xs font-semibold text-slate-500" title="File attached">📎</span>' : '<span class="text-xs text-slate-400">—</span>', { last:1 })}</tr>`; }).join('');
+      ${vTd(attHas(d.docFile) ? `<button onclick="event.stopPropagation(); agOpenFile('${esc(d.docFile.fileId)}', '${esc(String(d.title || 'File').replace(/'/g, ''))}', null)" class="text-xs font-semibold text-brand-600 hover:underline">📎 Open</button>` : d.link ? `<a href="${esc(d.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open</a>` : d.track && d.track.fileId ? '<span class="text-xs font-semibold text-slate-500" title="File attached">📎</span>' : '<span class="text-xs text-slate-400">—</span>', { last:1 })}</tr>`; }).join('');
   return vHead(k ? t.plural : 'Documentation', k ? 'The ' + t.label.toLowerCase() + ' register: reference number, date, status, details and the link to the file.' : 'EXCO papers, memos, TORs, SOPs, agreements, staff request forms, letters and meeting minutes in one register.',
       (k === 'exco' ? vBtnPlain('Blank paper (Word)', "excoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "excoDownload('', 'pdf', this)") : '') + (k === 'memo' ? vBtnPlain('Blank memo (Word)', "memoDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "memoDownload('', 'pdf', this)") : '') + (k === 'srf' ? vBtnPlain('Blank form (Word)', "srfDownload('', 'docx', this)") + vBtnPlain('Blank (PDF)', "srfDownload('', 'pdf', this)") : '') + (k === 'tor' ? vBtnPlain('Blank TOR', 'openTorBlank()') : '') + (k === 'agreement' ? vBtnPlain('+ Third-party agreement', "window._agPrefill = { extra:{ thirdParty:true, remindDays:'60' } }; openDocEdit('', 'agreement')") : '') + (canManageInventory() ? vBtnPlain('Numbering', 'openDocPrefixes()') : '') + vBtnPlain('Export CSV', `docExportCsv('${k || ''}')`) + vBtnPrimary('+ ' + (k ? t.label : 'Document'), `openDocEdit('', '${k || ''}')`)) + kpis +
     `<div class="mb-4">${typeTabs}</div>${k === 'agreement' ? `<div class="inline-flex rounded-lg bg-slate-100 p-1 gap-1 mb-4">${[['', 'All agreements'], ['fdc', 'FDC agreements (' + all.filter(z => !agIsTp(z)).length + ')'], ['tp', 'Third-party (' + all.filter(agIsTp).length + ')']].map(([v, l]) => `<button onclick="vehUi.agTp='${v}'; rerenderMain()" class="px-3 py-1 rounded-md text-xs font-semibold ${(vehUi.agTp || '') === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${l}</button>`).join('')}</div>` : ''}
@@ -8315,7 +8335,7 @@ function agTrackHtml(d){
   const gen = state.documents.filter(z => z.type === 'agreement' && agX(z).kind === 'amendment' && agX(z).origRef && agX(z).origRef === d.refNo);
   const rowsA = gen.map(z => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm cursor-pointer hover:bg-slate-50" onclick="openDocView('${z.id}')"><span class="w-24 text-slate-500">${z.date ? vDate(z.date) : '—'}</span><span class="flex-1 min-w-0 truncate">${esc(z.refNo || '')} · ${esc(z.title || '')}</span>${docStatusPill(z.status)}</div>`).join('') +
     t.amendments.map((a, i) => `<div class="px-4 py-2.5 border-b border-slate-100 last:border-0 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agAmendEdit('${id}', ${i})"` : ''}><div class="flex items-center gap-3 flex-wrap"><span class="w-24 text-slate-500">${a.date ? vDate(a.date) : '—'}</span><span class="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">${esc(a.type || 'Amendment')}</span><span class="flex-1 min-w-0 font-semibold text-slate-800 truncate">${esc(a.title || a.type || 'Amendment')}${a.ref ? ' <span class="font-normal text-slate-400">· ' + esc(a.ref) + '</span>' : ''}</span>${a.status === 'Draft' ? vPill('', 'Draft') : vPill('good', esc(a.status || 'Signed'))}
-      ${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open link</a>` : ''}${a.fileId ? `<button onclick="event.stopPropagation(); agOpenFile('${a.fileId}', '${esc((a.title || 'Amendment').replace(/'/g, ''))}', '${id}')" class="text-xs font-semibold text-brand-600 hover:underline">📎 View file</button>` : ed ? `<label onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agAmQuickFile(this, '${id}', ${i})">📎 Attach PDF</label>` : ''}${!a.link && ed ? `<button onclick="event.stopPropagation(); agAmQuickLink('${id}', ${i})" class="text-xs font-semibold text-brand-600 hover:underline">🔗 Add link</button>` : ''}</div>
+      ${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">Open link</a>` : ''}${a.fileId ? `<button onclick="event.stopPropagation(); agOpenFile('${a.fileId}', '${esc((a.title || 'Amendment').replace(/'/g, ''))}', '${id}')" class="text-xs font-semibold text-brand-600 hover:underline">📎 View file</button>` : ed ? `<label onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agAmQuickFile(this, '${id}', ${i})">📎 Attach PDF</label>` : ''}</div>
       ${[a.effective && 'Effective ' + vDate(a.effective), a.newStart && 'New start ' + vDate(a.newStart), a.newEnd && 'Extended to ' + vDate(a.newEnd), String(a.newValue || '').trim() && 'Value ' + agMoney(a.newValue), a.clauses && 'Clauses ' + a.clauses].filter(Boolean).length ? `<div class="text-[12px] text-slate-500 mt-1 ml-[6.75rem]">${esc([a.effective && 'Effective ' + vDate(a.effective), a.newStart && 'New start ' + vDate(a.newStart), a.newEnd && 'Extended to ' + vDate(a.newEnd), String(a.newValue || '').trim() && 'Value ' + agMoney(a.newValue), a.clauses && 'Clauses ' + a.clauses].filter(Boolean).join(' · '))}</div>` : ''}
       ${a.note ? `<div class="text-[12.5px] text-slate-600 mt-1 ml-[6.75rem] whitespace-pre-line">${esc(a.note)}</div>` : ''}</div>`).join('');
   const EE = agEffEnd(d);
@@ -8407,7 +8427,7 @@ function agDocEdit(id, i){
   const hos = (state.handovers || []).slice().sort((a, b) => String(b.handoverDate || '').localeCompare(String(a.handoverDate || '')));
   openModal((i >= 0 ? 'Edit' : 'Add') + ' document — ' + (d.refNo || ''), vFormOpen + vGrid(2, vS('Kind', 'kind', AG_DOC_KINDS, x.kind || 'Other', null, { attrs:' onchange="document.getElementById(\'ag-ho\').classList.toggle(\'hidden\', this.value !== \'Handover\')"' }) + vF('Date', 'date', x.date || '', 'date') +
       `<div id="ag-ho" class="sm:col-span-2 ${x.kind === 'Handover' ? '' : 'hidden'}">${vS('Handover in the app (optional)', 'handoverId', hos.map(h => [h.id, [h.referenceNumber, h.handoverType, h.handoverDate ? vDate(h.handoverDate) : '', h.toStaffName || h.toDepartment].filter(Boolean).join(' · ')]), x.handoverId || '', '— none —')}</div>` +
-      vF('Title', 'title', x.title || '', 'text', { span:'sm:col-span-2', attrs:' placeholder="e.g. Handover of the Male\u2019 office premises"' }) + vF('Link (SharePoint / OneDrive)', 'link', x.link || '', 'url', { span:'sm:col-span-2' })) +
+      vF('Title', 'title', x.title || '', 'text', { span:'sm:col-span-2', attrs:' placeholder="e.g. Handover of the Male\u2019 office premises"' }) + (x.link && vSafeUrl(x.link) ? `<div class="sm:col-span-2 text-[11px] text-slate-400">Saved earlier as a link: ${vLink(x.link, 'open')}</div>` : '')) +
     `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agDocFile(this)"><span id="agd-act">${x.fileId ? 'Replace file' : '📎 Attach a file (PDF)'}</span></label><span id="agd-info" class="text-xs text-slate-500">${x.fileId ? '📎 ' + esc(x.fileName || 'File') + ' kept' : ''}</span></div>` +
     vFoot('Save', `agDocSave('${id}', ${i})`, i >= 0 ? `agDocDelete('${id}', ${i})` : ''));
 }
@@ -8415,9 +8435,9 @@ async function agDocFile(input){ const files = [...input.files]; input.value = '
   try{ agDocAtt = await agPrepare(files); info.textContent = '📎 ' + agAttText(agDocAtt); document.getElementById('agd-act').textContent = 'Replace file'; }catch(e){ agDocAtt = null; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
 async function agDocSave(id, i){
   const d = docById(id); if(!d) return; const o = vehFormObj(document.getElementById('vform')), t = agTrack(d), docs = (t.docs || []).map(z => Object.assign({}, z));
-  const link = o.link ? vSafeUrl(o.link) : ''; if(o.link && !link) return vFail('The link must start with https://');
+  const link = i >= 0 ? (docs[i].link || '') : '';
   const x = Object.assign(i >= 0 ? docs[i] : { uid:uid() }, { kind:o.kind || 'Other', date:o.date || '', title:String(o.title || '').trim(), link, handoverId:o.kind === 'Handover' ? (o.handoverId || '') : '' });
-  if(!x.title && !x.handoverId && !x.link && !x.fileId && !agDocAtt) return vFail('Add a title, a link, a file or a handover.');
+  if(!x.title && !x.handoverId && !x.link && !x.fileId && !agDocAtt) return vFail('Add a title, a file or a handover.');
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   try{ if(agDocAtt){ const st = await agStore(agDocAtt, d.refNo || '', f => { if(btn) btn.textContent = 'Uploading ' + Math.round(f * 100) + '%'; }); if(x.fileId) agFileDel(x.fileId); Object.assign(x, st); agDocAtt = null; } }
   catch(e){ if(btn) btn.disabled = false; return vFail('The file could not be saved: ' + (e && e.message ? e.message : e)); }
@@ -8427,7 +8447,7 @@ async function agDocDelete(id, i){ const d = docById(id); if(!d) return; const t
 async function agOpenDocFile(id, i){ const d = docById(id), x = d && (agTrack(d).docs || [])[i]; if(!x || !x.fileId) return; agOpenFile(x.fileId, x.title || x.kind || 'Document', id); }
 const AG_ROW = { payments:{ title:'Payment', fields:[['due', 'Due date', 'date'], ['amount', 'Amount (MVR)', 'number'], ['note', 'Description (e.g. October rent, 1st instalment)'], ['paid', 'Paid', 'check'], ['paidOn', 'Paid on', 'date'], ['ref', 'Voucher / reference']] },
   obligations:{ title:'Obligation', fields:[['who', 'Whose obligation', 'who'], ['text', 'Obligation / deliverable'], ['due', 'Due date', 'date'], ['status', 'Status', 'status']] },
-  amendments:{ title:'Amendment', fields:[['date', 'Date', 'date'], ['title', 'Title (e.g. Second Amendment)'], ['note', 'What changed'], ['link', 'Link to the signed amendment']] } };
+  amendments:{ title:'Amendment', fields:[['date', 'Date', 'date'], ['title', 'Title (e.g. Second Amendment)'], ['note', 'What changed']] } };
 function agRowEdit(id, key, i){
   const d = docById(id); if(!d) return; const C = AG_ROW[key], r = i >= 0 ? (agTrack(d)[key][i] || {}) : {};
   const fld = ([n, l, k]) => k === 'date' ? vF(l, n, r[n] || '', 'date') : k === 'number' ? vF(l, n, r[n] == null ? '' : r[n], 'number', { attrs:' step="0.01"' }) : k === 'check' ? `<label class="flex items-center gap-2 text-sm text-slate-700 pt-6"><input type="checkbox" name="${n}" value="1" ${r[n] ? 'checked' : ''}> ${l}</label>` :
@@ -8448,7 +8468,7 @@ function agAmendEdit(id, i){
     vGrid(2, vF('New start date', 'newStart', a.newStart || '', 'date') + vF('New end date (extended to)', 'newEnd', a.newEnd || '', 'date') + vF('New value / rent (MVR)', 'newValue', a.newValue || '', 'text', { attrs:' placeholder="e.g. 90,000 or 7,500 per month"' }) + vF('Notice / other period', 'period', a.period || '', 'text', { attrs:' placeholder="e.g. 2 (two) months"' }) +
       vTa('Summary of the changes', 'note', a.note || '', { span:'sm:col-span-2', rows:4, ph:'e.g. Term extended by 2 years until 31st July 2025; rent revised to MVR 7,500 per month from 1st August 2023; all other terms unchanged.' }) +
       vTa('Other details / remarks', 'remarks', a.remarks || '', { span:'sm:col-span-2', rows:2 })) +
-    vSec('Document') + vGrid(2, vF('Link to the signed amendment (SharePoint / OneDrive)', 'link', a.link || '', 'url', { span:'sm:col-span-2' })) +
+    vSec('Document') + (a.link && vSafeUrl(a.link) ? `<div class="text-[11px] text-slate-400 mb-2">Saved earlier as a link: ${vLink(a.link, 'open')}</div>` : '') +
     `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agAmFile(this)"><span id="aga-act">${a.fileId ? 'Replace file' : '📎 Attach the amendment (PDF)'}</span></label><span id="aga-info" class="text-xs text-slate-500">${a.fileId ? '📎 ' + esc(a.fileName || 'File') + ' kept' : ''}</span></div>` +
     vFoot('Save', `agAmendSave('${id}', ${i})`, i >= 0 ? `agAmendDelete('${id}', ${i})` : ''), true);
 }
@@ -8456,7 +8476,7 @@ async function agAmFile(input){ const files = [...input.files]; input.value = ''
   try{ agAmAtt = await agPrepare(files); info.textContent = '📎 ' + agAttText(agAmAtt); document.getElementById('aga-act').textContent = 'Replace file'; }catch(e){ agAmAtt = null; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
 async function agAmendSave(id, i){
   const d = docById(id); if(!d) return; const o = vehFormObj(document.getElementById('vform')), t = agTrack(d), list = t.amendments.map(z => Object.assign({}, z));
-  const link = o.link ? vSafeUrl(o.link) : ''; if(o.link && !link) return vFail('The link must start with https://');
+  const link = i >= 0 ? (list[i].link || '') : '';
   const a = Object.assign(i >= 0 ? list[i] : { uid:uid() }, { type:o.type || 'Amendment', status:o.status || 'Signed', title:String(o.title || '').trim(), ref:String(o.ref || '').trim(), date:o.date || '', effective:o.effective || '', clauses:String(o.clauses || '').trim(),
     newStart:o.newStart || '', newEnd:o.newEnd || '', newValue:String(o.newValue || '').trim(), period:String(o.period || '').trim(), note:String(o.note || '').trim(), remarks:String(o.remarks || '').trim(), link });
   if(!a.title) return vFail('Enter the title.'); if(a.newStart && a.newEnd && a.newEnd < a.newStart) return vFail('The new end date is before the new start date.');
@@ -9155,7 +9175,7 @@ function openDocEdit(id, k, torK){
       vSec('EXCO') + vGrid(2, t.fields.slice(3).map(f => docField(f, x)).join('')) + vSec('File')
      : vSec(t.label + ' details') + vGrid(2, t.fields.map(f => docField(f, x)).join('')) +
     vSec('Summary and file') + vGrid(2, vTa(k === 'minutes' ? 'Summary of discussion' : 'Summary', 'summary', d ? d.summary : '', { span:'sm:col-span-2', rows:3 }))) +
-    vGrid(2, vF('Link to the file (SharePoint / OneDrive)', 'link', d ? d.link : '', 'url', { span:'sm:col-span-2' })) + (k === 'agreement' ? agFileRow(d) : '') +
+    (k === 'agreement' ? (d && d.link && vSafeUrl(d.link) ? `<div class="text-[11px] text-slate-400 mt-2">Saved earlier as a link: ${vLink(d.link, 'open')}</div>` : '') + agFileRow(d) : `<div class="mt-3.5"><label class="${VEH_LBL}">File</label>${attRow('docfile', d && d.docFile, 'Attach the file (PDF or photo)', d && d.link)}</div>`) +
     vFoot(d ? 'Save' : 'Register', `saveDoc('${id || ''}', '${k}')`, d && canManageInventory() ? `deleteDoc('${id}')` : ''), true);
 }
 async function saveDoc(id, k){
@@ -9165,7 +9185,7 @@ async function saveDoc(id, k){
   if(!String(o.title || '').trim()) return vFail('Enter the title.'); if(!o.date) return vFail('Enter the date.');
   const dup = state.documents.find(d => d.id !== id && d.type === k && String(d.refNo || '').trim().toLowerCase() === refNo.toLowerCase()); if(dup) return vFail(refNo + ' is already used for "' + (dup.title || '') + '".');
   if(k === 'memo'){ const tm = state.travelRequests.find(x => x.dsa && String(x.dsa.memoNo || '').trim().toLowerCase() === refNo.toLowerCase()); if(tm && !id) return vFail(refNo + ' is already the DSA memo for the trip to ' + (tm.destination || '—') + '.'); }
-  const link = o.link ? vSafeUrl(o.link) : ''; if(o.link && !link) return vFail('Enter a full web link starting with https://');
+  const link = id ? ((docById(id) || {}).link || '') : '';      // a link saved before is kept; files are attached
   const extra = {}; t.fields.forEach(([n]) => { extra[n] = String((o.extra || {})[n] || '').replace(/\s+$/, '').replace(/^\n+/, ''); });
   if(k === 'exco' || k === 'memo') extra.table = exTbRead();
   if(k === 'srf') Object.keys(extra).forEach(n => delete extra[n]), Object.assign(extra, srfRead());
@@ -9182,6 +9202,7 @@ async function saveDoc(id, k){
   const upl = k === 'agreement' ? agFormAtt : null; agFormAtt = null;
   const nid = await vehSave('documents', rec); closeModal(); rerenderMain(); toast(id ? 'Saved.' : refNo + ' registered.'); openDocView(id || nid);
   if(upl) agBgUpload(id || nid, upl, refNo, (t, st) => { if(t.fileId) agFileDel(t.fileId); return Object.assign({}, t, st); });
+  else attSaveTo('documents', id || nid, 'docFile', 'docfile', refNo);
 }
 function openDocView(id){
   const d = docById(id); if(!d) return; const t = docType(d.type) || { label:d.type, fields:[] }, x = d.extra || {}, a = docAlert(d);
@@ -9196,7 +9217,7 @@ function openDocView(id){
     ${d.type === 'exco' || d.type === 'memo' ? (fn => `<div class="flex flex-wrap gap-4 mb-4"><button onclick="${fn}('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="${fn}('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>`)(d.type === 'exco' ? 'excoDownload' : 'memoDownload') : d.type === 'tor' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="torDownload('${d.id}', '', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="torDownload('${d.id}', '', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : d.type === 'srf' ? `<div class="flex flex-wrap gap-4 mb-4"><button onclick="srfDownload('${d.id}', 'docx', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="srfDownload('${d.id}', 'pdf', this)" class="text-xs font-semibold text-brand-600 hover:underline">Download PDF</button></div>` : ''}
     ${d.type === 'agreement' && (agKind(x) === 'lease' || agIsTp(d)) && (x.utilElec || x.utilWater || x.utilGas || agKind(x) === 'lease') ? `<div class="text-sm text-slate-600 mb-3"><span class="text-[11px] uppercase tracking-wide text-slate-400 mr-2">Utilities in the rent</span>${agUtilIn(x).length ? AG_UTILS.map(([n, l]) => `<span class="inline-flex items-center gap-1 mr-3 ${agUtilIn(x).includes(l) ? 'text-emerald-700 font-semibold' : 'text-slate-400 line-through'}">${agUtilIn(x).includes(l) ? '✓' : '✕'} ${l}</span>`).join('') : '<span class="text-slate-500">None — paid by the Corporation</span>'}</div>` : ''}
     ${d.type === 'agreement' ? `<div class="flex flex-wrap items-center gap-2 mb-4">${agIsTp(d) ? vPill('acc', 'Third-party agreement') : vPill('', esc((AG_KINDS[agKind(x)] || {}).label || '')) + `<button onclick="agDownload('${d.id}', 'docx', this)" class="ml-2 text-xs font-semibold text-brand-600 hover:underline">Download Word</button><button onclick="agDownload('${d.id}', 'pdf', this)" class="ml-2 text-xs font-semibold text-brand-600 hover:underline">Download PDF</button>`}</div>` + agTrackHtml(d) : ''}
-    ${smp && !d.link || d.type === 'agreement' ? '' : `<div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">${d.link ? vLink(d.link, 'Open the file') : '<span class="text-amber-600">No file linked yet — use Edit to add the SharePoint link.</span>'}</div>`}
+    ${smp && !d.link && !attHas(d.docFile) || d.type === 'agreement' ? '' : `<div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">${attView(d.docFile, d.link, 'Open the file') || '<span class="text-amber-600">No file attached yet — use Edit to attach it.</span>'}</div>`}
     <div class="flex flex-wrap gap-2 mb-4 ${smp ? 'hidden' : ''}">${DOC_STATUS.filter(s => s !== (d.status || 'Draft')).slice(0, 8).map(s => `<button onclick="docSetStatus('${d.id}', '${s}')" class="px-2.5 py-1 rounded-md border border-slate-200 text-[11.5px] font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700">${s}</button>`).join('')}</div>
     ${(d.history || []).length ? `<div class="text-[11px] text-slate-400">${(d.history || []).slice(-5).map(h => esc(h.text) + ' · ' + esc(h.by || '') + ' ' + fmtD(h.at)).join(' — ')}</div>` : ''}
     <div class="flex justify-end gap-4 pt-3 mt-4 border-t border-slate-100">${canManageInventory() ? `<button onclick="deleteDoc('${d.id}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Delete</button>` : ''}<button onclick="openDocEdit('${d.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button></div>`, true);
@@ -9843,7 +9864,7 @@ function baDetail(r){
   return `<div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.baId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All business advances</button>
       <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${esc(r.title || 'Business Advance')} ${vPill(r.status === 'Settled' ? '' : 'acc', esc(r.status || 'Open'), 'align-middle')}</h1>
       <p class="text-sm text-slate-500 mt-0.5">${esc([r.no, r.holder && 'held by ' + r.holder + (r.department ? ' (' + r.department + ')' : ''), r.date && 'issued ' + vDate(r.date), r.ref && 'ref. ' + r.ref].filter(Boolean).join(' · '))}</p>${r.notes ? `<p class="text-sm text-slate-600 mt-1 whitespace-pre-line">${esc(r.notes)}</p>` : ''}</div>
-    <div class="flex gap-2.5 flex-wrap">${vBtnPlain('Excel', `baXlsxDownload('${r.id}', this)`)}${vBtnPlain('Statement (Excel)', `baXlsxDownload('${r.id}', this, 'cat')`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
+    <div class="flex gap-2.5 flex-wrap">${vBtnPlain('Excel', `baXlsxAsk('${r.id}')`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">${card('Current Balance', vMoney(t.balance), t.balance < 0 ? 'text-rose-600' : 'text-emerald-700')}${card('Total Spent', vMoney(t.spent))}${card('Total Received', vMoney(t.received))}${card('Pending Invoice', fmtNum(t.pending), t.pending ? 'text-amber-600' : 'text-slate-900')}</div>
     ${vPanel('Entries', ed ? `<button onclick="openBaEntry('${r.id}', '', 'Received')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">+ Money received</button><button onclick="openBaEntry('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Payment (transferred)</button>` : '',
       es.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Staff Name / Department' }, { t:'Type' }, { t:'Amount', n:1 }, { t:'Details' }, { t:'Invoice' }, { t:'Net', n:1 }, { t:'Remarks' }])}<tbody>${rows}</tbody></table></div>` : vEmpty('No entries yet. Add the money received, then each payment with its invoice.'))}
@@ -9882,7 +9903,7 @@ function openBaEntry(id, euid, type){
       `<div class="sm:col-span-2"><label class="${VEH_LBL}">Staff name / department (or supplier paid)${vReqStar}</label><input name="party" list="ba-parties" value="${esc(d.party || '')}" class="${VEH_FIELD}" placeholder="e.g. Sonee Hardware"></div>` +
       vF('Amount (MVR)', 'amount', d.amount == null ? '' : d.amount, 'number', { req:1, attrs:' step="0.01" min="0"' }) + vS('Invoice status', 'invoice', [['', '— Not needed'], ['Pending', 'Pending'], ['Received', 'Received']], d.invoice || '') +
       vS('Expense category', 'category', [['', '— Not set (Other)']].concat(BA_CATS.map(c => [c, c])), d.category || '') + vF('Voucher no. (optional)', 'voucher', d.voucher || '', 'text') +
-      vTa('Details', 'details', d.details || '', { rows:3, span:'sm:col-span-2', ph:'Items bought — one per line' }) + (AI_READ_URL ? `<div class="sm:col-span-2 -mt-2"><button type="button" onclick="aiTidyField(this, 'details')" class="text-xs font-semibold text-brand-600 hover:underline">Tidy the details with AI</button></div>` : '') + vF('Remarks (invoice no.)', 'remarks', d.remarks || '', 'text') + vF('Invoice link (optional)', 'link', d.link || '', 'text', { attrs:' placeholder="https://…"' })) +
+      vTa('Details', 'details', d.details || '', { rows:3, span:'sm:col-span-2', ph:'Items bought — one per line' }) + (AI_READ_URL ? `<div class="sm:col-span-2 -mt-2"><button type="button" onclick="aiTidyField(this, 'details')" class="text-xs font-semibold text-brand-600 hover:underline">Tidy the details with AI</button></div>` : '') + vF('Remarks (invoice no.)', 'remarks', d.remarks || '', 'text') + (d.link && vSafeUrl(d.link) ? `<div class="text-[11px] text-slate-400 self-end pb-3">Saved earlier as a link: ${vLink(d.link, 'open')}</div>` : '')) +
     `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm"><div class="flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baFileChosen(this, '${id}', '${euid || ''}')"><span id="ba-att-act">${e && e.fileId ? 'Replace invoice file' : '📎 Attach the invoice (PDF or photo)'}</span></label>
       <span id="ba-att-info" class="text-slate-500 text-xs">${e && e.fileId ? '📎 ' + esc(e.fileName || 'Invoice') + ' · ' + (e.filePages || 1) + ' page' + ((e.filePages || 1) === 1 ? '' : 's') + ' kept' : ''}</span>${e && e.fileId ? `<button type="button" id="ba-att-rm" onclick="baAttRemove()" class="text-xs text-slate-400 hover:text-rose-600">Remove file</button>` : ''}</div>
       <div id="ba-att-status" class="text-[11.5px] text-slate-400 mt-1">Attaching marks the invoice as received and fills the empty boxes from it.</div></div>` +
@@ -9904,7 +9925,7 @@ async function baFileChosen(input, id, euid){
 async function saveBaEntry(id, euid){
   const r = baById(id); if(!r) return; const o = vehFormObj(document.getElementById('vform'));
   if(!o.date) return vFail('Enter the date.'); if(!String(o.party || '').trim()) return vFail('Enter the staff name / department or supplier.'); if(!(vNum(o.amount) > 0)) return vFail('Enter the amount.');
-  const link = o.link ? vSafeUrl(o.link) : ''; if(o.link && !link) return vFail('The invoice link must be a web address starting with https://');
+  const link = (euid && ((r.entries || []).find(x => x.uid === euid) || {}).link) || '';      // a link saved before is kept; invoices are attached
   const entries = (r.entries || []).map(x => Object.assign({}, x)), old = euid ? entries.find(x => x.uid === euid) : null;
   const e = Object.assign(old || { uid:uid(), at:Date.now() }, { date:o.date, type:BA_TYPES.includes(o.type) ? o.type : 'Transferred', party:o.party.trim(), amount:vNum(o.amount), details:String(o.details || '').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), invoice:o.invoice || '', remarks:String(o.remarks || '').trim(), link, category:BA_CATS.includes(o.category) ? o.category : '', voucher:String(o.voucher || '').trim() });
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
@@ -9929,6 +9950,11 @@ async function openBaInvoice(id, euid){
 }
 
 /* ---------- Excel: the business advance statement in the finance sample layout, with its formulas ---------- */
+// one Excel button: choose the layout
+function baXlsxAsk(id){
+  const opt = (mode, title, sub) => `<button onclick="baXlsxDownload('${id}', this, '${mode}')" class="w-full text-left rounded-lg border border-slate-200 hover:border-brand-400 hover:bg-brand-50 px-4 py-3 mb-2.5"><div class="text-sm font-semibold text-slate-800">${title}</div><div class="text-xs text-slate-500 mt-0.5">${sub}</div></button>`;
+  openModal('Download Excel', opt('cat', 'Statement by expense category', 'The finance statement layout: a column for each expense category, the reconciliation and the cash count.') + opt('', 'Ledger of entries', 'Every entry in date order: money received, paid out and the running total, with the invoice status.'));
+}
 async function baXlsxDownload(id, btn, mode){
   const r = baById(id); if(!r) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
   try{ downloadBlob(await buildBaXlsx(r, mode), (mode === 'cat' ? 'Business Advance Statement - ' : 'Business Advance - ') + baFile(r) + '.xlsx'); }
@@ -10243,7 +10269,7 @@ function viewCleaning(){
   const avg = stats.length ? Math.round(stats.reduce((t, x) => t + x.st.pct, 0) / stats.length) : 0, last = clIsoAdd(week, -7);
   const lastLocs = locs.filter(l => clSetBefore(l.id, last)), lastSigned = lastLocs.filter(l => { const s = clStats(l.id, last); return s.signed || s.complete; }).length;
   const kpis = vKpis(statCard('Locations', fmtNum(locs.length), 'With a cleaning checklist', 'brand') + statCard('This week', avg + '%', 'Tasks ticked, all locations', avg >= 90 ? 'emerald' : avg ? 'amber' : 'slate') +
-    statCard('Signed copies', fmtNum(stats.filter(x => x.st.signed).length) + ' / ' + locs.length, 'Linked for this week', 'slate') + statCard('Last week', lastLocs.length ? lastSigned + ' / ' + lastLocs.length : '—', 'Completed or signed copy linked', lastSigned < lastLocs.length ? 'amber' : 'emerald'));
+    statCard('Signed copies', fmtNum(stats.filter(x => x.st.signed).length) + ' / ' + locs.length, 'Attached for this week', 'slate') + statCard('Last week', lastLocs.length ? lastSigned + ' / ' + lastLocs.length : '—', 'Completed or signed copy linked', lastSigned < lastLocs.length ? 'amber' : 'emerald'));
   const nav = `<div class="flex items-center gap-2 flex-wrap mb-5"><button onclick="vehUi.clWeek = clIsoAdd(vehUi.clWeek, -7); rerenderMain()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">‹</button>
       <div class="text-sm font-bold text-slate-900 px-2">Week of ${clWeekLabel(week)}</div><button onclick="vehUi.clWeek = clIsoAdd(vehUi.clWeek, 7); rerenderMain()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">›</button>
       ${week !== clWeekStart(vToday()) ? `<button onclick="vehUi.clWeek = clWeekStart(vToday()); rerenderMain()" class="text-xs font-semibold text-brand-600 hover:underline ml-1">This week</button>` : ''}
@@ -10252,7 +10278,7 @@ function viewCleaning(){
       <div class="flex items-center justify-between gap-2"><span class="font-bold text-slate-900 truncate">${esc(l.name)}</span><span class="text-sm font-extrabold num ${st.pct >= 90 ? 'text-emerald-600' : 'text-slate-700'}">${st.pct}%</span></div>
       <div class="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden"><div class="h-full rounded-full" style="width:${st.pct}%;background:${st.pct >= 90 ? '#10b981' : st.pct >= 50 ? '#f59e0b' : '#94a3b8'}"></div></div>
       <div class="flex items-center justify-between gap-2 mt-2"><span class="text-[11px] text-slate-400">${st.done} of ${st.total} tasks</span>${clStatusPill(st)}</div></button>`).join('')}</div>` : '';
-  const head = vHead('Cleaning Checklist', 'Weekly cleaning checklists by location: tick the tasks here, or print the checklist and link the signed copy.',
+  const head = vHead('Cleaning Checklist', 'Weekly cleaning checklists by location: tick the tasks here, or print the checklist and attach the signed copy.',
     (admin ? vBtnPlain('+ Location checklist', `openClSetup('')`) : ''));
   if(!locs.length) return head + `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No cleaning checklists yet. Set up a location with its rooms and the tasks in each.' + (admin ? `<div class="mt-4 flex flex-wrap justify-center gap-2.5">${vBtnPrimary('+ Set up a location', `openClSetup('')`)}${vBtnPlain('Use the Apollo Tower checklist', 'clSeed()')}</div>` : ''))}</div>`;
   return head + kpis + nav + cards + (loc ? clWeekPanel(loc, week) : '');
@@ -10302,20 +10328,20 @@ const clSigned = sh => !!(sh && (sh.docUrl || (sh.docFile && sh.docFile.fileId))
 async function clSetComplete(locId, week, on){ const sh = await clEnsureSheet(locId, week); await vehSave('cleaningSheets', { id:sh.id, complete:!!on, completedBy:on ? (authUser ? authUser.name : '') : '', completedAt:on ? Date.now() : 0 }); rerenderMain(); toast(on ? 'Week marked complete.' : 'Week reopened.'); }
 function openClLink(locId, week){
   const sh = clSheet(locId, week);
-  openModal('Signed checklist — ' + ((getLocation(locId) || {}).name || ''), vFormOpen + `<p class="text-sm text-slate-500 mb-4">Week of ${clWeekLabel(week)}. Attach the scanned or photographed signed checklist, or link it (e.g. on SharePoint).</p>` +
+  openModal('Signed checklist — ' + ((getLocation(locId) || {}).name || ''), vFormOpen + `<p class="text-sm text-slate-500 mb-4">Week of ${clWeekLabel(week)}. Attach the scanned or photographed signed checklist.</p>` +
     `<label class="${VEH_LBL}">Signed checklist</label>${trAttRow('cl', sh && sh.docFile && sh.docFile.fileId ? sh.docFile : null, 'Attach the signed checklist (PDF or photo)')}` +
-    `<div class="mt-3.5">${vF('Link to the signed checklist (optional)', 'docUrl', sh ? sh.docUrl : '', 'url')}</div><div class="mt-3.5">${vTa('Note', 'notes', sh ? sh.notes : '', { rows:2 })}</div>` +
+    `${sh && sh.docUrl && vSafeUrl(sh.docUrl) ? `<div class="text-[11px] text-slate-400 mt-1">Saved earlier as a link: ${vLink(sh.docUrl, 'open')}</div>` : ''}<div class="mt-3.5">${vTa('Note', 'notes', sh ? sh.notes : '', { rows:2 })}</div>` +
     `<label class="mt-4 flex items-start gap-2.5 text-sm text-slate-700 cursor-pointer"><input type="checkbox" id="cl-complete" checked class="mt-1"><span><span class="font-semibold">Mark the week as completed</span><span class="block text-xs text-slate-400">The checklist is done and signed for this week.</span></span></label>` +
     vFoot('Save', `saveClLink('${esc(locId)}', '${week}')`));
 }
 async function saveClLink(locId, week){
-  const o = vehFormObj(document.getElementById('vform')), url = o.docUrl ? vSafeUrl(o.docUrl) : ''; if(o.docUrl && !url) return vFail('Enter a full web link starting with https://');
+  const o = vehFormObj(document.getElementById('vform')), cur0 = clSheet(locId, week), url = (cur0 && cur0.docUrl) || '';
   const att = trAtt.cl;
   const done = document.getElementById('cl-complete').checked;
   const sh = await clEnsureSheet(locId, week); await vehSave('cleaningSheets', Object.assign({ id:sh.id, docUrl:url, notes:o.notes || '', linkedBy:authUser ? authUser.name : '', linkedAt:Date.now() },
     done ? (sh.complete ? {} : { complete:true, completedBy:authUser ? authUser.name : '', completedAt:Date.now() }) : (sh.complete ? { complete:false } : {})));
   delete trAtt.cl; if(att) clBgUpload(sh.id, att);
-  closeModal(); rerenderMain(); toast((att ? 'Signed checklist attached' : url ? 'Signed checklist linked' : 'Saved') + (done ? ' — week marked complete.' : '.'));
+  closeModal(); rerenderMain(); toast((att ? 'Signed checklist attached' : 'Saved') + (done ? ' — week marked complete.' : '.'));
 }
 // the signed checklist kept with the week (original PDF or photos), uploaded in the background
 async function clBgUpload(id, att){
@@ -10473,6 +10499,80 @@ function vlRange(){
   if(!vehUi.vlTo) vehUi.vlTo = vToday();
   return { from:vehUi.vlFrom <= vehUi.vlTo ? vehUi.vlFrom : vehUi.vlTo, to:vehUi.vlFrom <= vehUi.vlTo ? vehUi.vlTo : vehUi.vlFrom };
 }
+/* ---------- location tracking from the driver's phone: a link per trip opens a Start / Stop screen;
+   Start and Stop record the phone's location with the time, and the route is sampled while the screen stays open ---------- */
+const vlTrk = l => (l && l.track) || {};
+const vlMap = p => p ? 'https://www.google.com/maps?q=' + p.lat + ',' + p.lng : '';
+const vlTime = at => at ? new Date(at).toLocaleString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).replace(',', '') : '';
+function vlKm(pts){ let d = 0; for(let i = 1; i < pts.length; i++){ const a = pts[i - 1], b = pts[i], R = 6371, r = x => x * Math.PI / 180, dl = r(b.lat - a.lat), dg = r(b.lng - a.lng); const h = Math.sin(dl / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dg / 2) ** 2; d += 2 * R * Math.asin(Math.sqrt(h)); } return d; }
+const vlPts = l => { const t = vlTrk(l); return [t.start].concat(t.points || [], [t.end]).filter(Boolean); };
+function vlTrackBadge(l){ const t = vlTrk(l); if(!t.start) return ''; return `<div><button onclick="openVlTrackView('${l.id}')" class="text-[11px] font-semibold ${t.end ? 'text-emerald-600' : 'text-amber-600'} hover:underline">📍 ${t.end ? 'Tracked · ' + vlKm(vlPts(l)).toFixed(1) + ' km' : 'Tracking now'}</button></div>`; }
+const vlTrackUrl = id => location.origin + location.pathname + '?track=' + encodeURIComponent(id);
+function openVlTrackLink(id){
+  const l = state.vehicleLogs.find(x => x.id === id); if(!l) return; const v = vehById(l.vehicleId), url = vlTrackUrl(id), msg = 'Vehicle ' + vLabel(v) + (l.destination ? ' to ' + l.destination : '') + ': open this link on your phone and press Start tracking when you leave, Stop tracking when you are back.\n' + url;
+  openModal('Tracking link — ' + vLabel(v), `<p class="text-sm text-slate-500 mb-3">Send this link to the driver${l.driver ? ' (<b>' + esc(l.driver) + '</b>)' : ''}. On the phone it opens a screen with <b>Start tracking</b> and <b>Stop tracking</b> — each records the phone's location and the time. While the screen stays open, the route is recorded too. The driver signs in to the app once on the phone.</p>
+    <div class="flex gap-2 mb-3"><input id="vl-trk-url" readonly value="${esc(url)}" class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-300 text-sm"><button class="px-3 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="navigator.clipboard.writeText(document.getElementById('vl-trk-url').value).then(() => toast('Link copied.'))">Copy</button></div>
+    <div class="flex flex-wrap gap-2.5">${navigator.share ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick='navigator.share({ title:"Vehicle tracking", text:${esc(JSON.stringify(msg))} }).catch(() => {})'>Share…</button>` : ''}<a target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">WhatsApp</a><button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="openVlTracker('${id}')">Open the tracker here</button>${vlTrk(l).start ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="openVlTrackView('${id}')">View the route</button>` : ''}</div>`);
+}
+// saving a tracking point: straight to the trip (drivers with view-only access can still record their trip)
+async function vlTrackSave(id, patch){ const i = state.vehicleLogs.findIndex(x => x.id === id); if(i < 0) return; const l = state.vehicleLogs[i], rec = Object.assign({}, l, { track:Object.assign({}, vlTrk(l), patch), updatedAt:Date.now() }); state.vehicleLogs[i] = rec; await vehPersist('vehicleLogs', rec); }
+const vlGeo = () => new Promise((res, rej) => { if(!navigator.geolocation) return rej(new Error('this device has no location')); navigator.geolocation.getCurrentPosition(p => res({ lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6), acc:Math.round(p.coords.accuracy || 0), at:Date.now() }), e => rej(new Error(e.code === 1 ? 'location permission was refused — allow location for this site in the browser settings' : e.message || 'location not available')), { enableHighAccuracy:true, timeout:20000, maximumAge:0 }); });
+let vlWatch = null, vlWake = null, vlLastFix = null;
+function vlStopWatch(){ if(vlWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(vlWatch); vlWatch = null; try{ if(vlWake) vlWake.release(); }catch(e){} vlWake = null; }
+async function vlStartWatch(id){
+  vlStopWatch(); if(!navigator.geolocation) return;
+  try{ if(navigator.wakeLock) vlWake = await navigator.wakeLock.request('screen'); }catch(e){}
+  let last = null;
+  vlWatch = navigator.geolocation.watchPosition(async p => {
+    const pt = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6), acc:Math.round(p.coords.accuracy || 0), at:Date.now() };
+    vlLastFix = pt; if(pt.acc > 150) return;
+    if(last && pt.at - last.at < 60000 && vlKm([last, pt]) < 0.2) return;            // a point a minute, or every 200 m
+    last = pt; const l = state.vehicleLogs.find(x => x.id === id); if(!l || vlTrk(l).end){ vlStopWatch(); return; }
+    await vlTrackSave(id, { points:(vlTrk(l).points || []).concat([pt]).slice(-500) }); vlTrackerPaint(id);
+  }, () => {}, { enableHighAccuracy:true, maximumAge:15000, timeout:30000 });
+}
+function vlTrackerHtml(id){
+  const l = state.vehicleLogs.find(x => x.id === id); if(!l) return vEmpty('This trip was not found.');
+  const v = vehById(l.vehicleId), t = vlTrk(l), pts = vlPts(l), big = 'w-full py-5 rounded-2xl text-lg font-extrabold text-white';
+  return `<div id="vl-trk" class="text-center">
+    <div class="text-2xl font-extrabold text-slate-900">${esc(vLabel(v))}</div><div class="text-sm text-slate-500 mb-4">${esc([v && vName(v), l.destination && 'to ' + l.destination, l.driver && 'driver ' + l.driver].filter(Boolean).join(' · '))}</div>
+    ${!t.start ? `<button onclick="vlTrackStart('${id}', this)" class="${big} bg-emerald-600 hover:bg-emerald-700">▶ Start tracking</button><p class="text-xs text-slate-400 mt-3">Records where you are now, with the time. Keep this screen open during the trip to record the route.</p>`
+      : !t.end ? `<div class="rounded-xl bg-emerald-50 text-emerald-800 px-4 py-3 mb-4 text-sm"><b>Tracking</b> since ${esc(vlTime(t.start.at))}<div class="text-xs mt-0.5">${(t.points || []).length} route point${(t.points || []).length === 1 ? '' : 's'} · ${vlKm(pts).toFixed(1)} km so far${vlWatch != null ? ' · recording' : ' · keep this screen open to record the route'}</div></div>
+        <button onclick="vlTrackStop('${id}', this)" class="${big} bg-rose-600 hover:bg-rose-700">■ Stop tracking</button>
+        <label class="flex items-center justify-center gap-2 text-sm text-slate-600 mt-3"><input type="checkbox" id="vl-trk-ret" ${l.inDate ? 'disabled' : 'checked'}> Also record the vehicle as returned</label>${vlWatch == null ? `<button onclick="vlStartWatch('${id}'); setTimeout(() => vlTrackerPaint('${id}'), 300)" class="mt-3 text-sm font-semibold text-brand-600 hover:underline">Resume recording the route</button>` : ''}`
+      : `<div class="rounded-xl bg-slate-100 text-slate-700 px-4 py-3 text-sm"><b>Trip finished.</b><div class="mt-1">Started ${esc(vlTime(t.start.at))} · stopped ${esc(vlTime(t.end.at))} · ${vlKm(pts).toFixed(1)} km</div></div>`}
+    ${t.start ? `<div class="mt-4 text-xs"><a target="_blank" rel="noopener" href="${vlMap(t.start)}" class="font-semibold text-brand-600 hover:underline">Start location ↗</a>${t.end ? ` · <a target="_blank" rel="noopener" href="${vlMap(t.end)}" class="font-semibold text-brand-600 hover:underline">Stop location ↗</a>` : ''}</div>` : ''}
+  </div>`;
+}
+function vlTrackerPaint(id){ const el = document.getElementById('vl-trk'); if(el) el.outerHTML = vlTrackerHtml(id); }
+function openVlTracker(id){ openModal('Vehicle tracking', vlTrackerHtml(id)); const l = state.vehicleLogs.find(x => x.id === id); if(l && vlTrk(l).start && !vlTrk(l).end && vlWatch == null) vlStartWatch(id).then(() => vlTrackerPaint(id)); }
+async function vlTrackStart(id, btn){
+  btn.disabled = true; btn.textContent = 'Getting your location…';
+  try{ const p = await vlGeo(); await vlTrackSave(id, { start:Object.assign(p, { by:authUser ? authUser.name : '' }), points:[], end:null }); await vlStartWatch(id); toast('Tracking started.'); }
+  catch(e){ toast('Could not start: ' + (e.message || e), true); }
+  vlTrackerPaint(id);
+}
+async function vlTrackStop(id, btn){
+  btn.disabled = true; btn.textContent = 'Getting your location…'; const ret = document.getElementById('vl-trk-ret');
+  try{ const fresh = vlLastFix && Date.now() - vlLastFix.at < 30000 ? Object.assign({}, vlLastFix, { at:Date.now() }) : null; vlStopWatch(); const p = fresh || await vlGeo(); await vlTrackSave(id, { end:Object.assign(p, { by:authUser ? authUser.name : '' }) });
+    const l = state.vehicleLogs.find(x => x.id === id);
+    if(ret && ret.checked && l && !l.inDate){ const d = new Date(p.at), rec = Object.assign({}, l, { inDate:localDateStr(d), inTime:String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') }); state.vehicleLogs[state.vehicleLogs.indexOf(l)] = rec; await vehPersist('vehicleLogs', rec); }
+    toast('Tracking stopped.'); rerenderMain(); }
+  catch(e){ toast('Could not stop: ' + (e.message || e), true); }
+  vlTrackerPaint(id);
+}
+function openVlTrackView(id){
+  const l = state.vehicleLogs.find(x => x.id === id); if(!l) return; const v = vehById(l.vehicleId), t = vlTrk(l), pts = vlPts(l);
+  const route = pts.length >= 2 ? 'https://www.google.com/maps/dir/' + (pts.length > 24 ? pts.filter((p, i) => i % Math.ceil(pts.length / 23) === 0 || i === pts.length - 1) : pts).map(p => p.lat + ',' + p.lng).join('/') : '';
+  const row = (lab, p) => `<div class="flex items-center justify-between gap-3 py-2 border-t border-slate-100"><div><div class="text-[11px] uppercase tracking-wide text-slate-400">${lab}</div><div class="text-sm font-semibold text-slate-800">${p ? esc(vlTime(p.at)) : '—'}</div>${p ? `<div class="text-[11px] text-slate-400">${p.lat}, ${p.lng}${p.acc ? ' · ±' + p.acc + ' m' : ''}${p.by ? ' · ' + esc(p.by) : ''}</div>` : ''}</div>${p ? `<a target="_blank" rel="noopener" href="${vlMap(p)}" class="text-xs font-semibold text-brand-600 hover:underline">Map ↗</a>` : ''}</div>`;
+  openModal('Route — ' + vLabel(v), `<div class="text-sm text-slate-500 mb-2">${esc([l.destination, l.driver && 'driver ' + l.driver, vDate(l.outDate)].filter(Boolean).join(' · '))}</div>
+    ${row('Start tracking', t.start)}${row('Stop tracking', t.end)}
+    <div class="py-2 border-t border-slate-100 text-sm text-slate-600">${(t.points || []).length} route point${(t.points || []).length === 1 ? '' : 's'} · about <b>${vlKm(pts).toFixed(1)} km</b>${t.start && t.end ? ' · ' + vlDur(Math.max(1, Math.round((t.end.at - t.start.at) / 60000))) : ''}</div>
+    <div class="flex flex-wrap gap-2.5 mt-3">${route ? `<a target="_blank" rel="noopener" href="${route}" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Open the route in Google Maps</a>` : ''}<button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="openVlTrackLink('${id}')">Tracking link</button></div>`);
+}
+// opening the app with ?track=<trip>: the tracker opens once signed in and the trip is loaded
+(function(){ try{ const id = new URLSearchParams(location.search).get('track'); if(!id) return; let n = 0; const tm = setInterval(() => { n++; const l = authUser && state.vehicleLogs && state.vehicleLogs.find(x => x.id === id);
+  if(l){ clearInterval(tm); history.replaceState(null, '', location.pathname + location.hash); openVlTracker(id); } else if(n > 600) clearInterval(tm); }, 1000); }catch(e){} })();
 function viewVehicleLog(){
   const R = vlRange(), veh = vehUi.vlVeh || '', q = String(vehUi.vlQ || '').toLowerCase().trim();
   const all = state.vehicleLogs, open = all.filter(vlOpen).sort((a, b) => vlOutAt(a).localeCompare(vlOutAt(b)));
@@ -10486,16 +10586,16 @@ function viewVehicleLog(){
   const rows = list.map(l => { const v = vehById(l.vehicleId); return `<tr class="${vTr}">
     ${vTd(`<span class="font-semibold">${esc(vLabel(v))}</span><div class="text-[11px] text-slate-400">${esc(v ? vName(v) : '')}</div>`, { first:1 })}
     ${vTd(`${esc(l.staffName || '—')}${l.department ? `<div class="text-[11px] text-slate-400">${esc(l.department)}</div>` : ''}`)}${vTd(esc(l.driver || '—'), { cls:'text-slate-600' })}${vTd(esc(l.destination || '—'))}${vTd(`<div class="max-w-[14rem] text-slate-600">${esc(l.purpose || '—')}</div>`)}
-    ${vTd(outCell(l), { cls:'whitespace-nowrap' })}
+    ${vTd(outCell(l) + vlTrackBadge(l), { cls:'whitespace-nowrap' })}
     ${vTd(vlOpen(l) ? vPill('warn', 'Out') : `${vDate(l.inDate)} <span class="text-slate-400">${esc(l.inTime || '')}</span>`, { cls:'whitespace-nowrap' })}
     ${vTd(vlOpen(l) ? '' : vlDur(vlMinutes(l)), { cls:'whitespace-nowrap text-slate-500' })}
-    ${vTd(`${vlOpen(l) ? `<button onclick="openVlReturn('${l.id}')" class="text-xs font-semibold text-emerald-600 hover:underline mr-2.5">Return</button>` : ''}<button onclick="openVlForm('${l.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">Edit</button>${canManageInventory() ? `<button onclick="deleteVl('${l.id}')" class="text-xs font-semibold text-rose-600 hover:underline">Delete</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}
+    ${vTd(`<button onclick="openVlTrackLink('${l.id}')" title="Location tracking link for the driver's phone" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">📍 Track</button>${vlOpen(l) ? `<button onclick="openVlReturn('${l.id}')" class="text-xs font-semibold text-emerald-600 hover:underline mr-2.5">Return</button>` : ''}<button onclick="openVlForm('${l.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-2.5">Edit</button>${canManageInventory() ? `<button onclick="deleteVl('${l.id}')" class="text-xs font-semibold text-rose-600 hover:underline">Delete</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}
   </tr>`; }).join('');
   return `
     ${vHead('Vehicle Log', 'Who takes each vehicle, where and why, and when it comes back. Generate the Vehicle Request Log sheet for any vehicle.',
       vBtnPlain('Generate log (PDF)', 'openVlGenerate()') + vBtnPrimary('+ Vehicle out', 'openVlForm()'))}
     ${kpis}
-    ${open.length ? vPanel('Out now', 'Record the return when the vehicle is back', `<div class="divide-y divide-slate-100">${open.map(l => { const v = vehById(l.vehicleId); return `<div class="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap"><div><span class="font-bold text-slate-800">${esc(vLabel(v))}</span> <span class="text-sm text-slate-600">· ${esc(l.staffName || '—')}${l.department ? ' (' + esc(l.department) + ')' : ''} · ${esc(l.destination || '—')}</span><div class="text-[11.5px] text-slate-400">Out since ${vDate(l.outDate)} ${esc(l.outTime || '')}${l.driver ? ' · driver ' + esc(l.driver) : ''}${l.purpose ? ' · ' + esc(l.purpose) : ''}</div></div>${vBtnPrimary('Return', `openVlReturn('${l.id}')`)}</div>`; }).join('')}</div>`) : ''}
+    ${open.length ? vPanel('Out now', 'Record the return when the vehicle is back', `<div class="divide-y divide-slate-100">${open.map(l => { const v = vehById(l.vehicleId); return `<div class="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap"><div><span class="font-bold text-slate-800">${esc(vLabel(v))}</span> <span class="text-sm text-slate-600">· ${esc(l.staffName || '—')}${l.department ? ' (' + esc(l.department) + ')' : ''} · ${esc(l.destination || '—')}</span><div class="text-[11.5px] text-slate-400">Out since ${vDate(l.outDate)} ${esc(l.outTime || '')}${l.driver ? ' · driver ' + esc(l.driver) : ''}${l.purpose ? ' · ' + esc(l.purpose) : ''}</div>${vlTrackBadge(l)}</div><div class="flex items-center gap-2.5">${vBtnPlain('📍 Track', `openVlTrackLink('${l.id}')`)}${vBtnPrimary('Return', `openVlReturn('${l.id}')`)}</div></div>`; }).join('')}</div>`) : ''}
     <div class="flex flex-wrap items-end gap-3 mb-4">
       <label class="text-xs font-semibold text-slate-600">Vehicle${vVehSelect('vlVeh', veh).replace('class="', 'class="block mt-1 ')}</label>
       <label class="text-xs font-semibold text-slate-600">From<input type="date" value="${esc(R.from)}" onchange="vehSet('vlFrom', this.value)" class="${VEH_INPUT} block mt-1"></label>
@@ -10862,7 +10962,7 @@ function openTravelForm(id, scope){
     ${vSec('Requested and authorized by')}
     ${vGrid(2, vF('Requested by', 'requestedBy', t ? t.requestedBy : me.name, 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'requestedDesig\')"' }) + vF('Designation', 'requestedDesig', t ? t.requestedDesig : (trProfileDesig(me.name) || me.designation || '')) +
       vF('Authorized by', 'authorizedBy', t ? t.authorizedBy : '', 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'authorizedDesig\')"' }) + vF('Designation', 'authorizedDesig', t ? t.authorizedDesig : ''))}
-    <div class="mt-3.5">${vF('Link to the signed travel request form (optional)', 'formUrl', t ? t.formUrl : '', 'url')}${trAttRow('form', t && t.formFile, 'Attach the signed travel request form (PDF)')}</div>
+    <div class="mt-3.5"><label class="${VEH_LBL}">Signed travel request form</label>${attRow('form', t && t.formFile, 'Attach the signed travel request form (PDF or photo)', t && t.formUrl)}</div>
     ${vSec('Ticket')}
     ${vGrid(2, vS('Ticket bought through', 'ticket.via', [['pr', 'Purchase Requisition (PR)'], ['petty', 'Petty Cash Request'], ['none', 'No ticket needed']], tk.via, 'Not decided yet', { attrs:' onchange="trTicketVia(this.value)"' }) +
       `<div id="tr-tk-pr" ${tk.via === 'pr' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Purchase Requisition</label><select name="ticket.prId" class="${VEH_FIELD} bg-white"><option value="">Not linked (optional)</option>${prs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.prId ? 'selected' : ''}>${esc(p.prNumber || '—')}${prFirstItem(p) ? ' — ' + esc(prFirstItem(p)) : ''} — ${esc(vMoney(p.totalCost))}</option>`).join('')}</select></div>` +
@@ -10879,7 +10979,7 @@ function openTravelForm(id, scope){
       ${vGrid(2, vF('Memo number', 'dsa.memoNo', d.memoNo || trNextMemoNo(), 'text') + vF('Memo date', 'dsa.memoDate', d.memoDate || vToday(), 'date') +
         vF('From', 'dsa.memoFrom', d.memoFrom != null ? d.memoFrom : S.memoFrom) + vF('To', 'dsa.memoTo', d.memoTo != null ? d.memoTo : S.memoTo) + vF('CC', 'dsa.memoCc', d.memoCc != null ? d.memoCc : S.memoCc) + '<div></div>' +
         vF('Signed by (name)', 'dsa.signName', d.signName != null ? d.signName : S.signName, 'text', { attrs:' list="tr-people"' }) + vF('Signatory designation', 'dsa.signDesig', d.signDesig != null ? d.signDesig : S.signDesig))}
-      <div class="mt-3.5">${vF('Link to the signed memo (optional)', 'dsa.memoUrl', d.memoUrl || '', 'url')}${trAttRow('memo', t && t.memoFile, 'Attach the signed memo (PDF)')}</div>
+      <div class="mt-3.5"><label class="${VEH_LBL}">Signed memo</label>${attRow('memo', t && t.memoFile, 'Attach the signed memo (PDF or photo)', d.memoUrl)}</div>
       <div class="mt-3.5"><label class="${VEH_LBL}">DSA payment slip <span class="font-normal text-slate-400">(confirms the DSA was paid)</span></label>${trAttRow('slip', t && t.slipFile, 'Attach the payment slip (PDF or photo)')}</div>
     </div>
     ${vFoot(t ? 'Save changes' : 'Save request', `saveTravel('${t ? t.id : ''}')`, t && canManageInventory() ? `deleteTravel('${t.id}')` : '')}`, true);
@@ -10889,8 +10989,120 @@ function openTravelForm(id, scope){
 const trAtt = {}, TR_ATT = { form:{ field:'formFile', name:'Signed travel request form' }, memo:{ field:'memoFile', name:'Signed memo' }, slip:{ field:'slipFile', name:'DSA payment slip' } };
 function trAttRow(k, f, label){ delete trAtt[k];
   return `<div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="trAttPick(this, '${k}')"><span id="tr-att-act-${k}">${f ? 'Replace the attached file' : '📎 ' + label}</span></label><span id="tr-att-info-${k}" class="text-xs text-slate-500">${f ? '📎 ' + esc(f.fileName || 'File') + ' kept' : ''}</span></div>`; }
+/* ---------- reading an attached file: the labelled details on it (dates, amounts, numbers, names) fill the form's EMPTY boxes — never what was typed ---------- */
+// which boxes each attachment can fill (form field names, or #element-ids)
+function attReadMap(k){
+  const f = document.getElementById('vform') || document.getElementById('modal-body');
+  if(/^vd-/.test(k)){ const p = k.slice(3); return p === 'registry' ? { date:'registry.date', number:'registry.certNo', owner:'registry.owner' } : { start:p + '.start', expiry:p + '.expiry', amount:p + '.cost', number:p === 'insurance' ? 'insurance.policyNo' : '', supplier:p === 'insurance' ? 'insurance.provider' : '' }; }
+  if(k === 'vdoc') return f && f.querySelector('[name=refNo]') ? { number:'refNo', date:'date', amount:'amount', litres:'litres' } : { date:'date', amount:'cost', number:'', supplier:'' };
+  if(k === 'vfuel') return { date:'date', amount:'total', litres:'litres', supplier:'station' };
+  if(k === 'vfuel-dn') return { number:'ref', date:'date', litres:'litres', supplier:'station' };
+  if(k === 'utdoc') return { number:'billNo', date:'billDate', due:'dueDate', amount:'amount', from:'useFrom', to:'useTo', prev:'prevReading', curr:'currReading' };
+  if(k === 'repl') return { date:'date', amount:'amount', number:'number' };
+  if(k === 'docfile') return { number:'refNo', date:'date', title:'title' };
+  if(k === 'memo') return { number:'dsa.memoNo', date:'dsa.memoDate' };
+  if(k === 'form') return { number:'formNumber', date:'formDate', from:'fromDate', to:'toDate' };
+  if(k === 'pr-pr') return { number:'#pr-number', date:'#pr-date' };
+  if(k === 'cpdoc') return { date:'date', title:'title' };
+  if(k === 'cl' || k === 'pccc' || k === 'pcform' || k === 'pcin' || k === 'slip' || /^sdd|^pr-/.test(k)) return null;
+  return { date:'date', amount:'amount', number:'number' };
+}
+// the labelled details found in the text of a document
+function attParseText(text){
+  const T = String(text || ''), lines = T.replace(/\r/g, '').split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean), inv = pcParseInvoiceText(T);
+  const after = re => { for(let i = 0; i < lines.length; i++){ const m = re.exec(lines[i]); if(m){ const d = pcFindDates(lines[i].slice(m.index + m[0].length))[0] || (lines[i + 1] ? pcFindDates(lines[i + 1])[0] : ''); if(d) return d; } } return ''; };
+  const val = re => { for(let i = 0; i < lines.length; i++){ const m = re.exec(lines[i]); if(m){ const v = (m[1] || '').trim() || (lines[i + 1] || '').trim(); if(v) return v.replace(/^[:#\-.\s]+/, '').trim(); } } return ''; };
+  const num = re => { const v = val(re), t = /([A-Za-z0-9][A-Za-z0-9\/\-.()]*\d[A-Za-z0-9\/\-.()]*)/.exec(v); return t ? t[1].replace(/[.,]$/, '') : ''; };
+  const all = lines.flatMap(pcFindDates).sort();
+  const o = {
+    expiry: after(/\b(expir\w*|expiry\s*date|valid\s*(?:until|till|upto|up\s*to|to)|end\s*date|period\s*to|to\s*date|due\s*for\s*renewal)\b/i),
+    start: after(/\b(start\s*date|issued?\s*(?:on|date)?|date\s*of\s*issue|commenc\w*|effective(?:\s*date)?|period\s*from|from\s*date|valid\s*from|registration\s*date|date\s*of\s*registration)\b/i),
+    due: after(/\bdue\s*date|\bpay\s*by\b|\bpayment\s*due\b/i),
+    from: after(/\b(?:billing\s*period|period|from|usage\s*from|reading\s*from)\b/i),
+    to: after(/\b(?:to|until|usage\s*to|reading\s*to)\b/i),
+    date: inv.date || all[0] || '',
+    amount: inv.amount || '',
+    supplier: inv.supplier || '',
+    policy: num(/\bpolicy\s*(?:no|number|#)?\.?\s*[:#]?\s*(.*)$/i),
+    cert: num(/\b(?:certificate|cert|registration|reg)\.?\s*(?:no|number|#)\.?\s*[:#]?\s*(.*)$/i),
+    ref: num(/\b(?:ref(?:erence)?|memo|form|request|pr|po)\.?\s*(?:no|number|#)\.?\s*[:#]?\s*(.*)$/i) || (/\(?(?:MEMO|FRM)\)?[A-Z]*\/[A-Z0-9\/\-.]+/i.exec(T) || [''])[0],
+    number: inv.number || '',
+    owner: val(/\b(?:registered\s*owner|owner(?:'s)?\s*name|name\s*of\s*owner)\b\s*[:\-]?\s*(.*)$/i).slice(0, 80),
+    title: val(/\b(?:subject|re|title)\s*[:\-]\s*(.*)$/i).slice(0, 120),
+    litres: (/(\d+(?:\.\d+)?)\s*(?:l|lt|ltr|ltrs|litres?|liters?)\b(?!\s*\/)/i.exec(T) || [])[1] || '',
+    prev: num(/\b(?:previous|prev\.?|last)\s*(?:reading|rdg)\b\s*[:\-]?\s*(.*)$/i), curr: num(/\b(?:present|current|curr\.?|this)\s*(?:reading|rdg)\b\s*[:\-]?\s*(.*)$/i)
+  };
+  if(!o.expiry && all.length >= 2 && /insurance|registration|licen[cs]e|permit|certificate|road\s*worth/i.test(T)) o.expiry = all[all.length - 1];
+  if(!o.start && o.expiry && all.length >= 2) o.start = all.find(d => d < o.expiry) || '';
+  return o;
+}
+// the FDC "PURCHASE REQUISITION" (from the finance system): the PR form fills the whole requisition —
+// number, date, requester (Prepared by), the items (description, qty, unit cost, budget code) and who approved and authorised it
+function prParseForm(text){
+  const L = String(text || '').replace(/\r/g, '').split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean), out = { number:'', date:'', items:[], prepared:'', approved:'', authorised:'', approvedDesig:'', authorisedDesig:'' };
+  const n = /Requisition\s*No\.?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/]+)/i.exec(text) || /\b(FDC-\d{4}-PR-\d+)\b/i.exec(text); if(n) out.number = n[1].toUpperCase();
+  const dl = L.find(l => /^Date\s*:/i.test(l)); if(dl) out.date = pcFindDates(dl)[0] || '';
+  const money = v => vNum(String(v).replace(/,/g, ''));
+  const h = L.findIndex(l => /Description/i.test(l) && /(Qty|Unit\s*Cost|Amount)/i.test(l)), t = L.findIndex((l, i) => i > h && /^Total\b/i.test(l));
+  if(h >= 0) L.slice(h + 1, t > h ? t : h + 12).forEach(l => {
+    const m = /^(\S+)\s+(.+?)\s+(?:([A-Za-z]{2,6})\s+)?(\d[\d,]*(?:\.\d+)?)\s+(\d[\d,]*\.\d{2})\s+(\d[\d,]*\.\d{2})(?:\s+(.+))?$/.exec(l);
+    if(m) out.items.push({ code:m[1], name:m[2].trim(), uom:m[3] || '', qty:money(m[4]), unitCost:money(m[5]), amount:money(m[6]), budget:(m[7] || '').trim() });
+  });
+  const names = []; L.forEach(l => { const re = /Name\s*:\s*(.+?)(?=\s+Name\s*:|$)/gi; let m; while((m = re.exec(l))) names.push(m[1].trim()); });
+  const ai = L.findIndex(l => /Authori[sz]ed\s*By/i.test(l)), an = ai >= 0 ? L.slice(ai).map(l => /Name\s*:\s*(.+)$/i.exec(l)).find(Boolean) : null;
+  out.prepared = names[0] || ''; out.approved = names[1] || ''; out.authorised = an ? an[1].trim() : (names[2] || '');
+  if(out.authorised && out.approved === out.authorised) out.approved = names.find((x, i) => i > 0 && x !== out.authorised) || '';
+  const des = []; L.forEach((l, i) => { if(!/Des\w{0,4}nation\s*:/i.test(l)) return; let v = l.replace(/.*Des\w{0,4}nation\s*:\s*/i, '').trim(); if(/&$/.test(v) && L[i + 1] && !/:/.test(L[i + 1])) v += ' ' + L[i + 1]; des.push(v.replace(/Manaaer/g, 'Manager')); });
+  out.approvedDesig = des.length >= 3 ? des[1] : des.length === 2 ? (des[0] && !des[1] ? '' : des[0]) : ''; out.authorisedDesig = des.length >= 3 ? des[2] : des[des.length - 1] || '';
+  return out;
+}
+async function prReadForm(file, info){
+  const base = info ? info.textContent : '', say = t => { if(info && info.isConnected) info.textContent = base + ' · ' + t; };
+  say('reading the PR form…');
+  let got; try{ got = prParseForm(await pcReadInvoiceFile(file, m => say(m), { width:1700 })); }catch(e){ say('could not read it — fill the boxes by hand'); return; }
+  const done = [], mark = el => { if(!el) return; el.classList.add('ring-2', 'ring-amber-300'); setTimeout(() => el.classList.remove('ring-2', 'ring-amber-300'), 6000); };
+  const set = (id, v, label) => { const el = document.getElementById(id); if(!el || v == null || v === '') return; el.value = v; el.dispatchEvent(new Event('input', { bubbles:true })); el.dispatchEvent(new Event('change', { bubbles:true })); mark(el); done.push(label); };
+  set('pr-number', got.number, 'PR number'); if(got.date) set('pr-date', got.date, 'date');
+  const rq = document.getElementById('pr-requester');
+  if(rq && got.prepared){ if(rq.tagName === 'SELECT'){ const o = [...rq.options].find(x => x.value && trNorm(x.value) === trNorm(got.prepared)) || [...rq.options].find(x => x.value && trNorm(x.value).includes(trNorm(got.prepared).split(' ')[0])); if(o){ rq.value = o.value; mark(rq); done.push('requester'); } } else set('pr-requester', got.prepared, 'requester'); }
+  if(got.items.length){
+    const wrap = document.getElementById('pr-lines'); let rows = [...document.querySelectorAll('.pr-line-wrap')];
+    const blank = rows.every(r => !String((document.getElementById('pr-item-name-' + r.dataset.line) || {}).value || '').trim());
+    rows.slice(got.items.length).forEach(r => { if(blank || rows.length > got.items.length) r.remove(); });
+    while(document.querySelectorAll('.pr-line-wrap').length < got.items.length) addPrLineItem();
+    rows = [...document.querySelectorAll('.pr-line-wrap')];
+    got.items.forEach((it, i) => { const ix = rows[i].dataset.line;
+      set('pr-item-name-' + ix, it.name, i ? '' : 'items'); set('pr-qty-' + ix, String(it.qty), ''); set('pr-unit-cost-' + ix, String(it.unitCost), '');
+      const d = document.getElementById('pr-item-description-' + ix); if(d && !d.value.trim() && it.code) { d.value = it.code + (it.uom ? ' · ' + it.uom : ''); mark(d); }
+      const bc = document.getElementById('pr-budget-code-' + ix); if(bc && it.budget){ const o = [...bc.options].find(x => x.value && trNorm(x.value) === trNorm(it.budget)) || [...bc.options].find(x => x.value && trNorm(x.value).startsWith(trNorm(it.budget).slice(0, 6))); if(o){ bc.value = o.value; mark(bc); } }
+      if(typeof updatePrLineTotal === 'function') updatePrLineTotal(ix); });
+  }
+  prReadApprovals = (got.approved || got.authorised) ? { prepared:got.prepared, approved:got.approved, approvedDesig:got.approvedDesig, authorised:got.authorised, authorisedDesig:got.authorisedDesig } : null;
+  if(prReadApprovals) done.push('approvals');
+  say(done.filter(Boolean).length ? 'filled from it: ' + done.filter(Boolean).join(', ') + ' — please check' : 'could not find the details — fill the boxes by hand');
+}
+let prReadApprovals = null;
+async function attReadInto(k, file, info){
+  if(k === 'pr-pr') return prReadForm(file, info);
+  const map = attReadMap(k); if(!map || !file) return;
+  const root = document.getElementById('modal-body') || document, form = document.getElementById('vform');
+  const el = n => !n ? null : n[0] === '#' ? document.getElementById(n.slice(1)) : (form && form.querySelector(`[name="${n}"]`)) || root.querySelector(`[name="${n}"]`);
+  const pend = Object.values(map).map(el).filter(e => e && !String(e.value || '').trim()); if(!pend.length) return;
+  const base = info ? info.textContent : '', say = t => { if(info && info.isConnected) info.textContent = base + ' · ' + t; };
+  say('reading the document…');
+  let got; try{ got = attParseText(await pcReadInvoiceFile(file, m => say(m))); }catch(e){ say('could not read it — fill the boxes by hand'); return; }
+  const pick = { number:got.policy && /insurance/.test(map.number || '') ? got.policy : /registry|certNo/.test(map.number || '') ? (got.cert || got.number) : /memo|formNumber|refNo|pr-number/.test(map.number || '') ? (got.ref || got.number) : (got.number || got.ref),
+    date:/start/.test(map.date || '') ? (got.start || got.date) : (got.date || got.start), start:got.start, expiry:got.expiry, due:got.due, amount:got.amount, supplier:got.supplier, owner:got.owner, title:got.title, litres:got.litres, from:got.from, to:got.to, prev:got.prev, curr:got.curr };
+  const filled = [];
+  Object.entries(map).forEach(([what, name]) => { const e = el(name), v = pick[what]; if(!e || !v || String(e.value || '').trim()) return;
+    if(e.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return; if(e.type === 'number' && !(vNum(String(v).replace(/,/g, '')) > 0)) return;
+    e.value = e.type === 'number' ? String(vNum(String(v).replace(/,/g, ''))) : v; e.dispatchEvent(new Event('input', { bubbles:true })); e.dispatchEvent(new Event('change', { bubbles:true }));
+    e.classList.add('ring-2', 'ring-amber-300'); setTimeout(() => e.classList.remove('ring-2', 'ring-amber-300'), 6000);
+    filled.push(((e.closest('div') || {}).querySelector ? ((e.closest('div').querySelector('label') || {}).textContent || what) : what).replace(/\*$/, '').trim().toLowerCase()); });
+  say(filled.length ? 'filled from it: ' + filled.join(', ') + ' — please check' : 'nothing new to fill from it');
+}
 async function trAttPick(input, k){ const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('tr-att-info-' + k); info.textContent = 'Preparing…';
-  try{ trAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(trAtt[k]) + ' (saved when you press Save)'; document.getElementById('tr-att-act-' + k).textContent = 'Replace file'; if(k === 'pcform') pcRequesterChanged(); }catch(e){ delete trAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
+  try{ trAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(trAtt[k]) + ' (saved when you press Save)'; document.getElementById('tr-att-act-' + k).textContent = 'Replace file'; if(k === 'pcform') pcRequesterChanged(); attReadInto(k, files[0], info); }catch(e){ delete trAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
 async function trBgUpload(id, k, att){
   const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar(); const field = TR_ATT[k].field;
   try{ const t0 = trById(id), st = await agStore(att, (t0 && (k === 'form' ? t0.formNumber : (t0.dsa || {}).memoNo)) || '', f => { agUploads[key].f = f; agUploadBar(); });
@@ -10912,7 +11124,7 @@ async function saveTravel(id){
   if(o.toDate < o.fromDate) return vFail('The return date is before the departure date.');
   if(!parts.length) return vFail('Add at least one traveller.');
   const tk = o.ticket || {}, dd = o.dsa || {}, on = !!(f['dsa.enabled'] && f['dsa.enabled'].checked);
-  const urls = {}; for(const [k, v] of [['formUrl', o.formUrl], ['memoUrl', dd.memoUrl]]){ if(v){ const u = vSafeUrl(v); if(!u) return vFail('Enter a full web link starting with https://'); urls[k] = u; } else urls[k] = ''; }
+  const tOld = id ? trById(id) : null, urls = { formUrl:(tOld && tOld.formUrl) || '', memoUrl:(tOld && tOld.dsa && tOld.dsa.memoUrl) || '' };      // links saved before are kept; new documents are attached
   const memoNo = String(dd.memoNo || '').trim();
   if(on && memoNo && /\/$/.test(memoNo)) return vFail('Complete the memo number (it ends with the running number).');
   if(on && memoNo){ const dup = state.travelRequests.find(x => x.id !== id && x.dsa && String(x.dsa.memoNo || '').trim().toLowerCase() === memoNo.toLowerCase()); if(dup) return vFail('Memo ' + memoNo + ' is already used for the trip to ' + (dup.destination || '—') + '.'); }
@@ -11259,7 +11471,7 @@ async function trMemoDocx(id, btn){
   const t = trById(id); if(!t || !trDsaOn(t)) return;
   if(!t.dsa.memoNo){ toast('Enter the memo number first (Edit request).', true); return; }
   const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
-  try{ downloadBlob(await buildTravelMemoDocx(t), 'DSA_Memo_' + String(t.dsa.memoNo).replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '') + '.docx'); toast('Memo downloaded. Link the signed copy with Edit request.'); }
+  try{ downloadBlob(await buildTravelMemoDocx(t), 'DSA_Memo_' + String(t.dsa.memoNo).replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '') + '.docx'); toast('Memo downloaded. Attach the signed copy with Edit request.'); }
   catch(e){ console.error(e); toast('Could not create the memo: ' + (e && e.message ? e.message : e), true); }
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
@@ -11327,7 +11539,7 @@ async function trMemoPdf(id, btn){
   const t = trById(id); if(!t || !trDsaOn(t)) return;
   if(!t.dsa.memoNo){ toast('Enter the memo number first (Edit request).', true); return; }
   const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
-  try{ downloadBlob(await buildTravelMemoPdf(t), 'DSA_Memo_' + String(t.dsa.memoNo).replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '') + '.pdf'); toast('Memo downloaded. Link the signed copy with Edit request.'); }
+  try{ downloadBlob(await buildTravelMemoPdf(t), 'DSA_Memo_' + String(t.dsa.memoNo).replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '') + '.pdf'); toast('Memo downloaded. Attach the signed copy with Edit request.'); }
   catch(e){ console.error(e); toast('Could not create the memo: ' + (e && e.message ? e.message : e), true); }
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
@@ -11595,7 +11807,7 @@ function utBillsHtml(type){
       ${vTd('<b>' + fmtMVR(b.amount) + '</b>', { n:1 })}
       ${vTd(b.dueDate ? vDate(b.dueDate) : '—')}
       ${vTd(vPill(st.k, st.t) + (b.paidDate ? `<div class="text-[11px] text-slate-400 mt-0.5">${vDate(b.paidDate)}${b.paidVia ? ' · ' + esc(b.paidVia) : ''}</div>` : ''))}
-      ${vTd((b.docUrl ? vLink(b.docUrl, 'Invoice') + '<br>' : '') + (!b.paidDate ? `<button onclick="openUtPay('${b.id}')" class="text-xs font-semibold text-emerald-600 hover:underline mr-2.5">Mark paid</button>` : '') + `<button onclick="openUtBill('${b.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right whitespace-nowrap' })}
+      ${vTd((attView(b.docFile, b.docUrl, 'Invoice') ? '<span class="text-xs">' + attView(b.docFile, b.docUrl, 'Invoice') + '</span><br>' : '') + (!b.paidDate ? `<button onclick="openUtPay('${b.id}')" class="text-xs font-semibold text-emerald-600 hover:underline mr-2.5">Mark paid</button>` : '') + `<button onclick="openUtBill('${b.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right whitespace-nowrap' })}
     </tr>`;
   }).join('');
   return filters + (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Month / invoice' }, { t:'Location / account' }, { t:'Readings' }, { t:'Usage', n:1 }, { t:'Amount', n:1 }, { t:'Due' }, { t:'Status' }, { t:'' }])}<tbody>${rows}
@@ -11758,7 +11970,7 @@ function openUtBill(id, accId, type){
     '<div id="ut-calc" class="text-[11.5px] text-slate-400 mt-1.5"></div>'
     : vSec('Usage') + vGrid(2, vF(UT_TYPES[tp].usageLabel || 'Usage', 'units', d.units, 'number') + '<input type="hidden" name="prevReading" value=""><input type="hidden" name="currReading" value="">')) +
     vSec('Amount and payment') +
-    vGrid(2, vF('Amount (MVR)', 'amount', d.amount, 'number', { req:1 }) + vF('Link to the invoice (optional)', 'docUrl', d.docUrl, 'url') +
+    vGrid(2, vF('Amount (MVR)', 'amount', d.amount, 'number', { req:1 }) + `<div><label class="${VEH_LBL}">Invoice file</label>${attRow('utdoc', d.docFile, 'Attach the invoice (PDF or photo)', d.docUrl)}</div>` +
       vF('Paid on', 'paidDate', d.paidDate, 'date') + vS('Paid via', 'paidVia', UT_PAY_VIA, d.paidVia, '—') + vF('Payment reference', 'paidRef', d.paidRef, 'text', { attrs:' placeholder="Transfer ref, PR no., voucher no."' }) + vTa('Notes', 'notes', d.notes, { rows:2 })) +
     vFoot(b ? 'Save changes' : 'Save invoice', `saveUtBill('${id || ''}')`, b ? `deleteUtBill('${id}')` : ''), true);
   setTimeout(() => { const f = document.getElementById('vform'); if(f && f.prevReading) utBillCalc(f); }, 0);
@@ -11857,13 +12069,13 @@ async function saveUtBill(id){
   if(o.useFrom && o.useTo && o.useTo < o.useFrom) return vFail('The usage period ends before it starts.');
   if(!(vNum(o.amount) >= 0) || o.amount === '') return vFail('Enter the amount.');
   if(o.prevReading !== '' && o.currReading !== '' && vNum(o.currReading) < vNum(o.prevReading)) return vFail('The current reading is lower than the previous one.');
-  const url = o.docUrl ? vSafeUrl(o.docUrl) : ''; if(o.docUrl && !url) return vFail('Enter a full web link starting with https://');
+  const url = id ? ((state.utilityBills.find(x => x.id === id) || {}).docUrl || '') : '';
   const dup = state.utilityBills.find(x => x.id !== id && x.accountId === o.accountId && x.period === o.period && (!o.billNo || !x.billNo || x.billNo === o.billNo));
   if(dup && !id) return vFail('There is already an invoice for this account for ' + utMonthLabel(o.period) + '. Edit that one instead.');
   const num = v => v === '' || v == null ? '' : vNum(v);
   const rec = { accountId:o.accountId, period:o.period, billNo:String(o.billNo || '').trim(), billDate:o.billDate || '', dueDate:o.dueDate || '', useFrom:o.useFrom || '', useTo:o.useTo || '', prevReading:num(o.prevReading), currReading:num(o.currReading), units:num(o.units), amount:pcRound(vNum(o.amount)), paidDate:o.paidDate || '', paidVia:o.paidVia || '', paidRef:String(o.paidRef || '').trim(), docUrl:url, notes:String(o.notes || '').trim() };
   if(id) rec.id = id;
-  await vehSave('utilityBills', rec); closeModal(); rerenderMain(); toast(id ? 'Invoice updated.' : 'Invoice saved.');
+  const ubId = await vehSave('utilityBills', rec); attSaveTo('utilityBills', ubId || id, 'docFile', 'utdoc', rec.billNo); closeModal(); rerenderMain(); toast(id ? 'Invoice updated.' : 'Invoice saved.');
 }
 function deleteUtBill(id){
   const b = state.utilityBills.find(x => x.id === id); if(!b) return;
@@ -15947,7 +16159,7 @@ async function prBgUpload(id, att){
   catch(e){ toast('The quotation could not be uploaded: ' + (e && e.message ? e.message : e), true); }
   finally{ delete agUploads[key]; agUploadBar(); }
 }
-function openPurchaseRequisitionForm(id){
+function openPurchaseRequisitionForm(id){ prReadApprovals = null;
   const editing = id ? state.purchaseRequisitions.find(x=>x.id===id) : null;
   const prNumber = editing ? editing.prNumber : '';
   const requester = editing ? editing.requester : (authUser ? authUser.name : '');
@@ -16004,34 +16216,13 @@ function openPurchaseRequisitionForm(id){
     <div class="bg-amber-50 text-amber-800 text-[11.5px] rounded-lg px-3.5 py-2.5 mb-4 leading-relaxed">
       Setting status to Closed automatically stocks in any line items linked to a stock item above, at the location selected — no separate Stock In entry needed.
     </div>
-    <div class="text-xs font-semibold text-slate-600 mb-2">Document links <span class="font-normal text-slate-400">(optional)</span></div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-      <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Purchase Requisition URL</label>
-        <input type="url" id="pr-url-pr" value="${editing?esc(editing.prUrl||''):''}" placeholder="https://…" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Purchase Order URL</label>
-        <input type="url" id="pr-url-po" value="${editing?esc(editing.poUrl||''):''}" placeholder="https://…" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Delivery Order URL</label>
-        <input type="url" id="pr-url-do" value="${editing?esc(editing.doUrl||''):''}" placeholder="https://…" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Invoice URL</label>
-        <input type="url" id="pr-url-invoice" value="${editing?esc(editing.invoiceUrl||''):''}" placeholder="https://…" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5">TOR URL</label>
-        <input type="url" id="pr-url-tor" value="${editing?esc(editing.torUrl||''):''}" placeholder="https://…" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-      </div>
-    </div>
+    <div class="text-xs font-semibold text-slate-600 mb-2">Documents <span class="font-normal text-slate-400">(optional — attach PDFs or photos)</span></div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 mb-3">${PR_DOCS.map(([k, label, f]) => `<div><label class="block text-xs font-semibold text-slate-600 mb-1">${label}</label>${attRow('pr-' + k, ((editing && editing.files) || {})[k], 'Attach the ' + label.toLowerCase(), editing && editing[f])}</div>`).join('')}</div>
     <div class="mb-5">
-      <div class="text-xs font-semibold text-slate-600 mb-2">Other links <span class="font-normal text-slate-400">(optional, up to ${PR_MAX_OTHER_LINKS} — give each one a name)</span></div>
+      <div class="text-xs font-semibold text-slate-600 mb-2">Other documents <span class="font-normal text-slate-400">(optional — give each one a name)</span></div>
+      ${editing ? prOtherFilesHtml(editing, true) : ''}
       <datalist id="pr-link-names">${prKnownLinkNames().map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
-      <div id="pr-other-links">${prOtherLinkRowsHtml(editing)}</div>
-      <button type="button" id="pr-add-olink" onclick="addPrOtherLink()" class="text-xs font-semibold text-brand-600 hover:underline">+ Add another link</button>
+      ${[0, 1, 2].map(i => `<div class="grid gap-2 items-start mb-2" style="grid-template-columns:11rem 1fr"><input id="pr-oname-${i}" list="pr-link-names" placeholder="Name, e.g. Quotation" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm"><div class="-mt-2">${trAttRow('pr-o' + i, null, 'Attach the file')}</div></div>`).join('')}
     </div>
     <div class="flex justify-between items-center gap-2.5">
       <div>${editing && canManageInventory() ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50" onclick="deletePurchaseRequisition('${editing.id}')">Delete</button>` : ''}</div>
@@ -16078,25 +16269,11 @@ function savePurchaseRequisition(id){
   const requester = document.getElementById('pr-requester').value.trim();
   const locationId = document.getElementById('pr-location').value;
   const status = document.getElementById('pr-status').value;
-  const prUrl = document.getElementById('pr-url-pr').value.trim();
-  const poUrl = document.getElementById('pr-url-po').value.trim();
-  const doUrl = document.getElementById('pr-url-do').value.trim();
-  const invoiceUrl = document.getElementById('pr-url-invoice').value.trim();
-  const torRaw = document.getElementById('pr-url-tor').value.trim();
-  const torUrl = normalizeWebUrl(torRaw);
-  const otherLinks = [];
-  for(const row of document.querySelectorAll('#pr-other-links .pr-olink-row')){
-    const i = row.dataset.olink;
-    const label = document.getElementById('pr-olink-name-' + i).value.trim();
-    const rawUrl = document.getElementById('pr-olink-url-' + i).value.trim();
-    if(!label && !rawUrl) continue;                                           // an empty row is simply ignored
-    if(!label){ errEl.textContent = 'Give each other link a name.'; errEl.classList.remove('hidden'); return; }
-    if(!rawUrl){ errEl.textContent = `Add the link for "${label}", or clear that row.`; errEl.classList.remove('hidden'); return; }
-    const url = normalizeWebUrl(rawUrl);
-    if(url === null){ errEl.textContent = `The link for "${label}" must be a web address (starting with https://).`; errEl.classList.remove('hidden'); return; }
-    otherLinks.push({ label, url });
-  }
-  if(torUrl === null){ errEl.textContent = 'The TOR link must be a web address (starting with https://).'; errEl.classList.remove('hidden'); return; }
+  const ed0 = id ? state.purchaseRequisitions.find(x => x.id === id) : null;      // links saved before are kept; documents are now attached
+  const prUrl = (ed0 && ed0.prUrl) || '', poUrl = (ed0 && ed0.poUrl) || '', doUrl = (ed0 && ed0.doUrl) || '', invoiceUrl = (ed0 && ed0.invoiceUrl) || '', torUrl = (ed0 && ed0.torUrl) || '', otherLinks = (ed0 && ed0.otherLinks) || [];
+  const prNewDocs = PR_DOCS.map(([k]) => [k, attTake('pr-' + k)]).filter(x => x[1]);
+  const prNewOther = [0, 1, 2].map(i => ({ label:((document.getElementById('pr-oname-' + i) || {}).value || '').trim(), att:attTake('pr-o' + i) })).filter(x => x.att);
+  if(prNewOther.some(x => !x.label)){ errEl.textContent = 'Give each other document a name.'; errEl.classList.remove('hidden'); return; }
 
   if(!prNumber){ errEl.textContent='PR Number is required.'; errEl.classList.remove('hidden'); return; }
   if(!requisitionDate){ errEl.textContent='Requisition date is required.'; errEl.classList.remove('hidden'); return; }
@@ -16128,17 +16305,17 @@ function savePurchaseRequisition(id){
   const wasAlreadyClosed = editing ? editing.status === 'closed' : false;
 
   if(editing){
-    Object.assign(editing, { prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost });
+    Object.assign(editing, { prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost }); if(prReadApprovals){ editing.approvals = prReadApprovals; prReadApprovals = null; }
     if(status === 'closed' && !wasAlreadyClosed){
       applyPrAutoStockIn(editing);
       toast('Purchase requisition closed — linked stock items added to inventory.');
     } else {
       toast('Purchase requisition updated.');
     }
-    persistPurchaseRequisitionDoc(editing); if(prQuoteAtt){ prBgUpload(editing.id, prQuoteAtt); prQuoteAtt = null; }
+    persistPurchaseRequisitionDoc(editing); if(prQuoteAtt){ prBgUpload(editing.id, prQuoteAtt); prQuoteAtt = null; } prUploadDocs(editing.id, prNewDocs, prNewOther);
   } else {
     const pr = {
-      id: uid(), prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost,
+      id: uid(), prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost, approvals: prReadApprovals || null,
       createdByName: authUser ? authUser.name : null,
       createdByEmail: authUser ? authUser.email : null,
       createdAt: nowISO(),
@@ -16150,7 +16327,7 @@ function savePurchaseRequisition(id){
     } else {
       toast('Purchase requisition created.');
     }
-    persistPurchaseRequisitionDoc(pr); if(prQuoteAtt){ prBgUpload(pr.id, prQuoteAtt); prQuoteAtt = null; }
+    prReadApprovals = null; persistPurchaseRequisitionDoc(pr); if(prQuoteAtt){ prBgUpload(pr.id, prQuoteAtt); prQuoteAtt = null; } prUploadDocs(pr.id, prNewDocs, prNewOther);
   }
   closeModal();
   rerenderMain();
@@ -16226,6 +16403,18 @@ function removePrOtherLink(idx){
   if(row) row.remove();
   prRefreshOtherLinksUi();
 }
+// the documents of a requisition: PR, PO, DO, invoice and TOR, and other named documents, kept as attached files
+const PR_DOCS = [['pr', 'Purchase Requisition', 'prUrl'], ['po', 'Purchase Order', 'poUrl'], ['do', 'Delivery Order', 'doUrl'], ['invoice', 'Invoice', 'invoiceUrl'], ['tor', 'TOR', 'torUrl']];
+function prUploadDocs(prId, docs, other){
+  const upd = async fn => { const p = state.purchaseRequisitions.find(x => x.id === prId); if(!p) return ''; const was = fn(p); persistPurchaseRequisitionDoc(p); return was; };
+  docs.forEach(([k, att]) => attBg(att, k.toUpperCase(), async st => upd(p => { const f = Object.assign({}, p.files || {}), was = f[k] && f[k].fileId; f[k] = st; p.files = f; return was; })));
+  other.forEach(x => attBg(x.att, x.label, async st => upd(p => { const f = Object.assign({}, p.files || {}); f.other = (f.other || []).concat([Object.assign({ label:x.label }, st)]); p.files = f; return ''; })));
+}
+function prOtherFilesHtml(pr, editable){
+  const list = ((pr.files || {}).other || []); if(!list.length) return '';
+  return `<div class="flex flex-wrap gap-2 mb-2">${list.map((f, i) => `<span class="inline-flex items-center gap-1.5 text-xs rounded-full bg-slate-100 px-2.5 py-1"><button type="button" onclick="agOpenFile('${esc(f.fileId)}', '${esc(String(f.label || 'Document').replace(/'/g, ''))}', null)" class="font-semibold text-brand-600 hover:underline">📎 ${esc(f.label || 'Document')}</button>${editable ? `<button type="button" title="Remove" onclick="prRemoveOtherFile('${esc(pr.id)}', ${i}, this)" class="text-slate-400 hover:text-rose-600">✕</button>` : ''}</span>`).join('')}</div>`;
+}
+function prRemoveOtherFile(prId, i, btn){ const p = state.purchaseRequisitions.find(x => x.id === prId); if(!p || !p.files || !p.files.other) return; const f = p.files.other[i]; p.files = Object.assign({}, p.files, { other:p.files.other.filter((x, k) => k !== i) }); persistPurchaseRequisitionDoc(p); if(f && f.fileId) agFileDel(f.fileId); if(btn) btn.closest('span').remove(); toast('Document removed.'); }
 function prDocLinksHtml(pr, topMargin){
   const links = [
     pr.prUrl ? { label:'PR', url:pr.prUrl } : null,
@@ -16234,9 +16423,13 @@ function prDocLinksHtml(pr, topMargin){
     pr.invoiceUrl ? { label:'Invoice', url:pr.invoiceUrl } : null,
     pr.torUrl ? { label:'TOR', url:pr.torUrl } : null,
   ].concat(prOtherLinks(pr).map(l => ({ label: l.label || 'Link', url: l.url }))).filter(Boolean);
-  if(!links.length) return '';
+  const files = PR_DOCS.map(([k, label]) => { const f = (pr.files || {})[k]; return f && f.fileId ? { label:k === 'pr' ? 'PR' : k === 'po' ? 'PO' : k === 'do' ? 'DO' : label, f } : null; }).filter(Boolean).concat(((pr.files || {}).other || []).map(f => ({ label:f.label || 'Document', f })));
+  const ap = pr.approvals, apLine = ap && (ap.approved || ap.authorised) ? `<div class="w-full text-[11px] text-slate-500">${[ap.approved && 'Approved: ' + esc(ap.approved), ap.authorised && 'Authorised: ' + esc(ap.authorised)].filter(Boolean).join(' · ')}</div>` : '';
+  if(!links.length && !files.length) return apLine ? `<div class="flex flex-wrap gap-1.5 ${topMargin||'mt-2'}">${apLine}</div>` : '';
+  const fchip = 'inline-flex max-w-[11rem] px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10.5px] font-semibold hover:bg-brand-100';
+  const fileChips = files.map(x => `<button type="button" onclick="event.stopPropagation(); agOpenFile('${esc(x.f.fileId)}', '${esc(String(x.label).replace(/'/g, ''))}', null)" title="${esc(x.label)}" class="${fchip}"><span class="truncate">📎 ${esc(x.label)}</span></button>`).join('');
   const chip = 'inline-flex max-w-[11rem] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10.5px] font-semibold hover:bg-slate-200';
-  return `<div class="flex flex-wrap gap-1.5 ${topMargin||'mt-2'}">${links.map(l => {
+  return `<div class="flex flex-wrap gap-1.5 ${topMargin||'mt-2'}">${apLine}${fileChips}${links.map(l => {
     const href = normalizeWebUrl(l.url);
     return href
       ? `<a href="${esc(href)}" target="_blank" rel="noopener" title="${esc(l.label)}" onclick="event.stopPropagation()" class="${chip}"><span class="truncate">${esc(l.label)}</span>&nbsp;↗</a>`
@@ -16590,10 +16783,10 @@ function openHandoverForm(id){ hoFormAtt = null;
       <textarea id="ho-remarks" rows="2" placeholder="e.g. Tower 2 to Tower 16" class="${inp}">${editing?esc(editing.remarks||''):''}</textarea>
     </div>
     <div class="mb-5">
-      <label class="block text-xs font-semibold text-slate-600 mb-1.5">Handover form link <span class="font-normal text-slate-400">(optional)</span></label>
-      <input type="text" id="ho-file-url" inputmode="url" autocomplete="off" value="${editing?esc(editing.fileUrl||''):''}" placeholder="Link to the signed handover form, e.g. SharePoint" class="${inp}">
+      <label class="block text-xs font-semibold text-slate-600 mb-1.5">Signed handover form <span class="font-normal text-slate-400">(optional)</span></label>
+      <input type="hidden" id="ho-file-url" value="${editing?esc(editing.fileUrl||''):''}">${editing && editing.fileUrl && vSafeUrl(editing.fileUrl) ? `<div class="text-[11px] text-slate-400">Saved earlier as a link: ${vLink(editing.fileUrl, 'open')}</div>` : ''}
       <div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="hoFormFile(this)"><span id="ho-att-act">${editing && editing.signedFileId ? 'Replace the signed handover' : '📎 Attach the signed handover (PDF)'}</span></label><span id="ho-att-info" class="text-xs text-slate-500">${editing && editing.signedFileId ? '📎 ' + esc(editing.signedFileName || 'Signed handover') + ' kept' : ''}</span>${editing && editing.signedFileId ? `<button type="button" onclick="closeModal(); hoRemoveSigned('${editing.id}')" class="text-xs text-slate-400 hover:text-rose-600 ml-auto">Remove file</button>` : ''}</div>
-      <div class="text-[11px] text-slate-400 mt-1.5">If you add the link or attach the signed form, nobody needs to sign here.</div>
+      <div class="text-[11px] text-slate-400 mt-1.5">If you attach the signed form, nobody needs to sign here.</div>
     </div>
     <div class="flex justify-between items-center gap-2.5">
       <div>${editing && canManageInventory() ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50" onclick="deleteHandover('${editing.id}')">Delete</button>` : ''}</div>

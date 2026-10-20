@@ -2404,7 +2404,7 @@ function vLink(url, label){
   return u ? `<a href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs font-semibold text-brand-600 hover:underline">${esc(label || 'Open document')} ↗</a>` : '<span class="text-xs text-slate-400">No document linked</span>';
 }
 function vHead(title, sub, actions){
-  return `<div class="flex items-start justify-between gap-4 flex-wrap mb-6"><div><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${title}</h1><p class="text-sm text-slate-500 mt-0.5">${sub}</p></div><div class="flex gap-2.5 flex-wrap">${actions || ''}</div></div>`;
+  return `<div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-6"><div><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${title}</h1><p class="text-sm text-slate-500 mt-0.5">${sub}</p></div><div class="flex gap-2.5 flex-wrap">${actions || ''}</div></div>`;
 }
 const vKpis = html => `<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">${html}</div>`;
 const vPanel = (title, hint, body) => `<div class="bg-white rounded-xl border border-slate-200 mb-6"><div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-baseline justify-between gap-3 flex-wrap"><h2 class="text-sm font-bold text-slate-900">${title}</h2>${hint ? `<span class="text-xs text-slate-400">${hint}</span>` : ''}</div>${body}</div>`;
@@ -3490,7 +3490,7 @@ function viewPettyCash(){
   const tab = (id, label, n, color) => `<button onclick="vehUi.pcLoc='${id}'; vehUi.pcShown=30; rerenderMain()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold border ${vehUi.pcLoc === id ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">${color ? `<i class="w-2.5 h-2.5 rounded-full" style="background:${esc(color)}"></i>` : ''}${esc(label)}<span class="text-xs font-medium ${vehUi.pcLoc === id ? 'text-white/80' : 'text-slate-400'}">${n}</span></button>`;
   const locTabs = `<div class="flex flex-wrap gap-2 mb-3">${tab('', 'All locations', all.length)}${funds.map(f => tab(f.id, f.name, locCount(f.id), f.color || '#94a3b8')).join('')}${others ? tab('other', 'Other', others, '#94a3b8') : ''}</div>`;
   return `
-    <div class="sticky-toolbar">${vHead('Petty Cash Request', 'Requests for petty cash by location — a prior request, or a reimbursement of money already spent.', vBtnPlain('+ Fueling Petty Cash', "openPcForm(null,'fuel')") + vBtnPrimary('+ New Request', 'openPcForm()'))}</div>
+    ${vHead('Petty Cash Request', 'Requests for petty cash by location — a prior request, or a reimbursement of money already spent.', vBtnPlain('+ Fueling Petty Cash', "openPcForm(null,'fuel')") + vBtnPrimary('+ New Request', 'openPcForm()'))}</div>
     ${vKpis(
       statCard('Requests this month', fmtNum(thisM.length), new Date().toLocaleDateString('en-GB', { month:'long', year:'numeric' }), 'brand') +
       statCard('Prior requests', fmtMVR(sumOpt(thisM, 'Prior Request')), 'This month', 'emerald') +
@@ -5055,7 +5055,7 @@ function pcCcReset(){
 function viewPettyCashCount(){
   const f = pcCcFund();
   const actions = f ? vBtnPlain('Export CSV', 'pcCcCsv()') + vBtnPlain('Export PDF', 'pcCcPdf(this)') : '';
-  const head = '<div class="sticky-toolbar">' + vHead('Cash Count', 'Month-end cash count for a petty cash fund. Empty quantities count as 0. Saving or exporting keeps a record below.', actions) + '</div>';
+  const head = vHead('Cash Count', 'Month-end cash count for a petty cash fund. Empty quantities count as 0. Saving or exporting keeps a record below.', actions);
   if(!f) return head + vEmpty('Add a location first.');
   const dr = pcCcDraft(f.id), cnt = pcCountOf(f.id), rc = pcReconcile(f), can = pcCanCount(f.id), dis = can ? '' : 'disabled';
   pcCcFillPerson(dr, 'p', false); pcCcFillPerson(dr, 'c', false);
@@ -5259,6 +5259,20 @@ async function pcCcPdf(btn){
 }
 
 function pcStTab(k){ vehUi.stTab = k; rerenderMain(); }
+// live preview of the statement the ticked vouchers would make (and the open statement's rows); nothing is saved
+function pcStPreview(locId, open, elig, sel){
+  const picked = elig.filter(r => sel.has(r.id)), inOpen = open ? open.list : [];
+  const rows = inOpen.map(r => ({ r, status:'In statement' })).concat(picked.filter(r => !inOpen.some(o => o.id === r.id)).map(r => ({ r, status:'Will be added' })));
+  if(!rows.length) return '';
+  const shown = rows.slice(0, PC_STATEMENT_ROWS), cat = {}; let total = 0;
+  const body = shown.map(({ r, status }, i) => { const d = pcStatementRow(r); total = pcRound(total + d.amount); cat[d.category] = pcRound((cat[d.category] || 0) + d.amount);
+    return `<tr class="${vTr}">${vTd(String(i + 1), { first:1 })}${vTd(`<span class="font-semibold">${esc(d.voucher)}</span>`)}${vTd(esc(d.date).replace(/\n/g, '<br>'))}${vTd(esc(d.supplier || '—'))}${vTd(esc(d.bill || '—').replace(/\n/g, '<br>'))}${vTd(`<div class="max-w-[16rem] truncate" title="${esc(d.details)}">${esc(d.details || '—')}</div>`)}${vTd(esc(d.category || '—'))}${vTd(vPill(status === 'In statement' ? 'good' : 'warn', status))}${vTd(vMoney(d.amount), { n:1, last:1 })}</tr>`; }).join('');
+  const catLine = Object.keys(cat).map(k => esc(k) + ' ' + fmtMVR(cat[k])).join(' · ');
+  const over = rows.length > PC_STATEMENT_ROWS ? `<div class="text-xs text-amber-700 px-5 sm:px-6 pt-3">A statement holds ${PC_STATEMENT_ROWS} vouchers, so only the first ${PC_STATEMENT_ROWS} are shown.</div>` : '';
+  return vPanel('Preview of the statement', 'Live: it updates as you tick vouchers. Nothing is saved until you start the statement.',
+    over + `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'#' }, { t:'Voucher' }, { t:'Date' }, { t:'Supplier' }, { t:'Bill no.' }, { t:'Details' }, { t:'Category' }, { t:'Status' }, { t:'Amount', n:1 }])}<tbody>${body}</tbody></table></div>
+      <div class="px-5 sm:px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap"><div class="text-xs text-slate-500">${catLine}</div><div class="text-sm text-slate-600">${shown.length} row${shown.length === 1 ? '' : 's'} · Total <b class="text-slate-900">${fmtMVR(total)}</b></div></div>`);
+}
 function pcStToggle(id){ const s = new Set(vehUi.stSel || []); if(s.has(id)) s.delete(id); else s.add(id); vehUi.stSel = [...s]; rerenderMain(); }
 function pcStSelectAll(on){ vehUi.stSel = on ? pcEligible(pcStLocation()).slice(0, pcStRoom(pcStLocation())).map(r => r.id) : []; rerenderMain(); }
 function pcStLocChanged(v){ vehUi.stXLoc = v; vehUi.stSelLoc = ''; vehUi.stNo = ''; rerenderMain(); }
@@ -5682,7 +5696,7 @@ function viewPcStatementsExcel(){
     ? (!can ? `<div class="text-sm text-slate-500">Only ${esc(pcStatementWho(locId))} can add vouchers to the open statement.</div>` : room <= 0 ? `<div class="text-sm text-amber-700">Statement ${esc(open.no)} is full. Close it to start a new one.</div>` : `<div class="text-sm text-slate-500">${sel.size} voucher${sel.size === 1 ? '' : 's'} selected · <b class="text-slate-800">${fmtMVR(selTotal)}</b> · room for ${room} more</div>${vBtnPlain('Add all ready', 'pcAddAllReady()')}${vBtnPrimary('Add ' + sel.size + ' to ' + open.no, 'pcAddToStatement()')}`)
     : (!can ? `<div class="text-sm text-slate-500">Only ${esc(pcStatementWho(locId))} can start a statement here.</div>` : `<div class="text-sm text-slate-500">${sel.size} voucher${sel.size === 1 ? '' : 's'} selected · <b class="text-slate-800">${fmtMVR(selTotal)}</b></div><div class="flex items-end gap-3 flex-wrap"><label class="text-xs font-semibold text-slate-600">Statement number<input id="pc-st-no" type="text" maxlength="31" value="${esc(vehUi.stNo || pcNextStatementNo(locId, yy))}" oninput="vehUi.stNo = this.value" class="${VEH_INPUT} block mt-1 w-64"></label>${vBtnPrimary('Start statement' + (sel.size ? ' (Excel)' : ''), 'pcGenerateStatement(this)')}</div>`);
   return `
-    <div class="sticky-toolbar">${vHead('Statement', 'The Statement of Petty Cash Reimbursed for a location, as an Excel workbook in the finance layout.', '')}</div>
+    ${vHead('Statement', 'The Statement of Petty Cash Reimbursed for a location, as an Excel workbook in the finance layout.', '')}</div>
     <div class="flex flex-wrap items-end gap-3 mb-5"><label class="text-xs font-semibold text-slate-600">Location${vSelect('stXLocSel', pcFundList().map(l => [l.id, l.name]), locId, null, 'block mt-1').replace("vehSet('stXLocSel', this.value)", 'pcStLocChanged(this.value)')}</label>
       <div class="text-xs text-slate-500 pb-2.5">Petty Cash Custodian: <b class="text-slate-700">${esc(cust.name || 'not assigned')}</b> · Assigned balance <b class="text-slate-700">${fmtMVR(pcFloatOf(loc))}</b></div></div>
     ${!can ? `<div class="mb-5 rounded-lg bg-slate-100 text-slate-600 text-[13px] px-4 py-3">Only ${esc(pcStatementWho(locId))} can start, add to, close or reopen statements here. You can still download them.</div>` : ''}
@@ -5699,6 +5713,7 @@ function viewPcStatementsExcel(){
       elig.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'' }, { t:'Voucher' }, { t:'Invoice date' }, { t:'Supplier' }, { t:'Bill no.' }, { t:'Details' }, { t:'Category' }, { t:'Amount', n:1 }, { t:'' }])}<tbody>${readyRows}</tbody></table></div>
         <div class="px-5 sm:px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">${footer}</div>`
       : `${vEmpty('No vouchers are ready. A voucher joins a statement once it has an invoice.')}${!elig.length && !open && can ? `<div class="px-5 sm:px-6 pb-4 flex justify-end items-end gap-3 flex-wrap"><label class="text-xs font-semibold text-slate-600">Statement number<input id="pc-st-no" type="text" maxlength="31" value="${esc(vehUi.stNo || pcNextStatementNo(locId, yy))}" oninput="vehUi.stNo = this.value" class="${VEH_INPUT} block mt-1 w-64"></label>${vBtnPrimary('Start empty statement', 'pcGenerateStatement(this)')}</div>` : ''}`)}
+    ${pcStPreview(locId, open, elig, sel)}
     ${vPanel('Closed statements', 'Click a statement for its vouchers, downloads and replenishment', closed.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Statement' }, { t:'Invoice dates' }, { t:'Closed' }, { t:'Total', n:1 }, { t:'Replenishment' }, { t:'' }])}<tbody>${closed.map(s => `<tr class="${vTr} cursor-pointer" onclick="openPcStatementDetail('${esc(s.no)}')">${vTd(`<span class="font-semibold">${esc(s.no)}</span><div class="text-[11.5px] text-slate-400">${s.list.length} voucher${s.list.length === 1 ? '' : 's'}</div>`, { first:1 })}${vTd(s.from ? vDate(s.from) + (s.to !== s.from ? ' – ' + vDate(s.to) : '') : '—', { cls:'text-slate-500' })}${vTd(s.closedDate ? vDate(s.closedDate) : '—', { cls:'text-slate-500' })}${vTd(`<b>${fmtMVR(s.total)}</b>`, { n:1 })}${vTd(pcReplStatusPill(s))}${vTd(`<span class="text-xs font-semibold text-brand-600">View ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`).join('')}</tbody></table></div>` : vEmpty('No closed statements yet.'))}`;
 }
 function viewPettyCashStatement(){
@@ -10518,7 +10533,7 @@ function viewTravel(scope){
       ${vTd(trStatusPill(t.status), { last:1 })}
     </tr>`; }).join('');
   return `
-    <div class="sticky-toolbar">${vHead(S.label, scope === 'local' ? 'Trips within the country: the request, the ticket and the Daily Subsistence Allowance.' : 'Trips abroad: the request, the ticket and the Daily Subsistence Allowance.',
+    ${vHead(S.label, scope === 'local' ? 'Trips within the country: the request, the ticket and the Daily Subsistence Allowance.' : 'Trips abroad: the request, the ticket and the Daily Subsistence Allowance.',
       `${vBtnPlain('Blank memo (Word)', `trBlankMemo('${scope}', 'docx', this)`)}${vBtnPlain('Blank memo (PDF)', `trBlankMemo('${scope}', 'pdf', this)`)}<button onclick="openTravelSettings()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">DSA rates</button>${vBtnPrimary('+ Travel request', `openTravelForm('', '${scope}')`)}`)}</div>
     ${ratesMissing ? `<div class="mb-5 rounded-lg bg-amber-50 text-amber-800 text-[13px] px-4 py-3">No ${scope} DSA rates are set yet. Set them under <button onclick="openTravelSettings()" class="font-semibold underline">DSA rates</button> so new requests fill them in.</div>` : ''}
     ${kpis}

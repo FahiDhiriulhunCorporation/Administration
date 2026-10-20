@@ -1650,7 +1650,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.235';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.238';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2033,6 +2033,7 @@ function openModal(title, bodyHtml, wide){
   stopModalScrollPadding();
   titleEl.textContent = title;
   document.getElementById('modal-body').innerHTML = bodyHtml;
+  document.getElementById('modal-box').style.maxWidth = '';
   document.getElementById('modal-box').classList.toggle('max-w-lg', !wide);
   document.getElementById('modal-box').classList.toggle('max-w-2xl', !!wide);
   overlay.classList.remove('hidden');
@@ -3323,7 +3324,7 @@ function pcPerson(uid, fallbackName){
 }
 const pcRequester = r => r.requesterUid ? pcPerson(r.requesterUid, r.requesterName) : { name: r.requesterName || '', designation: r.requesterDesig || '' };      // no uid = typed in (not a user of the app)
 const pcCashReceiver = r => r.cashReceiverUid ? pcPerson(r.cashReceiverUid, r.cashReceiverName) : r.cashReceiverName ? { name: r.cashReceiverName, designation: r.cashReceiverDesig || '' } : pcRequester(r);      // blank = the requester collects the cash
-const pcHod = r => pcPerson(r.hodUid, r.hodName);
+const pcHod = r => r.hodUid ? pcPerson(r.hodUid, r.hodName) : { name:r.hodName || '', designation:r.hodDesig || '' };      // no uid = typed in (e.g. the HOD of another department)
 function pcCustodian(r){
   const loc = pcFund(r.locationId);
   return pcPerson(loc && loc.pettyCashCustodianUid, (loc && loc.pettyCashCustodianName) || r.custodianName || '');
@@ -3472,7 +3473,7 @@ function viewPettyCash(){
       : (st.key === 'process' && pcCanProcess(r)) ? `<button onclick="event.stopPropagation(); pcAct('process','${r.id}')" class="mt-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700">Process</button>` : '';
     return `<tr class="${vTr} cursor-pointer" onclick="openPcDetails('${r.id}')">
       ${vTd(`<div class="font-bold text-slate-800 whitespace-nowrap">${esc(r.number || '—')}</div><div class="text-[11.5px] text-slate-400">${vDate(r.date)}</div>`, { first:1 })}
-      ${vTd(`<div class="text-slate-800 max-w-[20rem] truncate" title="${esc(r.purpose || '')}">${esc(r.purpose || '—')}</div><div class="text-[11.5px] text-slate-400 max-w-[20rem] truncate">${esc(pcLocName(r.locationId))}${r.category ? ' · ' + esc(r.category) : ''}</div>`)}
+      ${vTd(`<div class="text-slate-800 max-w-[20rem] truncate" title="${esc(r.purpose || '')}">${esc(r.purpose || '—')}</div><div class="text-[11.5px] text-slate-400 max-w-[20rem] truncate">${esc(pcLocName(r.locationId))}${r.category ? ' · ' + esc(r.category) : ''}${r.external ? ' · <span class="text-amber-600 font-semibold">from ' + esc(r.external.department || r.department || 'another dept') + '</span>' : ''}</div>`)}
       ${vTd(vPill(r.option === 'Reimbursement' ? 'warn' : 'acc', esc(r.option || '—')))}
       ${vTd(`<span class="whitespace-nowrap">${esc(rq.name || '—')}</span>`)}
       ${vTd(`<b>${fmtMVR(pcTotal(r))}</b>`, { n:1 })}
@@ -3490,7 +3491,7 @@ function viewPettyCash(){
   const tab = (id, label, n, color) => `<button onclick="vehUi.pcLoc='${id}'; vehUi.pcShown=30; rerenderMain()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold border ${vehUi.pcLoc === id ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">${color ? `<i class="w-2.5 h-2.5 rounded-full" style="background:${esc(color)}"></i>` : ''}${esc(label)}<span class="text-xs font-medium ${vehUi.pcLoc === id ? 'text-white/80' : 'text-slate-400'}">${n}</span></button>`;
   const locTabs = `<div class="flex flex-wrap gap-2 mb-3">${tab('', 'All locations', all.length)}${funds.map(f => tab(f.id, f.name, locCount(f.id), f.color || '#94a3b8')).join('')}${others ? tab('other', 'Other', others, '#94a3b8') : ''}</div>`;
   return `
-    ${vHead('Petty Cash Request', 'Requests for petty cash by location — a prior request, or a reimbursement of money already spent.', vBtnPlain('+ Fueling Petty Cash', "openPcForm(null,'fuel')") + vBtnPrimary('+ New Request', 'openPcForm()'))}</div>
+    ${vHead('Petty Cash Request', 'Requests for petty cash by location — a prior request, or a reimbursement of money already spent.', vBtnPlain('+ From another department', 'openPcIntake()') + vBtnPlain('+ Fueling Petty Cash', "openPcForm(null,'fuel')") + vBtnPrimary('+ New Request', 'openPcForm()'))}</div>
     ${vKpis(
       statCard('Requests this month', fmtNum(thisM.length), new Date().toLocaleDateString('en-GB', { month:'long', year:'numeric' }), 'brand') +
       statCard('Prior requests', fmtMVR(sumOpt(thisM, 'Prior Request')), 'This month', 'emerald') +
@@ -3577,9 +3578,9 @@ function pcCashChange(){
 function pcRequesterChanged(){
   const sel = document.getElementById('pc-requester'), box = document.getElementById('pc-sign-box'), linked = document.getElementById('pc-form-link');
   pcToggleCustom(sel, 'pc-req-custom');
-  if(sel.value === PC_OTHER){ box.innerHTML = '<div class="text-sm text-slate-500">This requester isn\'t a user of the app, so they sign the printed form. Attach the signed form (or add its link) above once it is signed.</div>'; return; }
   const oldR = pcEditingId ? state.pettyCash.find(x => x.id === pcEditingId) : null;
   if((linked && linked.value.trim()) || trAtt.pcform || (oldR && oldR.formFile && oldR.formFile.fileId)){ box.innerHTML = '<div class="text-sm text-slate-500">The signed form is attached, so no signature is needed here.</div>'; return; }
+  if(sel.value === PC_OTHER){ box.innerHTML = '<div class="text-sm text-slate-500">This requester isn\'t a user of the app, so they sign the printed form. Attach the signed form (or add its link) above once it is signed.</div>'; return; }
   const mine = authUser && sel.value === authUser.uid;
   const old = pcEditingId ? state.pettyCash.find(x => x.id === pcEditingId) : null;       // when editing, signing again is a choice, not a default
   const signedNote = old && pcSigned(old) ? '<div class="text-[11.5px] text-amber-700 mt-2">This request is already signed. Changing it removes the signature unless you tick the box to sign it again.</div>' : '';
@@ -4032,7 +4033,7 @@ async function pcSyncFuelRequisitions(rec, pcId, createNew){
 
 /* ---------- the request form (items or fueling) ---------- */
 function pcNumberEdited(){ pcNumberTouched = true; }
-async function openPcForm(id, mode){
+async function openPcForm(id, mode, preset){
   const r = id ? state.pettyCash.find(x => x.id === id) : null;
   if(id && !r) return;
   if(id && pcInClosed(r)){ toast(r.number + ' is in the closed statement ' + r.statementNo + '. The petty cash custodian can reopen the statement to change it.', true); return; }
@@ -4044,6 +4045,8 @@ async function openPcForm(id, mode){
   let lastLoc = ''; try{ lastLoc = localStorage.getItem(STORAGE_PREFIX + 'pcLastLocation') || ''; }catch(e){}
   const locId = r ? r.locationId : (mode === 'fuel' ? PC_FUEL_ID : (LOCATIONS.some(l => l.id === lastLoc) ? lastLoc : LOCATIONS[0].id));
   const d = r || { number:pcNextVoucher(locId, vToday()), date:vToday(), locationId:locId, department:'Administration', option:'Prior Request', category: mode === 'fuel' ? 'Fuel' : '', items:[{}, {}, {}], fuelRows:[{}], invoices:[], requesterUid:authUser ? authUser.uid : '', hodUid:'' };
+  if(!r && preset){ Object.assign(d, { department:preset.department || d.department, requesterUid:'', hodUid:'', option:'Prior Request', ext:true }); }
+  pcIntake = !r && preset ? preset : null;
   const items = pcItems(d).length ? pcItems(d) : [{}], fuelRows = (d.fuelRows && d.fuelRows.length) ? d.fuelRows : [{}], invoices = (d.invoices && d.invoices.length) ? d.invoices : [{}];
   const linkedReqs = r ? state.fuelRequisitions.filter(q => q.pettyCashId === r.id).length : 0;
   pcEditingId = id || ''; pcNumberTouched = !!r; pcPurposeTouched = !!r; Object.keys(pcAttach).forEach(k => { delete pcAttach[k]; });
@@ -4076,8 +4079,8 @@ async function openPcForm(id, mode){
     ${itemsBlock}
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-5">
       <div><label class="${VEH_LBL}">Petty Cash Custodian</label><div id="pc-custodian" class="text-sm px-3.5 py-2.5 rounded-lg bg-slate-50 border border-slate-200 min-h-[2.6rem]"></div><div class="text-[11px] text-slate-400 mt-1">Set automatically from the location.</div></div>
-      <div><label class="${VEH_LBL}">Requester${vReqStar}</label><select name="requesterUid" id="pc-requester" onchange="pcRequesterChanged()" class="${VEH_FIELD} bg-white">${pcUserOptions(d.requesterUid, 'Select requester…')}${pcOtherOpt(!d.requesterUid && !!d.requesterName)}</select>${pcCustomBox('pc-req-custom', !d.requesterUid ? d.requesterName : '', !d.requesterUid ? d.requesterDesig : '', !d.requesterUid && !!d.requesterName, 'reqName', 'reqDesig')}</div>
-      <div><label class="${VEH_LBL}">HOD (approves)${vReqStar}</label><select name="hodUid" id="pc-hod" class="${VEH_FIELD} bg-white">${pcUserOptions(d.hodUid, 'Select HOD…')}</select></div>
+      <div><label class="${VEH_LBL}">Requester${vReqStar}</label><select name="requesterUid" id="pc-requester" onchange="pcRequesterChanged()" class="${VEH_FIELD} bg-white">${pcUserOptions(d.requesterUid, 'Select requester…')}${pcOtherOpt(!d.requesterUid && (!!d.requesterName || d.ext))}</select>${pcCustomBox('pc-req-custom', !d.requesterUid ? d.requesterName : '', !d.requesterUid ? d.requesterDesig : '', !d.requesterUid && (!!d.requesterName || d.ext), 'reqName', 'reqDesig')}</div>
+      <div><label class="${VEH_LBL}">HOD (approves)${vReqStar}</label><select name="hodUid" id="pc-hod" onchange="pcToggleCustom(this, 'pc-hod-custom')" class="${VEH_FIELD} bg-white">${pcUserOptions(d.hodUid, 'Select HOD…')}${pcOtherOpt(!d.hodUid && (!!d.hodName || d.ext))}</select>${pcCustomBox('pc-hod-custom', !d.hodUid ? d.hodName : '', !d.hodUid ? d.hodDesig : '', !d.hodUid && (!!d.hodName || d.ext), 'hodName', 'hodDesig')}</div>
     </div>
     <div class="mt-3.5 grid grid-cols-1 sm:grid-cols-[16rem_1fr] gap-3.5"><div><label class="${VEH_LBL}">Cash received by</label><select name="cashReceiverUid" id="pc-cash-receiver" onchange="pcToggleCustom(this, 'pc-cr-custom')" class="${VEH_FIELD} bg-white">${pcUserOptions(d.cashReceiverUid || '', 'Same as the requester')}${pcOtherOpt(!d.cashReceiverUid && !!d.cashReceiverName)}</select>${pcCustomBox('pc-cr-custom', !d.cashReceiverUid ? d.cashReceiverName : '', !d.cashReceiverUid ? d.cashReceiverDesig : '', !d.cashReceiverUid && !!d.cashReceiverName, 'crName', 'crDesig')}</div><div class="text-[11.5px] text-slate-400 self-end pb-2.5">Who collects the cash. It is printed in the "Cash Received by" column of the form, and confirmed when the cash is handed over.</div></div>
     <div class="mt-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3.5">
@@ -4088,7 +4091,24 @@ async function openPcForm(id, mode){
     <div class="mt-3.5"><label class="${VEH_LBL}">Signed petty cash request <span class="font-normal text-slate-400">(optional — attach the file or add its link)</span></label><input type="text" id="pc-form-link" name="formLink" value="${esc(d.formLink || '')}" data-has="${d.formLink ? '1' : '0'}" oninput="pcFormLinkChanged()" inputmode="url" autocomplete="off" placeholder="Link to the signed form, e.g. SharePoint" class="veh-link ${VEH_FIELD}">${trAttRow('pcform', d.formFile && d.formFile.fileId ? d.formFile : null, 'Attach the signed petty cash request (PDF or photo)')}<div class="text-[11px] text-slate-400 mt-1">If you attach or link the signed form, the requester doesn't need to sign here.</div></div>
     <div class="mt-3.5"><label class="${VEH_LBL}">Requester's signature</label><div id="pc-sign-box" class="rounded-lg border border-slate-200 px-4 py-3"></div></div>
     ${vFoot(r ? 'Save changes' : 'Create request', `savePcForm('${id || ''}')`)}`, true);
+  if(pcIntake && pcIntake.att){ trAtt.pcform = pcIntake.att; const inf = document.getElementById('tr-att-info-pcform'), ac = document.getElementById('tr-att-act-pcform'); if(inf) inf.textContent = '📎 ' + agAttText(pcIntake.att) + ' (the approved request — saved when you press Save)'; if(ac) ac.textContent = 'Replace file'; }
+  if(pcIntake){ const fv = document.getElementById('vform'); fv.insertAdjacentHTML('afterbegin', `<div class="rounded-lg bg-amber-50 text-amber-800 text-[12.5px] px-3.5 py-2.5 mb-4">Approved request from <b>${esc(pcIntake.department || 'another department')}</b>: type the details from the form — the requester and the HOD who approved it (as on the form), the items and the amounts. The approved form is attached, so no signature is needed here.</div>`); }
   pcLocationChanged(); pcRequesterChanged(); if(mode === 'fuel') pcFuelRecalc(); else pcRecalc();
+}
+// an approved petty cash request from another department: attach the approved form, then the voucher is made from it
+let pcIntake = null;
+function openPcIntake(){
+  if(!LOCATIONS.length){ toast('Add a location first.', true); return; }
+  const mine = (authUser && authUser.department) || 'Administration', depts = DEPARTMENTS.map(x => x.name).filter(n => n !== mine);
+  openModal('Approved request from another department', vFormOpen + `<p class="text-sm text-slate-500 mb-4">For a petty cash request another department has already filled in and had approved by its HOD. Attach the approved form, choose the department, then fill in the voucher from it.</p>
+    <label class="${VEH_LBL}">Approved petty cash request${vReqStar}</label>${trAttRow('pcin', null, 'Attach the approved request (PDF or photo)')}
+    <div class="mt-3.5"><label class="${VEH_LBL}">Department${vReqStar}</label><input name="department" list="pc-in-depts" value="${esc(depts[0] || '')}" class="${VEH_FIELD}"><datalist id="pc-in-depts">${DEPARTMENTS.map(x => `<option value="${esc(x.name)}"></option>`).join('')}</datalist></div>` +
+    vFoot('Continue', 'pcIntakeGo()'));
+}
+function pcIntakeGo(){
+  const att = trAtt.pcin, dept = String((document.querySelector('#vform [name=department]') || {}).value || '').trim();
+  if(!att) return vFail('Attach the approved petty cash request.'); if(!dept) return vFail('Enter the department.');
+  delete trAtt.pcin; openPcForm(null, 'items', { department:dept, att });
 }
 async function savePcForm(id){
   const f = document.getElementById('vform'), old = id ? state.pettyCash.find(x => x.id === id) : null, fuel = pcFormMode === 'fuel';
@@ -4137,9 +4157,11 @@ async function savePcForm(id){
   if(reqOther && !reqDesig) return vFail('Type the requester\'s designation.');
   if(crOther && !crName) return vFail('Type the name of the person who receives the cash.');
   if(!hodUid) return vFail('Select the HOD.');
-  if(requesterUid === hodUid) return vFail('The requester and the HOD must be different people.');
-  const rq = reqOther ? { name:reqName, designation:reqDesig } : pcPerson(requesterUid), hod = pcPerson(hodUid), loc = pcFund(locationId), cust = pcPerson(loc && loc.pettyCashCustodianUid, loc && loc.pettyCashCustodianName);
-  const rec = { number, date, locationId, department, purpose, option, category, items, invoices, total:pcTotal({ items }), requesterUid: reqOther ? '' : requesterUid, requesterName:rq.name, requesterDesig: reqOther ? reqDesig : '', hodUid, hodName:hod.name, custodianName:cust.name, formLink, formFile:(old && old.formFile) || null,
+  const hodOther = hodUid === PC_OTHER, hodNameT = hodOther ? String(f.hodName.value || '').trim() : '', hodDesigT = hodOther ? String(f.hodDesig.value || '').trim() : '';
+  if(hodOther && !hodNameT) return vFail('Type the HOD\'s name.');
+  if(!hodOther && requesterUid === hodUid) return vFail('The requester and the HOD must be different people.');
+  const rq = reqOther ? { name:reqName, designation:reqDesig } : pcPerson(requesterUid), hod = hodOther ? { name:hodNameT } : pcPerson(hodUid), loc = pcFund(locationId), cust = pcPerson(loc && loc.pettyCashCustodianUid, loc && loc.pettyCashCustodianName);
+  const rec = { number, date, locationId, department, purpose, option, category, items, invoices, total:pcTotal({ items }), requesterUid: reqOther ? '' : requesterUid, requesterName:rq.name, requesterDesig: reqOther ? reqDesig : '', hodUid: hodOther ? '' : hodUid, hodName:hod.name, hodDesig: hodOther ? hodDesigT : '', custodianName:cust.name, formLink, formFile:(old && old.formFile) || null,
     cashReceiverUid:crUid, cashReceiverName: crOther ? crName : (crUid ? pcPerson(crUid).name : ''), cashReceiverDesig: crOther ? crDesig : '', cashAmount, changeAmount };
   if(old && old.processedDate){ if(cashAmount != null) rec.processedAmount = cashAmount; rec.balanceReturned = changeAmount; }      // already handed over: keep the processing in step
   if(fuel){ rec.kind = 'fuel'; rec.fuelRows = fuelRows; }
@@ -4152,7 +4174,8 @@ async function savePcForm(id){
     else if(old && pcSigned(old) && old.requesterSignature.contentKey === key) rec.requesterSignature = old.requesterSignature;   // nothing that was signed has changed
     else if(old) rec.requesterSignature = null;
     if(!fuel){ try{ localStorage.setItem(STORAGE_PREFIX + 'pcLastLocation', locationId); }catch(e){} }
-    const savedId = await vehSave('pettyCash', rec);
+    if(!old && pcIntake){ rec.external = { department:pcIntake.department, at:Date.now(), by:authUser ? authUser.name : '' }; }
+    const savedId = await vehSave('pettyCash', rec); pcIntake = null;
     const fAtt = trAtt.pcform; delete trAtt.pcform; if(fAtt) pcFormBgUpload(savedId, fAtt);
     if(fuel && (wantReq || (old && state.fuelRequisitions.some(q => q.pettyCashId === savedId)))) await pcSyncFuelRequisitions(rec, savedId, wantReq);
     closeModal(); toast(old ? 'Request updated.' : (signNow ? 'Request created and signed.' : 'Request created.'));
@@ -4925,6 +4948,58 @@ async function buildPettyCashStatementXlsx(focusNo){
   return out.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE' });
 }
 // downloads the one workbook of all statements; it opens on the given statement's sheet
+// live preview: the statement's sheet exactly as the workbook builds it (values, colours, merges, widths), shown in the app before downloading
+async function pcStWorkbookPreview(no, fromDetail){
+  openModal('Preview — ' + no, '<div class="text-sm text-slate-500">Building the statement…</div>', true);
+  try{
+    const blob = await buildPettyCashStatementXlsx(no), z = await JSZip.loadAsync(blob);
+    const P = async n => { const f = z.file(n); return f ? new DOMParser().parseFromString(await f.async('string'), 'application/xml') : null; };
+    const wb = await P('xl/workbook.xml'), act = +((wb.querySelector('workbookView') || { getAttribute:() => 0 }).getAttribute('activeTab') || 0);
+    const sh = await P('xl/worksheets/sheet' + (act + 1) + '.xml'), st = await P('xl/styles.xml'), ssd = await P('xl/sharedStrings.xml');
+    const shared = ssd ? [...ssd.getElementsByTagName('si')].map(si => [...si.getElementsByTagName('t')].map(t => t.textContent).join('')) : [];
+    const kids = (el, n) => el ? [...el.children].filter(c => c.localName === n) : [];
+    const one = (el, n) => el ? [...el.getElementsByTagName(n)][0] || null : null;
+    const fmts = {}; [...st.getElementsByTagName('numFmt')].forEach(f => { fmts[f.getAttribute('numFmtId')] = f.getAttribute('formatCode'); });
+    const fonts = kids(one(st, 'fonts'), 'font').map(f => { const c = one(f, 'color'); return { b:!!one(f, 'b'), i:!!one(f, 'i'), sz:+((one(f, 'sz') || { getAttribute:() => 11 }).getAttribute('val')), color:c && c.getAttribute('rgb') ? '#' + c.getAttribute('rgb').slice(-6) : '' }; });
+    const fills = kids(one(st, 'fills'), 'fill').map(f => { const pf = one(f, 'patternFill'), fg = pf && one(pf, 'fgColor'); return pf && pf.getAttribute('patternType') === 'solid' && fg && fg.getAttribute('rgb') ? '#' + fg.getAttribute('rgb').slice(-6) : ''; });
+    const borders = kids(one(st, 'borders'), 'border').map(b => ['left', 'right', 'top', 'bottom'].some(k => { const e = one(b, k); return e && e.getAttribute('style'); }));
+    const xfs = kids(one(st, 'cellXfs'), 'xf').map(x => { const a = one(x, 'alignment'); return { font:fonts[+x.getAttribute('fontId') || 0] || {}, fill:fills[+x.getAttribute('fillId') || 0] || '', border:borders[+x.getAttribute('borderId') || 0], nf:x.getAttribute('numFmtId') || '0', h:a ? a.getAttribute('horizontal') : '', wrap:a ? /^(1|true)$/.test(a.getAttribute('wrapText') || '') : false }; });
+    const colW = {}, colHid = {};
+    [...sh.getElementsByTagName('col')].forEach(c => { for(let k = +c.getAttribute('min'); k <= +c.getAttribute('max'); k++){ colW[k] = +(c.getAttribute('width') || 9); if(/^(1|true)$/.test(c.getAttribute('hidden') || '')) colHid[k] = 1; } });
+    const cells = {}, rowH = {}, rowHid = {}; let maxR = 0, maxC = 0;
+    [...sh.getElementsByTagName('row')].forEach(rw => { const n = +rw.getAttribute('r'); if(rw.getAttribute('ht')) rowH[n] = +rw.getAttribute('ht'); if(/^(1|true)$/.test(rw.getAttribute('hidden') || '')) rowHid[n] = 1;
+      kids(rw, 'c').forEach(c => { const ref = c.getAttribute('r'), m = /^([A-Z]+)(\d+)$/.exec(ref), col = pcColIndex(m[1]), t = c.getAttribute('t'), v = one(c, 'v');
+        const fx = one(c, 'f');
+        let val = fx && /^\s*TODAY\(\)\s*$/i.test(fx.textContent) ? String(Math.round((Date.parse(vToday() + 'T00:00:00Z') - Date.UTC(1899, 11, 30)) / 86400000)) : t === 'inlineStr' ? [...c.getElementsByTagName('t')].map(x => x.textContent).join('') : t === 's' ? shared[+(v ? v.textContent : 0)] : v ? v.textContent : '';
+        cells[n + ':' + col] = { val, num:t !== 's' && t !== 'inlineStr' && t !== 'str' && val !== '' && !isNaN(+val), s:+(c.getAttribute('s') || 0) };
+        if(val !== '' || c.getAttribute('s')){ maxR = Math.max(maxR, n); maxC = Math.max(maxC, col); } }); });
+    maxR = Math.min(maxR, 60); maxC = Math.min(maxC, 40);
+    const span = {}, covered = {};
+    [...sh.getElementsByTagName('mergeCell')].forEach(m => { const [a, b] = m.getAttribute('ref').split(':'), p = /^([A-Z]+)(\d+)$/.exec(a), q = /^([A-Z]+)(\d+)$/.exec(b || a);
+      const r1 = +p[2], c1 = pcColIndex(p[1]), r2 = +q[2], c2 = pcColIndex(q[1]); span[r1 + ':' + c1] = { r2, c2 }; for(let r = r1; r <= r2; r++) for(let c = c1; c <= c2; c++) if(r !== r1 || c !== c1) covered[r + ':' + c] = 1; });
+    const fmtVal = (cl, x) => { if(!cl.num) return esc(cl.val).replace(/\n/g, '<br>'); const n = +cl.val, code = fmts[x.nf] || '', id = +x.nf;
+      if((id >= 14 && id <= 22) || /[dmy]{2}/i.test(code.replace(/"[^"]*"/g, ''))){ const d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000); return esc(d.getUTCDate() + '-' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()] + '-' + String(d.getUTCFullYear()).slice(/yyyy/i.test(code) ? 0 : 2)); }
+      if(/0\.00|#,##0\.0|_\(|\$|MVR|43|44/.test(code + id) || id === 4 || id === 2 || id === 39 || id === 40) return n === 0 && /-/.test(code) ? '-' : n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+      return String(Math.round(n * 1e6) / 1e6); };
+    const vis = c => !colHid[c], cols = []; for(let c = 1; c <= maxC; c++) if(vis(c)) cols.push(c);
+    const cw = c => Math.round((colW[c] || 8.43) * 7 + 5), tblW = cols.reduce((a, c) => a + cw(c), 0);
+    let html = '<colgroup>' + cols.map(c => `<col style="width:${cw(c)}px">`).join('') + '</colgroup>';
+    for(let r = 1; r <= maxR; r++){
+      if(rowHid[r]) continue; html += `<tr style="height:${Math.round((rowH[r] || 15) * 1.333)}px">`;
+      for(const c of cols){ const k = r + ':' + c; if(covered[k]) continue;
+        const cl = cells[k] || { val:'', s:0 }, x = xfs[cl.s] || { font:{} }, sp = span[k]; let cs = 1, rs = 1;
+        if(sp){ cs = cols.filter(cc => cc >= c && cc <= sp.c2).length || 1; rs = 0; for(let rr = r; rr <= sp.r2; rr++) if(!rowHid[rr]) rs++; rs = rs || 1; }
+        const css = [x.fill ? 'background:' + x.fill : '', x.font.b ? 'font-weight:700' : '', x.font.i ? 'font-style:italic' : '', x.font.color ? 'color:' + x.font.color : '', 'font-size:' + Math.round((x.font.sz || 11) * 1.333) + 'px',
+          'text-align:' + (x.h || (cl.num ? 'right' : 'left')), x.border ? 'border:1px solid #9ca3af' : '', x.wrap ? 'white-space:normal' : 'white-space:nowrap;overflow:hidden'].filter(Boolean).join(';');
+        html += `<td${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''} style="${css}">${fmtVal(cl, x)}</td>`; }
+      html += '</tr>'; }
+    openModal('Preview — ' + no, `<div class="flex items-center justify-between gap-3 flex-wrap mb-3"><p class="text-xs text-slate-500">The statement sheet as the workbook will have it. Scroll sideways for the reconciliation and the cash count.</p><label class="text-xs text-slate-500 flex items-center gap-2">Zoom <input type="range" min="30" max="110" value="50" oninput="document.querySelector('.pc-xl-prev').style.setProperty('--pz', this.value / 100)"></label></div>
+      <div style="overflow:auto;max-height:70vh;background:#fff;border:1px solid #cbd5e1;border-radius:8px"><table class="pc-xl-prev" style="width:${tblW}px;border-collapse:collapse;table-layout:fixed;font-family:Calibri,Carlito,Arial,sans-serif;font-size:15px;color:#111;background:#fff;zoom:var(--pz,.5)">${html}</table></div>
+      <style>.pc-xl-prev td{padding:2px 4px;vertical-align:middle;line-height:1.25;border-color:#9ca3af}</style>
+      <div class="flex justify-end gap-2.5 mt-4">${fromDetail ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="openPcStatementDetail('${esc(no)}')">Back</button>` : `<button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="closeModal()">Close</button>`}<button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="pcDownloadStatements('${esc(no)}', this)">Download workbook</button></div>`, true);
+    document.getElementById('modal-box').style.maxWidth = 'min(96vw, 1500px)';
+  }catch(e){ console.error(e); openModal('Preview — ' + no, vEmpty('The preview could not be built: ' + esc(e && e.message ? e.message : String(e))), true); }
+}
 async function pcDownloadStatements(focusNo, btn){
   const label = btn ? btn.innerHTML : '';
   if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
@@ -5530,7 +5605,7 @@ function openPcStatementDetail(no){
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Total', fmtMVR(s.total))}${item('Vouchers', s.list.length)}${item('Invoice dates', s.from ? vDate(s.from) + (s.to !== s.from ? ' – ' + vDate(s.to) : '') : '—')}${item('Closed', s.closedDate ? vDate(s.closedDate) : '—')}</div>
     <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Download</div>
     <div class="grid sm:grid-cols-2 gap-2 mb-5">
-      ${dl('Statement', 'PDF', `pcStatementPdf('${esc(no)}', this)`)}${dl('Statement workbook (all statements)', 'Excel', `pcDownloadStatements('${esc(no)}', this)`)}
+      ${dl('Statement', 'PDF', `pcStatementPdf('${esc(no)}', this)`)}${dl('Statement workbook (all statements)', 'Excel', `pcDownloadStatements('${esc(no)}', this)`)}${dl('Preview the statement sheet', 'View', `pcStWorkbookPreview('${esc(no)}', true)`)}
       ${rr ? dl('Replenishment form', 'PDF', `pcReplFormPdf('${esc(no)}', this)`) + dl('Replenishment form', 'Word', `pcReplForm('${esc(no)}', this)`) : ''}
     </div>
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
@@ -5720,7 +5795,7 @@ function viewPcStatementsExcel(){
     ${vPanel('Open statement', open ? pcStProgressHtml(open) : '', open ? `
       <div class="px-5 sm:px-6 py-4 flex items-start justify-between gap-3 flex-wrap">
         <div><div class="flex items-center gap-2.5"><div class="text-base font-bold text-slate-900 num">${esc(open.no)}</div>${can ? `<button onclick="openPcRenameStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-brand-600 hover:underline" title="Edit the statement number">Edit number</button>` : ''}</div><div class="text-xs text-slate-500 mt-0.5">${open.list.length} of ${PC_STATEMENT_ROWS} vouchers · ${fmtMVR(open.total)}${open.from ? ' · invoices ' + vDate(open.from) + (open.to !== open.from ? ' – ' + vDate(open.to) : '') : ''}</div>${unprocOpen ? `<div class="text-xs text-amber-700 mt-1">${unprocOpen} voucher${unprocOpen === 1 ? ' is' : 's are'} not processed yet</div>` : ''}</div>
-        <div class="flex items-center gap-2 flex-wrap"><button onclick="pcDownloadStatements('${esc(open.no)}', this)" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Download workbook</button>${can ? `<button onclick="pcCloseStatement('${esc(open.no)}')" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700">Close statement</button><button onclick="pcReleaseStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Release</button>` : ''}</div></div>
+        <div class="flex items-center gap-2 flex-wrap"><button onclick="pcStWorkbookPreview('${esc(open.no)}')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Preview</button><button onclick="pcDownloadStatements('${esc(open.no)}', this)" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Download workbook</button>${can ? `<button onclick="pcCloseStatement('${esc(open.no)}')" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700">Close statement</button><button onclick="pcReleaseStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Release</button>` : ''}</div></div>
       ${open.list.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Voucher' }, { t:'Supplier' }, { t:'Bill no.' }, { t:'Details' }, { t:'Category' }, { t:'Processed' }, { t:'Amount', n:1 }, { t:'' }])}<tbody>${openRows}</tbody></table></div>` : vEmpty('No vouchers in this statement yet. Add them from the list below.')}`
       : vEmpty(can ? 'No statement is open. Pick vouchers below, give the statement a number and start it. New requests then go into it.' : 'No statement is open.'))}
     ${pcCashBoxHtml(loc)}
@@ -9645,6 +9720,8 @@ async function wrPdf(id, btn){
    Total Spent = Σ Transferred; Total Received = Σ Received; Pending Invoice = count of "Pending".
 ===================================================================== */
 const BA_TYPES = ['Transferred', 'Received'], BA_INV = ['Pending', 'Received'];
+// expense categories: the columns of the finance "Business Advance - Statement" sample
+const BA_CATS = ['Small Tools and Equipment', 'Garbage Disposal', 'Postage & Delivery', 'Fuel', 'Refreshments', 'Printing and Office Supplies', 'Repair & Maintenance', 'Transportation & Logistics'];
 const baById = id => (state.businessAdvances || []).find(r => r.id === id) || null;
 const baEntries = r => (r.entries || []).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.at || 0) - (b.at || 0));
 const baNet = e => e.type === 'Transferred' ? -vNum(e.amount) : vNum(e.amount);
@@ -9675,12 +9752,12 @@ function baDetail(r){
   const card = (l, v, cls) => `<div class="bg-white rounded-xl border border-slate-200 px-5 py-4"><div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">${l}</div><div class="text-xl font-extrabold mt-1 num ${cls || 'text-slate-900'}">${v}</div></div>`;
   const rows = es.map(e => { const k = (r.entries || []).indexOf(e);
     return `<tr class="${vTr} align-top ${ed ? 'cursor-pointer' : ''}" ${ed ? `onclick="openBaEntry('${r.id}', '${e.uid}')"` : ''}>${vTd(`<span class="whitespace-nowrap">${esc(baDate(e.date))}</span>`, { first:1 })}${vTd(esc(e.party || ''))}${vTd(vPill(e.type === 'Received' ? 'good' : '', esc(e.type)))}${vTd(vMoney(e.amount), { n:1 })}
-      ${vTd(`<div class="whitespace-pre-line text-[13px] min-w-[12rem]">${esc(e.details || '')}</div>`)}${vTd((e.invoice ? vPill(e.invoice === 'Pending' ? 'warn' : 'good', esc(e.invoice)) : '<span class="text-slate-300">—</span>') + (e.fileId ? `<div><button onclick="event.stopPropagation(); openBaInvoice('${r.id}', '${e.uid}')" class="text-[11.5px] font-semibold text-brand-600 hover:underline mt-1">📎 View</button></div>` : '') + (e.link ? `<div>${vLink(e.link, 'Link')}</div>` : ''))}
+      ${vTd(`<div class="whitespace-pre-line text-[13px] min-w-[12rem]">${esc(e.details || '')}</div>${e.type === 'Transferred' && e.category ? `<div class="text-[11px] text-slate-400 mt-0.5">${esc(e.category)}</div>` : ''}`)}${vTd((e.invoice ? vPill(e.invoice === 'Pending' ? 'warn' : 'good', esc(e.invoice)) : '<span class="text-slate-300">—</span>') + (e.fileId ? `<div><button onclick="event.stopPropagation(); openBaInvoice('${r.id}', '${e.uid}')" class="text-[11.5px] font-semibold text-brand-600 hover:underline mt-1">📎 View</button></div>` : '') + (e.link ? `<div>${vLink(e.link, 'Link')}</div>` : ''))}
       ${vTd(`<span class="${baNet(e) < 0 ? 'text-rose-600' : 'text-emerald-700'} font-semibold">${vMoney(baNet(e))}</span>`, { n:1 })}${vTd(`<span class="text-[12.5px]">${esc(e.remarks || '')}</span>`, { last:1 })}</tr>`; }).join('');
   return `<div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.baId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All business advances</button>
       <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${esc(r.title || 'Business Advance')} ${vPill(r.status === 'Settled' ? '' : 'acc', esc(r.status || 'Open'), 'align-middle')}</h1>
       <p class="text-sm text-slate-500 mt-0.5">${esc([r.no, r.holder && 'held by ' + r.holder + (r.department ? ' (' + r.department + ')' : ''), r.date && 'issued ' + vDate(r.date), r.ref && 'ref. ' + r.ref].filter(Boolean).join(' · '))}</p>${r.notes ? `<p class="text-sm text-slate-600 mt-1 whitespace-pre-line">${esc(r.notes)}</p>` : ''}</div>
-    <div class="flex gap-2.5 flex-wrap">${vBtnPlain('Excel', `baXlsxDownload('${r.id}', this)`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
+    <div class="flex gap-2.5 flex-wrap">${vBtnPlain('Excel', `baXlsxDownload('${r.id}', this)`)}${vBtnPlain('Statement (Excel)', `baXlsxDownload('${r.id}', this, 'cat')`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">${card('Current Balance', vMoney(t.balance), t.balance < 0 ? 'text-rose-600' : 'text-emerald-700')}${card('Total Spent', vMoney(t.spent))}${card('Total Received', vMoney(t.received))}${card('Pending Invoice', fmtNum(t.pending), t.pending ? 'text-amber-600' : 'text-slate-900')}</div>
     ${vPanel('Entries', ed ? `<button onclick="openBaEntry('${r.id}', '', 'Received')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">+ Money received</button><button onclick="openBaEntry('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Payment (transferred)</button>` : '',
       es.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Staff Name / Department' }, { t:'Type' }, { t:'Amount', n:1 }, { t:'Details' }, { t:'Invoice' }, { t:'Net', n:1 }, { t:'Remarks' }])}<tbody>${rows}</tbody></table></div>` : vEmpty('No entries yet. Add the money received, then each payment with its invoice.'))}
@@ -9718,6 +9795,7 @@ function openBaEntry(id, euid, type){
     vGrid(2, vS('Type', 'type', [['Transferred', 'Transferred — paid out'], ['Received', 'Received — money in']], d.type, null, { attrs:' onchange="baTypeChanged(this)"' }) + vF('Date', 'date', d.date || vToday(), 'date', { req:1 }) +
       `<div class="sm:col-span-2"><label class="${VEH_LBL}">Staff name / department (or supplier paid)${vReqStar}</label><input name="party" list="ba-parties" value="${esc(d.party || '')}" class="${VEH_FIELD}" placeholder="e.g. Sonee Hardware"></div>` +
       vF('Amount (MVR)', 'amount', d.amount == null ? '' : d.amount, 'number', { req:1, attrs:' step="0.01" min="0"' }) + vS('Invoice status', 'invoice', [['', '— Not needed'], ['Pending', 'Pending'], ['Received', 'Received']], d.invoice || '') +
+      vS('Expense category', 'category', [['', '— Not set (Other)']].concat(BA_CATS.map(c => [c, c])), d.category || '') + vF('Voucher no. (optional)', 'voucher', d.voucher || '', 'text') +
       vTa('Details', 'details', d.details || '', { rows:3, span:'sm:col-span-2', ph:'Items bought — one per line' }) + (AI_READ_URL ? `<div class="sm:col-span-2 -mt-2"><button type="button" onclick="aiTidyField(this, 'details')" class="text-xs font-semibold text-brand-600 hover:underline">Tidy the details with AI</button></div>` : '') + vF('Remarks (invoice no.)', 'remarks', d.remarks || '', 'text') + vF('Invoice link (optional)', 'link', d.link || '', 'text', { attrs:' placeholder="https://…"' })) +
     `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm"><div class="flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baFileChosen(this, '${id}', '${euid || ''}')"><span id="ba-att-act">${e && e.fileId ? 'Replace invoice file' : '📎 Attach the invoice (PDF or photo)'}</span></label>
       <span id="ba-att-info" class="text-slate-500 text-xs">${e && e.fileId ? '📎 ' + esc(e.fileName || 'Invoice') + ' · ' + (e.filePages || 1) + ' page' + ((e.filePages || 1) === 1 ? '' : 's') + ' kept' : ''}</span>${e && e.fileId ? `<button type="button" id="ba-att-rm" onclick="baAttRemove()" class="text-xs text-slate-400 hover:text-rose-600">Remove file</button>` : ''}</div>
@@ -9742,7 +9820,7 @@ async function saveBaEntry(id, euid){
   if(!o.date) return vFail('Enter the date.'); if(!String(o.party || '').trim()) return vFail('Enter the staff name / department or supplier.'); if(!(vNum(o.amount) > 0)) return vFail('Enter the amount.');
   const link = o.link ? vSafeUrl(o.link) : ''; if(o.link && !link) return vFail('The invoice link must be a web address starting with https://');
   const entries = (r.entries || []).map(x => Object.assign({}, x)), old = euid ? entries.find(x => x.uid === euid) : null;
-  const e = Object.assign(old || { uid:uid(), at:Date.now() }, { date:o.date, type:BA_TYPES.includes(o.type) ? o.type : 'Transferred', party:o.party.trim(), amount:vNum(o.amount), details:String(o.details || '').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), invoice:o.invoice || '', remarks:String(o.remarks || '').trim(), link });
+  const e = Object.assign(old || { uid:uid(), at:Date.now() }, { date:o.date, type:BA_TYPES.includes(o.type) ? o.type : 'Transferred', party:o.party.trim(), amount:vNum(o.amount), details:String(o.details || '').split('\n').map(x => x.trim()).filter(Boolean).join('\n'), invoice:o.invoice || '', remarks:String(o.remarks || '').trim(), link, category:BA_CATS.includes(o.category) ? o.category : '', voucher:String(o.voucher || '').trim() });
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   const drop = [];
   try{
@@ -9765,13 +9843,13 @@ async function openBaInvoice(id, euid){
 }
 
 /* ---------- Excel: the business advance statement in the finance sample layout, with its formulas ---------- */
-async function baXlsxDownload(id, btn){
+async function baXlsxDownload(id, btn, mode){
   const r = baById(id); if(!r) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
-  try{ downloadBlob(await buildBaXlsx(r), 'Business Advance - ' + baFile(r) + '.xlsx'); }
+  try{ downloadBlob(await buildBaXlsx(r, mode), (mode === 'cat' ? 'Business Advance Statement - ' : 'Business Advance - ') + baFile(r) + '.xlsx'); }
   catch(e){ console.error(e); toast('Could not create the Excel file: ' + (e && e.message ? e.message : e), true); }
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
-async function buildBaXlsx(r){
+async function buildBaXlsx(r, mode){
   // laid out like the finance sample "Business Advance - Statement": title bar, last update date, the entries table,
   // the reconciliation panel (right), the cash-at-hand count, the totals row and the sign-off block
   try{ await loadScriptOnce(JSZIP_URL); }catch(e){ throw new Error('The document builder could not be loaded. Check your internet connection and try again.'); }
@@ -9821,6 +9899,9 @@ async function buildBaXlsx(r){
   const pendSpent = es.filter(e => e.type === 'Transferred' && e.invoice === 'Pending').reduce((s, e) => s + vNum(e.amount), 0);
   const received = t.received, spent = t.spent, balance = t.balance;
 
+  let maxRow, widths, lastCol = 'R', valid = '';
+  if(mode === 'cat') ({ maxRow, widths, lastCol } = baCatLayout());
+  else {
   // title, last update date, reference
   S('A1', 'Business Advance Statement' + (r.title ? ' — ' + r.title : ''), 1); mg('A1', 'R1', 1); rowHt[1] = 34;
   S('B2', 'Last update date:', 16);
@@ -9884,8 +9965,58 @@ async function buildBaXlsx(r){
   S('E' + (b + 7), 'Sign:', 15); mg('E' + (b + 7), 'E' + (b + 9), 15); mg('F' + (b + 7), 'F' + (b + 9), 0);
   S('B' + (b + 10), 'Date:', 15); mg('C' + (b + 10), 'D' + (b + 10), 0);
   S('E' + (b + 10), 'Date:', 15); B('F' + (b + 10), 0);
-  const maxRow = b + 10;
+  maxRow = b + 10; widths = [6, 30, 15, 14, 16, 44, 16, 17, 17, 17, 3, 16, 16, 18, 3, 18, 16, 22];
+  valid = `<dataValidations count="2"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="D${T0}:D${last}"><formula1>"Transferred,Received"</formula1></dataValidation><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G${T0}:G${last}"><formula1>"Pending,Received"</formula1></dataValidation></dataValidations>`;
+  }
 
+  // the statement by expense category, laid out like the finance sample "Business Advance - Statement":
+  // # · Supplier · Date · Voucher · Bill · Details · Department · one column per category · Total; the reconciliation and the cash count on the right; the sign-off below
+  function baCatLayout(){
+    const pay = es.filter(e => e.type === 'Transferred'), other = pay.some(e => !BA_CATS.includes(e.category));
+    const cats = BA_CATS.concat(other ? ['Other'] : []), c0 = 8, cTot = c0 + cats.length, LT = colL(cTot), L1 = colL(c0), LL = colL(cTot - 1);
+    const n0 = 5, slots = Math.max(23, pay.length), nl = n0 + slots - 1, TR = nl + 1;
+    const R0 = cTot + 2, RA = colL(R0), RB = colL(R0 + 1), RC = colL(R0 + 2);       // the reconciliation: label, label, value
+    S('A1', 'Business Advance Statement – ' + (r.title || ''), 1); mg('A1', LT + '1', 1); rowHt[1] = 34;
+    S('B2', 'Last update date:', 16); N('C2', xlDate(vToday()) || 0, 17);
+    S('F2', [r.no, r.holder && 'Held by ' + r.holder + (r.department ? ' (' + r.department + ')' : ''), r.ref && 'Ref. ' + r.ref].filter(Boolean).join('   ·   '), 18); rowHt[2] = 24;
+    ['#', 'Supplier', 'Date', 'Voucher Number', 'Bill Number', 'Details', 'Department'].concat(cats, ['Total']).forEach((h, i) => S(colL(i + 1) + '4', h, 2)); rowHt[4] = 44;
+    for(let i = 0; i < slots; i++){
+      const n = n0 + i, e = pay[i]; N('A' + n, i + 1, 7);
+      for(let c = c0; c < cTot; c++) B(colL(c) + n, 6);
+      F(LT + n, `SUM(${L1}${n}:${LL}${n})`, e ? vNum(e.amount) : 0, 6);
+      if(!e){ B('B' + n, 5); B('C' + n, 14); B('D' + n, 7); B('E' + n, 7); B('F' + n, 5); B('G' + n, 7); continue; }
+      const det = String(e.details || ''), lines = Math.max(det.split('\n').length, Math.ceil(det.length / 40), Math.ceil(String(e.party || '').length / 22), 1); rowHt[n] = Math.max(24, lines * 15 + 6);
+      S('B' + n, e.party || '', 5); const d = xlDate(e.date); if(d != null) N('C' + n, d, 14); else S('C' + n, baDate(e.date), 7);
+      S('D' + n, e.voucher || '', 7); S('E' + n, e.remarks || '', 7); S('F' + n, det, 5); S('G' + n, e.department || r.department || '', 7);
+      N(colL(c0 + cats.indexOf(BA_CATS.includes(e.category) ? e.category : 'Other')) + n, e.amount, 6);
+    }
+    S('F' + TR, 'Total', 18);
+    cats.forEach((c, k) => { const L = colL(c0 + k); F(L + TR, `SUM(${L}${n0}:${L}${nl})`, pcRound(pay.filter(e => (BA_CATS.includes(e.category) ? e.category : 'Other') === c).reduce((s, e) => s + vNum(e.amount), 0)), 19); });
+    F(LT + TR, `SUM(${LT}${n0}:${LT}${nl})`, spent, 19);
+    const pendAmt = pcRound(pay.filter(e => e.invoice === 'Pending').reduce((s, e) => s + vNum(e.amount), 0));
+    S(RA + '3', 'BUSINESS ADVANCE RECONCILIATION STATEMENT', 9); mg(RA + '3', RC + '3', 9);
+    const row = (n, label, f, v, st) => { S(RA + n, label, 10); mg(RA + n, RB + n, 10); F(RC + n, f, v, st || 3); };
+    row(4, 'Balance B/F (advance received)', String(received), received);
+    row(5, 'Amount used (spent)', `${LT}${TR}`, spent);
+    row(6, 'Total Balance C/D', `${RC}4-${RC}5`, balance, 8);
+    S(RA + '7', 'Current business advance details:', 9); mg(RA + '7', RC + '7', 9);
+    row(8, 'Amount to replenish (amount used)', `${RC}5`, spent);
+    row(9, 'Cash at hand', `${RC}28`, 0);
+    row(10, 'Spent, invoice pending', String(pendAmt), pendAmt);
+    row(11, 'Total cash balance', `${RC}9`, 0, 8);
+    row(12, 'Unbalanced (balance C/D − cash at hand)', `${RC}6-${RC}9`, balance);
+    S(RA + '14', 'CASH AT HAND:', 9); mg(RA + '14', RC + '14', 9);
+    S(RA + '15', 'DENOMINATION', 11); S(RB + '15', 'QUANTITY', 11); S(RC + '15', 'TOTAL MVR', 11);
+    PC_DENOMS.forEach((dn, i) => { const n = 16 + i; N(RA + n, dn, 12); B(RB + n, 13); F(RC + n, `${RA}${n}*${RB}${n}`, 0, 6); });
+    S(RA + '28', 'TOTAL', 8); B(RB + '28', 8); C[RC + '28'] = `<c r="${RC}28" s="8"><f>SUM(${RC}16:${RC}27)</f><v>0</v></c>`;
+    const b = TR + 3;
+    S('B' + b, 'Advance Holder:', 15); S('C' + b, r.holder || '', 5); mg('C' + b, 'D' + b, 5); S('E' + b, 'Checked by (Finance):', 15);
+    [[1, 'Sign:'], [4, 'Date:'], [7, 'Sign:'], [10, 'Date:']].forEach(([o, l]) => { S('B' + (b + o), l, 15); S('E' + (b + o), l, 15); });
+    mg('C' + (b + 1), 'D' + (b + 3), 0); mg('C' + (b + 4), 'D' + (b + 4), 0); mg('C' + (b + 7), 'D' + (b + 9), 0); mg('C' + (b + 10), 'D' + (b + 10), 0);
+    S('B' + (b + 6), 'Checked by:', 15); S('E' + (b + 6), 'Approved by (Finance):', 15);
+    const w = [6, 26, 16, 16, 16, 40, 16].concat(cats.map(() => 15), [16, 3, 22, 18, 16]);
+    return { maxRow:b + 10, widths:w, lastCol:RC };
+  }
   // rows, cells in column order
   const byRow = {};
   Object.keys(C).forEach(ref => { const p = rc(ref); (byRow[p.r] = byRow[p.r] || []).push([p.c, C[ref]]); });
@@ -9893,11 +10024,10 @@ async function buildBaXlsx(r){
     const ht = rowHt[n] ? ` ht="${rowHt[n]}" customHeight="1"` : '';
     return `<row r="${n}"${ht}>${byRow[n].sort((x, y) => x[0] - y[0]).map(x => x[1]).join('')}</row>`;
   }).join('');
-  const widths = [6, 30, 15, 14, 16, 44, 16, 17, 17, 17, 3, 16, 16, 18, 3, 18, 16, 22];
   const colsXml = widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('');
-  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:R${maxRow}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="22"/>
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${lastCol}${maxRow}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="22"/>
 <cols>${colsXml}</cols><sheetData>${rowsXml}</sheetData><mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>
-<dataValidations count="2"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="D${T0}:D${last}"><formula1>"Transferred,Received"</formula1></dataValidation><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G${T0}:G${last}"><formula1>"Pending,Received"</formula1></dataValidation></dataValidations>
+${valid}
 <pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>`;
   const name = String(r.title || 'Business Advance').replace(/[\\\/?*\[\]:]/g, '-').slice(0, 31) || 'Business Advance';
   const z = new JSZip();

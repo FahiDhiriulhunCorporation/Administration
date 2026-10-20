@@ -1650,7 +1650,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.238';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.239';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3334,7 +3334,7 @@ function pcNextNumber(){
   let max = 0; state.pettyCash.forEach(r => { const m = re.exec(r.number || ''); if(m) max = Math.max(max, +m[1]); });
   return 'FDC-PCR-' + y + '-' + String(max + 1).padStart(3, '0');
 }
-const pcHasForm = r => !!(r && (r.formLink || (r.formFile && r.formFile.fileId)));          // the signed petty cash form is linked or attached
+const pcHasForm = r => !!(r && (r.formLink || (r.formFile && r.formFile.fileId) || r.external));          // the signed petty cash form is linked or attached
 const pcCanSign = r => !!authUser && !!r.requesterUid && r.requesterUid === authUser.uid && !pcHasForm(r);        // no signing once the signed form is linked
 // what a signature vouches for: if any of this changes after signing, the signature no longer applies
 const pcContentKey = r => JSON.stringify([r.number, r.locationId, r.department, r.purpose, r.option, r.date, r.requesterUid || ('~' + (r.requesterName || '') + '|' + (r.requesterDesig || '')), r.hodUid, pcItems(r).map(i => [i.name, i.description, vNum(i.qty), vNum(i.unitPrice)])]);
@@ -3371,7 +3371,7 @@ function pcSteps(r){
   const reimb = r.option === 'Reimbursement', rq = pcRequester(r), sig = r.requesterSignature, inv = pcInvoices(r), proc = !!r.processedDate;
   const s = {
     requested: { label:'Requested', done:true, text:vDate(r.date) + ' · ' + (rq.name || 'the requester') },
-    signed: pcSigned(r) ? { label:'Signed by the requester', done:true, text:sig.name + ' · ' + fmtDT(sig.signedAt) } : pcHasForm(r) ? { label:'Signed form attached', done:true, text:'The signed form is attached, so no digital signature is needed' } : { label:'Signed by the requester', done:false, text:'Waiting for ' + (rq.name || 'the requester') },
+    signed: r.external ? { label:'Approved by the HOD (' + (r.external.department || r.department || 'other department') + ')', done:true, text:(r.hodName || 'HOD') + (r.hodDate ? ' · ' + vDate(r.hodDate) : '') + ' · the approved form is attached' } : pcSigned(r) ? { label:'Signed by the requester', done:true, text:sig.name + ' · ' + fmtDT(sig.signedAt) } : pcHasForm(r) ? { label:'Signed form attached', done:true, text:'The signed form is attached, so no digital signature is needed' } : { label:'Signed by the requester', done:false, text:'Waiting for ' + (rq.name || 'the requester') },
     invoice: { label:'Invoice added', done:pcHasInvoice(r), text:pcHasInvoice(r) ? inv.length + ' invoice' + (inv.length === 1 ? '' : 's') + ' · ' + fmtMVR(pcInvoiceTotal(r)) : 'No invoice yet' },
     processed: { label:reimb ? 'Reimbursement paid' : 'Cash handed over', done:proc, text:proc ? [vDate(r.processedDate), r.processedBy, fmtMVR(r.processedAmount), 'received by ' + pcCashReceiver(r).name].filter(Boolean).join(' · ') + (r.processNote ? '\n' + r.processNote : '') + (vNum(r.balanceReturned) ? '\nBalance returned ' + fmtMVR(r.balanceReturned) : '') : 'Not processed yet' },
     statement: { label:'Included in a statement', done:!!r.statementNo, text:r.statementNo ? r.statementNo + (pcInClosed(r) ? ' · closed' : ' · open') : 'Not in a statement yet' },
@@ -3491,7 +3491,7 @@ function viewPettyCash(){
   const tab = (id, label, n, color) => `<button onclick="vehUi.pcLoc='${id}'; vehUi.pcShown=30; rerenderMain()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold border ${vehUi.pcLoc === id ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">${color ? `<i class="w-2.5 h-2.5 rounded-full" style="background:${esc(color)}"></i>` : ''}${esc(label)}<span class="text-xs font-medium ${vehUi.pcLoc === id ? 'text-white/80' : 'text-slate-400'}">${n}</span></button>`;
   const locTabs = `<div class="flex flex-wrap gap-2 mb-3">${tab('', 'All locations', all.length)}${funds.map(f => tab(f.id, f.name, locCount(f.id), f.color || '#94a3b8')).join('')}${others ? tab('other', 'Other', others, '#94a3b8') : ''}</div>`;
   return `
-    ${vHead('Petty Cash Request', 'Requests for petty cash by location — a prior request, or a reimbursement of money already spent.', vBtnPlain('+ From another department', 'openPcIntake()') + vBtnPlain('+ Fueling Petty Cash', "openPcForm(null,'fuel')") + vBtnPrimary('+ New Request', 'openPcForm()'))}</div>
+    ${vHead('Petty Cash Request', 'Requests for petty cash by location — a prior request, or a reimbursement of money already spent.', vBtnPlain('+ Approved request (other dept.)', 'openPcIntake()') + vBtnPlain('+ Fueling Petty Cash', "openPcForm(null,'fuel')") + vBtnPrimary('+ New Request', 'openPcForm()'))}</div>
     ${vKpis(
       statCard('Requests this month', fmtNum(thisM.length), new Date().toLocaleDateString('en-GB', { month:'long', year:'numeric' }), 'brand') +
       statCard('Prior requests', fmtMVR(sumOpt(thisM, 'Prior Request')), 'This month', 'emerald') +
@@ -4097,18 +4097,104 @@ async function openPcForm(id, mode, preset){
 }
 // an approved petty cash request from another department: attach the approved form, then the voucher is made from it
 let pcIntake = null;
+// an approved petty cash request from another department: the custodian attaches the approved form and the app reads it —
+// department, purpose, items, requester and approving HOD — so the voucher is made in one step, without filling a second form.
+// Then the usual steps follow: Process (hand over the cash), Add invoice (with the change), and the statement.
+let pcInFile = null;
 function openPcIntake(){
   if(!LOCATIONS.length){ toast('Add a location first.', true); return; }
-  const mine = (authUser && authUser.department) || 'Administration', depts = DEPARTMENTS.map(x => x.name).filter(n => n !== mine);
-  openModal('Approved request from another department', vFormOpen + `<p class="text-sm text-slate-500 mb-4">For a petty cash request another department has already filled in and had approved by its HOD. Attach the approved form, choose the department, then fill in the voucher from it.</p>
-    <label class="${VEH_LBL}">Approved petty cash request${vReqStar}</label>${trAttRow('pcin', null, 'Attach the approved request (PDF or photo)')}
-    <div class="mt-3.5"><label class="${VEH_LBL}">Department${vReqStar}</label><input name="department" list="pc-in-depts" value="${esc(depts[0] || '')}" class="${VEH_FIELD}"><datalist id="pc-in-depts">${DEPARTMENTS.map(x => `<option value="${esc(x.name)}"></option>`).join('')}</datalist></div>` +
-    vFoot('Continue', 'pcIntakeGo()'));
+  pcInFile = null;
+  openModal('Receive an approved petty cash request', `<p class="text-sm text-slate-500 mb-4">For a request filled in by another department and approved by its HOD. Attach the approved form — the app reads it and makes the voucher. You then hand over the cash (Process), and add the invoice and the change when the requester comes back.</p>
+    <label class="flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 hover:border-brand-400 px-4 py-6 text-sm font-semibold text-brand-600 cursor-pointer"><input type="file" accept="application/pdf,image/*" class="hidden" onchange="pcInPick(this)">📎 Choose the approved request (PDF or photo)</label>
+    <div id="pc-in-body" class="mt-4"></div>`, true);
 }
-function pcIntakeGo(){
-  const att = trAtt.pcin, dept = String((document.querySelector('#vform [name=department]') || {}).value || '').trim();
-  if(!att) return vFail('Attach the approved petty cash request.'); if(!dept) return vFail('Enter the department.');
-  delete trAtt.pcin; openPcForm(null, 'items', { department:dept, att });
+// reads the FDC "Petty Cash Request Form": the label on the left, the value to its right; the items between the table header and TOTAL; the sign-off columns
+async function pcReadRequestForm(file, say){
+  const out = { department:'', purpose:'', items:[], reqName:'', reqDesig:'', hodName:'', hodDesig:'', hodDate:'', total:0 };
+  const clean = v => { v = String(v || '').replace(/\s+/g, ' ').trim(); return /^(fill|-+|_+|n\/?a)$/i.test(v) ? '' : v; };
+  if(/pdf/i.test(file.type) || /\.pdf$/i.test(file.name)){
+    await loadScriptOnce(PDFJS_URL); pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const doc = await pdfjsLib.getDocument({ data:new Uint8Array(await file.arrayBuffer()) }).promise, page = await doc.getPage(1), H = page.getViewport({ scale:1 }).height;
+    const W = (await page.getTextContent()).items.filter(t => String(t.str).trim()).map(t => ({ s:String(t.str).trim(), x:t.transform[4], y:H - t.transform[5], w:t.width || 0 }));
+    if(W.length > 10){
+      const find = re => W.find(w => re.test(w.s)), right = (lab, maxDx) => { const l = find(lab); if(!l) return ''; return W.filter(w => w !== l && Math.abs(w.y - l.y) < 4 && w.x > l.x + 5 && w.x < l.x + (maxDx || 420)).sort((a, b) => a.x - b.x).map(w => w.s).join(' '); };
+      out.department = clean(right(/^Department:?$/i)); out.purpose = clean(right(/^Purpose:?$/i));
+      // items: columns from the header, rows anchored on the expected total
+      const hI = find(/^Item/i), hD = find(/^Description/i), hQ = find(/^Qty$/i), hT = find(/^Expected Total/i) || find(/^Amount \(MVR\)/i), hP = find(/^Per Unit|^Expected Price/i), tot = W.find(w => /^TOTAL$/.test(w.s));
+      if(hI && hQ && tot){
+        const top = Math.max(...W.filter(w => /\(MVR\)|Per Unit|Qty|Item/.test(w.s) && w.y < tot.y).map(w => w.y)) + 6, bot = tot.y - 3;
+        const xD = hD ? hD.x - 8 : hI.x + 80, xQ = hQ.x - 8, xP = hP ? hP.x - 10 : xQ + 40, xT = hT ? hT.x - 10 : xP + 60, xA = W.find(w => /^Actual/i.test(w.s)) ? W.find(w => /^Actual/i.test(w.s)).x - 10 : xT + 80;
+        const cell = W.filter(w => w.y > top && w.y < bot);
+        const num = s => vNum(String(s).replace(/,/g, '').replace(/[^\d.]/g, ''));
+        const anchors = cell.filter(w => w.x >= xT && w.x < xA && /\d/.test(w.s)).sort((a, b) => a.y - b.y);
+        const rows = anchors.map(a => ({ y:a.y, total:num(a.s), name:[], desc:[], qty:'', price:'' }));
+        const near = y => rows.reduce((b, r) => !b || Math.abs(r.y - y) < Math.abs(b.y - y) ? r : b, null);
+        cell.forEach(w => { const r = near(w.y); if(!r) return;
+          if(w.x < xD && w.x >= hI.x - 20){ r.name.push(w); } else if(w.x >= xD && w.x < xQ){ r.desc.push(w); } else if(w.x >= xQ && w.x < xP && /\d/.test(w.s)){ r.qty = num(w.s); } else if(w.x >= xP && w.x < xT && /\d/.test(w.s)){ r.price = num(w.s); } });
+        const txt = arr => arr.sort((a, b) => a.y - b.y || a.x - b.x).map(w => w.s).join(' ').replace(/^\d+\s+/, '');
+        out.items = rows.map(r => { const q = r.qty || (r.price && r.total ? Math.round(r.total / r.price * 100) / 100 : 1); return { name:txt(r.name), description:txt(r.desc), qty:q || 1, unitPrice:r.price || (q ? pcRound(r.total / q) : r.total) }; }).filter(it => it.name || it.description);
+        const tv = W.filter(w => Math.abs(w.y - tot.y) < 4 && w.x > tot.x + 20 && /\d/.test(w.s)).sort((a, b) => a.x - b.x)[0]; out.total = tv ? num(tv.s) : 0;
+      }
+      // sign-off: Name / Designation / Date rows under "Requested by" and "Approved by (HOD)"
+      const cR = find(/^Requested by/i), cH = find(/^Approved by/i), cC = find(/^Cash Received/i);
+      if(cR && cH){
+        const bandR = [cR.x - 50, cH.x - 8], bandH = [cH.x - 8, cC ? cC.x - 8 : cH.x + 110];
+        const val = (rowRe, band) => { const l = W.find(w => rowRe.test(w.s) && w.y > cR.y); if(!l) return ''; return clean(W.filter(w => w !== l && Math.abs(w.y - l.y) < 6 && w.x >= band[0] && w.x < band[1]).sort((a, b) => a.x - b.x).map(w => w.s).join(' ')); };
+        out.reqName = val(/^Name:?$/i, bandR); out.reqDesig = val(/^Designation:?$/i, bandR); out.hodName = val(/^Name:?$/i, bandH); out.hodDesig = val(/^Designation:?$/i, bandH);
+        const d = val(/^Date:?$/i, bandH), m = /(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/.exec(d); if(m) out.hodDate = (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+      }
+      return out;
+    }
+  }
+  // a photo or a scanned PDF: read the words and pick out what can be found
+  const text = await pcReadInvoiceFile(file, say);
+  const grab = re => { const m = re.exec(text); return m ? clean(m[1]) : ''; };
+  out.department = grab(/Department\s*:?\s*(.+)/i); out.purpose = grab(/Purpose\s*:?\s*(.+)/i);
+  const t = /TOTAL\s*([\d,]+(?:\.\d+)?)/i.exec(text); if(t) out.total = vNum(t[1].replace(/,/g, ''));
+  return out;
+}
+async function pcInPick(input){
+  const file = input.files && input.files[0]; input.value = ''; if(!file) return;
+  const body = document.getElementById('pc-in-body'); body.innerHTML = '<div class="text-sm text-slate-500">Reading the approved form…</div>';
+  let att, got;
+  try{ att = await agPrepare([file]); }catch(e){ body.innerHTML = `<div class="text-sm text-rose-600">Could not attach: ${esc(e && e.message ? e.message : e)}</div>`; return; }
+  try{ got = await pcReadRequestForm(file, m => { const x = body.querySelector('div'); if(x) x.textContent = m; }); }catch(e){ got = { items:[] }; }
+  pcInFile = att;
+  const locs = pcAssignedFunds().filter(f => f.id !== PC_FUEL_ID); let last = ''; try{ last = localStorage.getItem(STORAGE_PREFIX + 'pcLastLocation') || ''; }catch(e){}
+  const loc = locs.find(l => l.id === last) || locs[0] || LOCATIONS[0], items = got.items && got.items.length ? got.items : [{ name:got.purpose || '', description:'', qty:1, unitPrice:got.total || '' }];
+  const read = [got.department, got.purpose, got.items && got.items.length, got.hodName].filter(Boolean).length;
+  const inp = 'w-full px-2.5 py-1.5 rounded-md border border-slate-300 text-sm';
+  body.innerHTML = `<form id="vform" onsubmit="return false">
+    <div class="text-xs ${read >= 3 ? 'text-emerald-700' : 'text-amber-700'} mb-3">📎 ${esc(agAttText(att))} — ${read >= 3 ? 'read from the form; check it and add the category.' : 'some details could not be read; fill in what is missing.'}</div>
+    ${vGrid(2, vF('Department', 'department', got.department || '', 'text', { req:1, attrs:' list="pc-in-depts"' }) + vF('Purpose', 'purpose', got.purpose || '', 'text', { req:1 }) +
+      `<div><label class="${VEH_LBL}">Location${vReqStar}</label><select name="locationId" class="${VEH_FIELD} bg-white">${locs.map(l => `<option value="${esc(l.id)}" ${l.id === loc.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>` +
+      `<div><label class="${VEH_LBL}">Expense category${vReqStar}</label><select name="category" class="${VEH_FIELD} bg-white"><option value="">Select category…</option>${PC_CATEGORIES.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>` +
+      `<div><label class="${VEH_LBL}">Type</label><div class="flex gap-5 pt-2">${PC_OPTIONS.map(o => `<label class="flex items-center gap-2 text-sm text-slate-700"><input type="radio" name="option" value="${o}" ${o === 'Prior Request' ? 'checked' : ''}> ${o}</label>`).join('')}</div></div>`)}
+    <datalist id="pc-in-depts">${DEPARTMENTS.map(x => `<option value="${esc(x.name)}"></option>`).join('')}</datalist>
+    <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mt-4 mb-1.5">Items (as on the form)</div>
+    <div id="pc-in-items" class="space-y-1.5">${items.map(it => `<div class="pc-in-row grid gap-1.5" style="grid-template-columns:1.2fr 1.5fr 3.5rem 5.5rem"><input data-f="name" value="${esc(it.name || '')}" placeholder="Item / service" class="${inp}"><input data-f="description" value="${esc(it.description || '')}" placeholder="Description" class="${inp}"><input data-f="qty" type="number" step="any" value="${esc(it.qty || 1)}" class="${inp}"><input data-f="unitPrice" type="number" step="0.01" value="${esc(it.unitPrice === '' ? '' : it.unitPrice)}" placeholder="Price" class="${inp}"></div>`).join('')}</div>
+    <button type="button" onclick="const c = document.querySelector('.pc-in-row').cloneNode(true); c.querySelectorAll('input').forEach(i => { i.value = i.dataset.f === 'qty' ? '1' : ''; }); document.getElementById('pc-in-items').appendChild(c)" class="text-xs font-semibold text-brand-600 hover:underline mt-1.5">+ Add item</button>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-4">
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Requested by</div><div class="grid grid-cols-2 gap-2"><input name="reqName" value="${esc(got.reqName || '')}" placeholder="Name" class="${inp}"><input name="reqDesig" value="${esc(got.reqDesig || '')}" placeholder="Designation" class="${inp}"></div><div class="text-[11px] text-slate-400 mt-1">Leave empty if not on the form — the person who takes the cash is recorded when you process it.</div></div>
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Approved by (HOD)</div><div class="grid grid-cols-2 gap-2"><input name="hodName" value="${esc(got.hodName || '')}" placeholder="Name" class="${inp}"><input name="hodDesig" value="${esc(got.hodDesig || '')}" placeholder="Designation" class="${inp}"></div><input type="date" name="hodDate" value="${esc(got.hodDate || '')}" class="${inp} mt-2"></div>
+    </div>
+    ${vFoot('Create voucher', 'pcInSave()')}</form>`;
+}
+async function pcInSave(){
+  const f = document.getElementById('vform'), o = vehFormObj(f), att = pcInFile;
+  const items = [...document.querySelectorAll('#pc-in-items .pc-in-row')].map(r => { const g = k => r.querySelector(`[data-f="${k}"]`).value.trim(); return { name:g('name'), description:g('description'), qty:vNum(g('qty')) || 1, unitPrice:vNum(g('unitPrice')) }; }).filter(it => it.name || it.description);
+  if(!att) return vFail('Attach the approved form.'); if(!String(o.department || '').trim()) return vFail('Enter the department.'); if(!String(o.purpose || '').trim()) return vFail('Enter the purpose.');
+  if(!o.category) return vFail('Choose the expense category.'); if(!items.length) return vFail('Add at least one item.'); if(!String(o.hodName || '').trim()) return vFail('Enter the HOD who approved it.');
+  items.forEach(it => { if(!it.name) it.name = it.description; });
+  const locationId = o.locationId, date = vToday(), loc = pcFund(locationId), cust = pcPerson(loc && loc.pettyCashCustodianUid, loc && loc.pettyCashCustodianName);
+  const rec = { number:pcNextVoucher(locationId, date), date, locationId, department:o.department.trim(), purpose:o.purpose.trim(), option:(f.querySelector('input[name=option]:checked') || {}).value || 'Prior Request', category:o.category,
+    items, invoices:[], total:pcTotal({ items }), requesterUid:'', requesterName:String(o.reqName || '').trim(), requesterDesig:String(o.reqDesig || '').trim(), hodUid:'', hodName:o.hodName.trim(), hodDesig:String(o.hodDesig || '').trim(), hodDate:o.hodDate || '',
+    custodianName:cust.name, formLink:'', formFile:null, external:{ department:o.department.trim(), at:Date.now(), by:authUser ? authUser.name : '' }, createdByUid:authUser ? authUser.uid : '' };
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  try{ localStorage.setItem(STORAGE_PREFIX + 'pcLastLocation', locationId); }catch(e){}
+  const id = await vehSave('pettyCash', rec); pcInFile = null; pcFormBgUpload(id, att);
+  closeModal(); rerenderMain(); toast('Voucher ' + rec.number + ' created from the approved request. Press Process when you hand over the cash.');
+  setTimeout(() => openPcDetails(id), 300);
 }
 async function savePcForm(id){
   const f = document.getElementById('vform'), old = id ? state.pettyCash.find(x => x.id === id) : null, fuel = pcFormMode === 'fuel';

@@ -4006,6 +4006,17 @@ function pcRemoveFuelRow(btn){ const box = document.getElementById('pc-fuel-rows
 // on the request form: Item = the fuel (Petrol / Diesel), Details = the vehicle (e.g. "Motorcycle C5914"), then Qty and Rate (MVR)
 const pcShortPlate = p => { const m = /-([A-Z]{1,2}\d{2,})$/i.exec(String(p || '').trim()); return m ? m[1].toUpperCase() : String(p || '').trim(); };
 const pcFuelItems = rows => rows.map(r => { const v = vehById(r.vehicleId); return { name:r.fuelType || 'Fuel', description: v ? [v.type, pcShortPlate(v.plate)].filter(Boolean).join(' ') : '', qty:pcFuelQty(r), unitPrice:pcFuelEach(r) }; });
+// a fueling voucher's rows follow the invoices submitted for them: Qty = the invoices for that vehicle, price per fill =
+// their average, and the rate per litre = their total ÷ their litres. The requested figures are kept, so removing the invoices puts them back.
+function pcFuelRowsFromInvoices(r, invoices){
+  return (r.fuelRows || []).map(row => {
+    const orig = row.requested || { qty:pcFuelQty(row), amountEach:pcFuelEach(row), rate:row.rate };
+    const mine = invoices.filter(i => i.vehicleId === row.vehicleId && vNum(i.amount) > 0);
+    if(!mine.length){ const o = Object.assign({}, row, orig); delete o.requested; delete o.fromInvoices; return o; }
+    const sum = pcRound(mine.reduce((s, i) => s + vNum(i.amount), 0)), lit = Math.round(mine.reduce((s, i) => s + vNum(i.litres), 0) * 1000) / 1000;
+    return Object.assign({}, row, { qty:mine.length, amountEach:pcRound(sum / mine.length), rate: lit ? Math.round(sum / lit * 100) / 100 : orig.rate, requested:orig, fromInvoices:true });
+  });
+}
 // keep the vehicle module's petty cash fuel requisitions in step with a fueling petty cash request
 async function pcSyncFuelRequisitions(rec, pcId, createNew){
   const rows = rec.fuelRows || [], linked = state.fuelRequisitions.filter(q => q.pettyCashId === pcId);
@@ -4216,12 +4227,16 @@ async function savePcInvoices(id){
   }catch(e){ if(btn) btn.disabled = false; return vFail('The invoice file could not be saved: ' + (e && e.message ? e.message : e)); }
   invoices.forEach(iv => { delete iv._key; if(!iv.fileId){ delete iv.fileId; delete iv.filePages; delete iv.fileName; } });
   const oldFileIds = pcInvoices(r).map(i => i.fileId).filter(Boolean), keep = new Set(invoices.map(i => i.fileId).filter(Boolean));
-  await vehSave('pettyCash', { id, invoices });
+  const fuelRows = r.kind === 'fuel' ? pcFuelRowsFromInvoices(r, invoices) : null;
+  await vehSave('pettyCash', fuelRows ? { id, invoices, fuelRows } : { id, invoices });
   oldFileIds.filter(f => !keep.has(f)).forEach(f => pcFileDelete(f));
-  if(r.kind === 'fuel') await pcSyncFuelLog(Object.assign({}, r, { invoices }));
+  if(r.kind === 'fuel'){
+    await pcSyncFuelLog(Object.assign({}, r, { invoices }));
+    if(state.fuelRequisitions.some(q => q.pettyCashId === id)) await pcSyncFuelRequisitions(Object.assign({}, r, { invoices, fuelRows }), id, false);
+  }
   Object.keys(pcAttach).forEach(k => { delete pcAttach[k]; });
   pcInvFuelVehs = null;
-  closeModal(); rerenderMain(); toast(invoices.length ? (r.kind === 'fuel' ? 'Invoices saved and logged under Fueling.' : 'Invoices saved.') : 'Invoices removed.');
+  closeModal(); rerenderMain(); toast(invoices.length ? (r.kind === 'fuel' ? 'Invoices saved, logged under Fueling, and the quantities updated from them.' : 'Invoices saved.') : (r.kind === 'fuel' ? 'Invoices removed. The requested quantities are back.' : 'Invoices removed.'));
   if(pcBackTo === id) pcDone(id);
 }
 

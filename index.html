@@ -411,6 +411,15 @@ function refreshAppearanceModal(){
   .anya-tip{ margin-top:3px; font-size:.88em; color:var(--an-mut); }
   .anya-find .anya-acts{ margin-top:5px; } .anya-acts button.anya-quiet{ color:var(--an-mut); border-color:color-mix(in srgb,var(--an-mut) 40%,transparent); background:transparent; }
   .anya-letter{ margin-top:8px; padding:10px 12px; background:color-mix(in srgb,var(--an-bg) 70%,#fff 4%); border:1px dashed color-mix(in srgb,var(--an-mut) 45%,transparent); font-size:.92em; } .anya-letter p{ margin:6px 0; }
+  .anya-sep{ display:flex; align-items:center; gap:8px; color:var(--an-mut); font-size:.78em; letter-spacing:.06em; text-transform:uppercase; margin:4px 0; } .anya-sep::before,.anya-sep::after{ content:''; flex:1; height:1px; background:color-mix(in srgb,var(--an-mut) 35%,transparent); }
+  .anya-cmd .anya-mic{ background:transparent; color:var(--an-a); width:30px; font-size:15px; border:1px solid color-mix(in srgb,var(--an-a) 45%,transparent); touch-action:none; user-select:none; -webkit-user-select:none; }
+  html[data-anya="modern"] .anya-cmd .anya-mic{ border-radius:50%; width:32px; height:32px; color:var(--an-a); }
+  .anya-cmd .anya-mic.anya-rec{ background:#e11d48; color:#fff; border-color:#e11d48; animation:anyaPulse 1s ease-in-out infinite; }
+  .anya-hbtn.anya-hon{ background:color-mix(in srgb,var(--an-a) 18%,transparent); }
+  #anya-fab.anya-listening{ animation:anyaPulse 1.4s ease-in-out infinite; } #anya-fab.anya-hands::after{ content:'👂'; position:absolute; left:-6px; top:-6px; font-size:14px; }
+  #anya-fab.anya-talking .anya-ring{ animation:anyaTalk .35s ease-in-out infinite alternate; }
+  @keyframes anyaPulse{ 0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb,var(--an-a) 55%,transparent); } 50%{ box-shadow:0 0 0 9px color-mix(in srgb,var(--an-a) 0%,transparent); } }
+  @keyframes anyaTalk{ to{ transform:scale(1.07); } }
   #toast-wrap{ bottom:92px !important; }
   @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ right:46px; bottom:-4px; font-size:9.5px; padding:1px 7px; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
   @media print{ #anya-fab,#anya-panel,#anya-peek{ display:none !important; } }
@@ -1896,7 +1905,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.263';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.265';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2245,6 +2254,7 @@ function renderNav(){
     <div class="nav-panel flex-1 min-w-0 px-2.5 py-3 overflow-y-auto"><div class="px-3 pt-1 pb-2 text-[15px] font-bold text-white">${esc(hub.key === 'home' ? 'Overview' : hub.label)}</div>${hub.groups.map(g => `${g.name && hub.groups.length > 1 ? `<div class="px-3 pt-4 pb-1.5 first:pt-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">${esc(g.name)}</div>` : ''}<div class="space-y-0.5">${g.items.map(item).join('')}</div>`).join('')}</div>`;
 }
 function goTo(tab){
+  try{ if(typeof anyaTrack === 'function' && tab !== ui.tab){ anyaTrack('page', tab); anyaPageNudge(tab); } }catch(e){}
   if(tab === 'weekly-report' && typeof vehUi !== 'undefined') vehUi.wrId = '';      // the menu always opens the list of reports
   ui.tab = tab;
   toggleSidebar(false);
@@ -2291,7 +2301,7 @@ function openModal(title, bodyHtml, wide){
   stopModalScrollPadding();
   titleEl.textContent = title;
   document.getElementById('modal-body').innerHTML = bodyHtml;
-  try{ if(typeof anyaOnModal === 'function') anyaOnModal(title); }catch(e){}
+  try{ if(typeof anyaOnModal === 'function'){ anyaOnModal(title); anyaTrack('form', title); } }catch(e){}
   document.getElementById('modal-box').style.maxWidth = '';
   document.getElementById('modal-box').classList.toggle('max-w-lg', !wide);
   document.getElementById('modal-box').classList.toggle('max-w-2xl', !!wide);
@@ -2445,8 +2455,11 @@ async function vehSave(key, obj){
     id = uid(); obj.createdAt = Date.now(); obj.createdBy = who;
     rec = Object.assign({}, obj, { id });
     state[key].push(rec);
+    rec._anyaNew = 1;
   }
+  const isNew = !!rec._anyaNew; delete rec._anyaNew;
   await vehPersist(key, rec);
+  try{ if(typeof anyaTrack === 'function') anyaTrack('save', key, isNew); }catch(e){}
   return id;
 }
 async function vehDelete(key, id){
@@ -7624,6 +7637,7 @@ function gsIndex(){
 }
 let gsData = [], gsSel = 0;
 function gsOpen(){
+  try{ if(typeof anyaTrack === 'function') anyaTrack('search'); }catch(e){}
   if(document.getElementById('gs-wrap')) return;
   gsData = gsIndex(); gsSel = 0;
   const w = document.createElement('div'); w.id = 'gs-wrap';
@@ -7788,7 +7802,7 @@ const anyaActInfo = id => {
   if(a.g){ const g = ANYA_GUIDES.find(x => x.id === a.g); if(!g || !g.acts.length) return null; return { js:g.acts[0][1], page:g.page, label:g.title.toLowerCase(), short:g.acts[0][0] }; }
   return { js:a.js, page:a.page, label:a.label, short:'+ ' + a.label.replace(/^an? /, '').replace(/ \(.*$/, '') };
 };
-const ANYA_SYS = { check:'Check for mistakes', pending:'What\'s pending', balance:'Petty cash balance', trno:'Next travel number', help:'What Anya can do', me:'Who am I', learned:'What Anya has learned' };
+const ANYA_SYS = { activity:'My activity', brief:'Daily brief', check:'Check for mistakes', pending:'What\'s pending', balance:'Petty cash balance', trno:'Next travel number', help:'What Anya can do', me:'Who am I', learned:'What Anya has learned' };
 const ANYA_THEMES = { cyberpunk:'Cyberpunk ✦', tron:'Tron ✦', tronhud:'Tron HUD ✦', cp2027:'Cyberpunk 2027 ✦' };
 // a readable name for an intent ("g:fuel" → "Fuel entry (steps)")
 function anyaIntentLabel(i){
@@ -7817,23 +7831,41 @@ const anyaJacc = (a, b) => { const A = new Set(a.filter(x => !x.startsWith('#'))
 const anyaML = {
   key(){ return 'anya_ml_' + ((authUser && (authUser.uid || authUser.email)) || 'anon'); },
   _d:null, _dk:'', _model:null,
-  data(){ const k = this.key(); if(this._dk !== k){ this._dk = k; this._model = null; try{ this._d = JSON.parse(localStorage.getItem(k) || 'null'); }catch(e){ this._d = null; } if(!this._d || this._d.v !== 1) this._d = { v:1, ex:[], use:{}, page:{} }; } return this._d; },
-  save(){ try{ localStorage.setItem(this.key(), JSON.stringify(this._d)); }catch(e){} this._model = null; },
+  data(){ const k = this.key(); if(this._dk !== k){ this._dk = k; this._model = null; try{ this._d = JSON.parse(localStorage.getItem(k) || 'null'); }catch(e){ this._d = null; } if(!this._d || this._d.v !== 1) this._d = { v:1, ex:[], use:{}, page:{} }; this.cloudLoad(); } return this._d; },
+  // what Anya learns is kept for good: on this device, and in the user's private cloud record (fdc_inventory_notes/{uid}) so it follows them to any device
+  save(){ try{ localStorage.setItem(this.key(), JSON.stringify(this._d)); }catch(e){} this._model = null; this.cloudSave(); },
+  _ct:null, _cloudFor:'',
+  cloudSave(){ clearTimeout(this._ct); this._ct = setTimeout(() => { try{ if(!authUser || !authUser.uid || !firestoreDb) return; firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).set({ anya:JSON.parse(JSON.stringify(this._d)), anyaAt:Date.now() }, { merge:true }).catch(() => {}); }catch(e){} }, 1500); },
+  cloudLoad(){
+    try{
+      if(!authUser || !authUser.uid || typeof firestoreDb === 'undefined' || !firestoreDb || this._cloudFor === authUser.uid) return; this._cloudFor = authUser.uid;
+      firestoreDb.collection('fdc_inventory_notes').doc(authUser.uid).get().then(doc => { const c = doc.exists && doc.data().anya; if(c && c.v === 1){ this.merge(c); try{ localStorage.setItem(this.key(), JSON.stringify(this._d)); }catch(e){} this._model = null; } this.cloudSave(); }).catch(() => {});
+    }catch(e){}
+  },
+  // joins two memories without losing anything: phrases by the stronger weight, habits by the higher count, everything else added together
+  merge(c){
+    const d = this._d;
+    (c.ex || []).forEach(e => { const m = d.ex.find(x => x.q === e.q && x.i === e.i); if(!m) d.ex.push(e); else if(Math.abs(e.w) > Math.abs(m.w) || e.t > m.t){ m.w = Math.abs(e.w) > Math.abs(m.w) ? e.w : m.w; m.t = Math.max(m.t || 0, e.t || 0); } });
+    const mu = (A, B) => Object.keys(B || {}).forEach(k => { const a = A[k], b = B[k]; if(!a || (b.n || 0) > (a.n || 0)) A[k] = b; else a.t = Math.max(a.t || 0, b.t || 0); });
+    mu(d.use, c.use); Object.keys(c.page || {}).forEach(pg => { d.page[pg] = d.page[pg] || {}; mu(d.page[pg], c.page[pg]); });
+    ['mute', 'dis', 'err'].forEach(f => { if(c[f]){ d[f] = d[f] || {}; Object.keys(c[f]).forEach(k => { d[f][k] = f === 'err' ? Math.max(d[f][k] || 0, c[f][k]) : c[f][k]; }); } });
+    if(c.auto === false && d.auto === undefined) d.auto = false;
+    const seen = new Set((d.chat || []).map(m => m.at + m.text)); d.chat = (d.chat || []).concat((c.chat || []).filter(m => !seen.has(m.at + m.text))).sort((a, b) => (a.at || 0) - (b.at || 0));
+  },
   // remember that this phrasing meant this intent (w > 0) or did not (w < 0)
   learn(q, i, w){
     if(!q || !i) return; const d = this.data(), t = anyaNorm(q); if(!t) return;
     let e = d.ex.find(x => x.q === t && x.i === i);
     if(e){ e.w = Math.max(-6, Math.min(12, e.w + w)); e.t = Date.now(); } else d.ex.push(e = { q:t, i, w, t:Date.now() });
-    if(d.ex.length > 400){ d.ex.sort((a, b) => Math.abs(b.w) * (b.t / 1e12) - Math.abs(a.w) * (a.t / 1e12)); d.ex.length = 400; }
     this.save();
   },
   // habits: how often (fading over ~30 days) each intent is used, overall and on each page
   used(i, page){
-    const d = this.data(), now = Date.now(), fade = (o, k) => { const u = o[k] || { n:0, t:now }; u.n = u.n * Math.exp(-(now - u.t) / 2.6e9) + 1; u.t = now; o[k] = u; };
+    const d = this.data(), now = Date.now(), fade = (o, k) => { const u = o[k] || { n:0, t:now }; u.n = (u.n || 0) + 1; u.t = now; o[k] = u; };
     fade(d.use, i); if(page){ d.page[page] = d.page[page] || {}; fade(d.page[page], i); }
     this.save();
   },
-  score(u){ return u ? u.n * Math.exp(-(Date.now() - u.t) / 2.6e9) : 0; },
+  score(u){ return u ? u.n * (0.5 + 0.5 * Math.exp(-(Date.now() - u.t) / 2.6e9)) : 0; },   // never fades below half: old habits are kept, recent ones rank first
   // the user's own phrasing, if one close enough was taught before
   recall(q){
     const d = this.data(), tk = anyaTokens(q); let best = null, bs = 0;
@@ -7848,7 +7880,7 @@ const anyaML = {
     ANYA_GUIDES.forEach(g => { add('g:' + g.id, 'how ' + g.title, 1); g.keys.forEach(k => add('g:' + g.id, 'how ' + k, 1)); });
     ANYA_ACTIONS.forEach(a => a.k.forEach(k => add('a:' + a.id, 'new ' + k, 1.2)));
     anyaPages().forEach(n => add('p:' + n.id, 'open ' + n.label, 1));
-    [['check', 'check analyse analyze audit mistakes errors problems issues wrong fix health'], ['pending', 'pending waiting attention overdue outstanding to do left'], ['balance', 'petty cash balance float cash left available money'], ['trno', 'next travel request number trf'], ['help', 'help commands what can you do'], ['learned', 'what have you learned learning memory']].forEach(([k, t]) => add('s:' + k, t, 1));
+    [['activity', 'my activity usage habits time stats what do i do most analyse me'], ['brief', 'brief daily summary today morning'], ['check', 'check analyse analyze audit mistakes errors problems issues wrong fix health'], ['pending', 'pending waiting attention overdue outstanding to do left'], ['balance', 'petty cash balance float cash left available money'], ['trno', 'next travel request number trf'], ['help', 'help commands what can you do'], ['learned', 'what have you learned learning memory']].forEach(([k, t]) => add('s:' + k, t, 1));
     Object.keys(ANYA_THEMES).forEach(k => add('t:' + k, k + ' ' + ANYA_THEMES[k] + ' theme', 1));
     this.data().ex.forEach(e => { if(e.w > 0) add(e.i, e.q, 1 + e.w); });
     const cls = {}, vocab = new Set();
@@ -7875,7 +7907,7 @@ const anyaML = {
     return Object.entries(sc).filter(([i, s]) => s >= 1 && anyaIntentOk(i) && !/^s:(help|learned|me)$/.test(i)).sort((a, b) => b[1] - a[1]).slice(0, n).map(x => x[0]);
   },
   habitHere(page){ const p = this.data().page[page] || {}; const best = Object.entries(p).filter(([i]) => anyaIntentOk(i)).sort((a, b) => this.score(b[1]) - this.score(a[1]))[0]; return best && this.score(best[1]) >= 3 ? best[0] : null; },
-  forget(){ this._d = { v:1, ex:[], use:{}, page:{} }; this.save(); }
+  forget(){ /* Anya keeps everything she has learned */ }
 };
 
 /* ---------- the window ---------- */
@@ -7888,20 +7920,22 @@ function anyaMount(){
   document.body.appendChild(fab);
   const p = document.createElement('div');
   p.id = 'anya-panel'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Anya assistant'); p.hidden = true;
-  p.innerHTML = `<div class="anya-head">${ANYA_RING(40)}<div class="anya-id"><div class="anya-name">ANYA</div><div class="anya-sub"><i></i>assistant · online · learning</div></div>
-      <button type="button" class="anya-hbtn" title="What I've learned" onclick="anyaExec('s:learned','')">◈</button><button type="button" class="anya-hbtn" title="Clear the conversation" onclick="anyaClear()">↺</button><button type="button" class="anya-hbtn" title="Close" onclick="anyaToggle(false)">✕</button></div>
+  p.innerHTML = `<div class="anya-head">${ANYA_RING(40)}<div class="anya-id"><div class="anya-name">ANYA</div><div class="anya-sub"><i></i>online · learning</div></div>
+      <button type="button" class="anya-hbtn" id="anya-spk" onclick="anyaToggleSpeak()">🔈</button><button type="button" class="anya-hbtn" title="What I've learned" onclick="anyaExec('s:learned','')">◈</button><button type="button" class="anya-hbtn" title="New conversation (the old one is kept)" onclick="anyaClear()">↺</button><button type="button" class="anya-hbtn" title="Close" onclick="anyaToggle(false)">✕</button></div>
     <div id="anya-log" class="anya-log" aria-live="polite"></div>
     <div id="anya-chips" class="anya-chips"></div>
-    <form class="anya-cmd" onsubmit="event.preventDefault(); anyaSend()"><input id="anya-in" autocomplete="off" aria-label="Message Anya" placeholder="Ask or tell me what to do…" maxlength="400"><button type="submit" title="Send">➤</button></form>`;
+    <form class="anya-cmd" onsubmit="event.preventDefault(); anyaSend()"><input id="anya-in" autocomplete="off" aria-label="Message Anya" placeholder="Ask or tell me what to do…" maxlength="400"><button type="button" id="anya-mic" class="anya-mic" onpointerdown="anyaMicDown()" onpointerup="anyaMicUp(event)" onpointerleave="if(anya._micT){ clearTimeout(anya._micT); anya._micT = null; }">🎤</button><button type="submit" title="Send">➤</button></form>`;
+  setTimeout(anyaVoiceUi, 0);
   document.body.appendChild(p);
   p.addEventListener('keydown', e => { if(e.key === 'Escape') anyaToggle(false); });
 }
 function anyaSync(){
+  const who = typeof authUser !== 'undefined' && authUser ? (authUser.uid || authUser.email) : ''; if(who !== anya.uid){ anya.uid = who; anya.log = []; anya.acts = []; anya.greeted = false; }
   const on = !!(typeof authUser !== 'undefined' && authUser);
   if(on) anyaMount();
   const fab = document.getElementById('anya-fab'); if(fab) fab.style.display = on ? '' : 'none';
   if(!on){ anyaToggle(false); return; }
-  if(!anya.greeted){ anya.greeted = true; anyaPeek(); }
+  if(!anya.greeted){ anya.greeted = true; anyaPeek(); try{ if(anyaVoiceCfg().hands) setTimeout(anyaHandsFree, 1500); anyaVoiceUi(); }catch(e){} }
   anyaBadge();
 }
 function anyaPeek(){
@@ -7922,17 +7956,31 @@ function anyaToggle(force){
   p.hidden = !anya.open; if(fab) fab.classList.toggle('anya-on', anya.open);
   const pk = document.getElementById('anya-peek'); if(pk) pk.remove();
   if(anya.open){
-    if(!anya.log.length) anyaWelcome();
+    if(!anya.log.length){ anyaRestoreChat(); const d = anyaML.data(); if(d.briefDay !== vToday()){ d.briefDay = vToday(); anyaML.save(); if(anya.log.length) anyaBrief(); else anyaWelcome(); } else if(anya.log.length) anyaSay(`${anyaHello()} Welcome back — our earlier conversation is above. What can I do for you?`); else anyaWelcome(); }
     anyaDraw(); setTimeout(() => { const i = document.getElementById('anya-in'); if(i && matchMedia('(pointer:fine)').matches) i.focus(); }, 30);
   }
 }
-function anyaClear(){ anya.log = []; anya.acts = []; anyaWelcome(); anyaDraw(); }
+function anyaClear(){ anya.log.push({ who:'sep', text:'New conversation · ' + new Date().toLocaleString('en-GB', { dateStyle:'medium', timeStyle:'short' }), at:Date.now() }); anyaWelcome(); anyaDraw(); }
+// the conversation is saved (text only — buttons can't be pressed again later) and comes back next time, on any device
+let anyaChatT = null;
+function anyaSaveChat(){
+  clearTimeout(anyaChatT); anyaChatT = setTimeout(() => {
+    try{ const d = anyaML.data(); const strip = h => String(h || '').replace(/<button[^>]*>[\s\S]*?<\/button>/g, '').slice(0, 4000);
+      const fresh = anya.log.filter(m => !m.restored).map(m => ({ who:m.who, text:String(m.text || '').slice(0, 2000), extra:strip(m.extra), at:m.at || Date.now() }));
+      const keep = (d.chat || []).filter(m => !fresh.some(f => f.at === m.at && f.text === m.text));
+      d.chat = keep.concat(fresh).slice(-1500); anyaML.save(); }catch(e){}
+  }, 1200);
+}
+function anyaRestoreChat(){
+  const c = (anyaML.data().chat || []).slice(-150); if(!c.length) return;
+  anya.log = [{ who:'sep', text:'Earlier conversations', restored:true, at:0 }].concat(c.map(m => Object.assign({ restored:true, acts:[] }, m)));
+}
 function anyaWelcome(){
   const g = ANYA_GUIDES.find(x => x.id === ANYA_PAGE_GUIDE[ui.tab]), here = anyaPageLabel(ui.tab), habit = anyaML.habitHere(ui.tab);
   const acts = []; let nf = 0; try{ nf = anyaFindings().filter(f => f.sev !== 'info').length; }catch(e){}
   if(habit) acts.push([anyaIntentLabel(habit), () => anyaExec(habit, '')]);
   if(g && here) acts.push(['Show the steps', () => anyaGuide(g)]);
-  anyaSay(`Hi${anyaFirst() ? ' ' + anyaFirst() : ''}, I'm **Anya**. Ask me how a process works, or tell me what to do — e.g. "new petty cash request", "open fueling", "find Ahmed", "what's pending?".` +
+  anyaSay(`${anyaHello()} I'm **Anya**. Ask me how a process works, or tell me what to do — e.g. "new petty cash request", "open fueling", "find Ahmed", "what's pending?".` +
     (habit ? `\nOn **${here || 'this page'}** you usually go for **${anyaIntentLabel(habit)}**.` : g && here ? `\nYou're on **${here}** — want the steps for ${g.title.toLowerCase()}?` : '') +
     `\nI learn from you: tap 👍 or 👎 under my answers (or just type 👍 / "wrong") and I'll get better at your way of asking.` + (nf ? `\n⚠ I spotted **${nf}** thing${nf === 1 ? '' : 's'} in the records that may be wrong.` : ''), nf ? [['Show what\'s wrong', () => anyaAnalyze()], ...acts] : acts);
 }
@@ -7940,24 +7988,25 @@ function anyaAct(fn){ anya.acts.push(fn); return anya.acts.length - 1; }
 // acts: [label, fn | 'js string']; opts.intent / opts.q let the user rate the answer
 function anyaSay(text, acts, extra, opts){
   const o = opts || {};
-  anya.log.push({ who:'anya', text, extra:extra || '', intent:o.intent || '', q:o.q || '', fb:'',
+  anya.log.push({ who:'anya', at:Date.now() + Math.random(), text, extra:extra || '', intent:o.intent || '', q:o.q || '', fb:'',
     acts:(acts || []).map(([l, f]) => ({ label:l, n:anyaAct(() => { if(o.intent && o.q) anyaML.learn(o.q, o.intent, .5); return typeof f === 'function' ? f() : (anyaToggleSmall(), (0, eval)(f)); }) })) });
 }
 function anyaToggleSmall(){ if(innerWidth < 640) anyaToggle(false); }
 function anyaRun(n){ const f = anya.acts[n]; if(!f) return; try{ f(); }catch(e){ anyaSay('That did not work: ' + (e && e.message ? e.message : e)); } anyaDraw(); }
 function anyaDraw(){
   const L = document.getElementById('anya-log'); if(!L) return;
-  L.innerHTML = anya.log.map((m, k) => m.who === 'me' ? `<div class="anya-me">${esc(m.text)}</div>` :
+  L.innerHTML = anya.log.map((m, k) => m.who === 'sep' ? `<div class="anya-sep"><span>${esc(m.text)}</span></div>` : m.who === 'me' ? `<div class="anya-me">${esc(m.text)}</div>` :
     `<div class="anya-msg"><div>${anyaFmt(m.text)}</div>${m.extra || ''}${m.acts && m.acts.length ? `<div class="anya-acts">${m.acts.map(a => `<button type="button" onclick="anyaRun(${a.n})">${esc(a.label)}</button>`).join('')}</div>` : ''}${m.intent && m.q ? `<div class="anya-fb">${m.fb === 'up' ? '<span>✓ learned — thanks</span>' : m.fb === 'down' ? '<span>noted — I won\'t answer that way again</span>' : `<button type="button" title="Right answer" onclick="anyaRate(${k},1)">👍</button><button type="button" title="Not what I meant" onclick="anyaRate(${k},-1)">👎</button>`}</div>` : ''}</div>`).join('') +
     (anya.busy ? '<div class="anya-msg anya-busy"><span></span><span></span><span></span> processing</div>' : '');
   L.scrollTop = L.scrollHeight;
+  anyaSaveChat();
   const C = document.getElementById('anya-chips');
   if(C){
-    const mine = anyaML.top(ui.tab, 4), base = ['s:check', 's:pending', 's:balance', 'a:pc-new', 'g:travel', 's:help'].filter(i => anyaIntentOk(i) && !mine.includes(i));
+    const mine = anyaML.top(ui.tab, 4), base = ['s:brief', 's:check', 's:pending', 's:balance', 'a:pc-new', 'g:travel', 's:help'].filter(i => anyaIntentOk(i) && !mine.includes(i));
     C.innerHTML = [...mine.map(i => [i, 1]), ...base.map(i => [i, 0])].slice(0, 6).map(([i, my]) => `<button type="button" class="${my ? 'anya-mine' : ''}" title="${my ? 'One of your shortcuts' : ''}" onclick="anyaChip('${i}')">${my ? '★ ' : ''}${esc(anyaIntentLabel(i).replace(/ — steps$/, ' steps'))}</button>`).join('');
   }
 }
-function anyaChip(i){ anya.log.push({ who:'me', text:anyaIntentLabel(i) }); anyaExec(i, ''); }
+function anyaChip(i){ anya.log.push({ who:'me', at:Date.now() + Math.random(), text:anyaIntentLabel(i) }); anyaExec(i, ''); }
 // 👍 teaches the phrasing; 👎 un-teaches it and offers the next best guesses
 function anyaRate(k, v){
   const m = anya.log[k]; if(!m || !m.intent || m.fb) return;
@@ -7974,15 +8023,17 @@ function anyaAlternatives(q, not){
   return out;
 }
 // the user picked what they meant: learn it strongly, then do it
-function anyaChoose(q, i){ anyaML.learn(q, i, 3); anya.log.push({ who:'me', text:anyaIntentLabel(i) }); anyaExec(i, q, true); }
+function anyaChoose(q, i){ anyaML.learn(q, i, 3); anya.log.push({ who:'me', at:Date.now() + Math.random(), text:anyaIntentLabel(i) }); anyaExec(i, q, true); }
 async function anyaSend(text){
   const inp = document.getElementById('anya-in');
   const q = String(text != null ? text : (inp ? inp.value : '')).trim(); if(!q || anya.busy) return;
   if(inp) inp.value = '';
-  anya.log.push({ who:'me', text:q }); anya.busy = true; anyaDraw();
+  anya.log.push({ who:'me', at:Date.now() + Math.random(), text:q }); anya.busy = true; anyaDraw();
   await new Promise(r => setTimeout(r, 380));
+  const from = anya.log.length;
   try{ await anyaReply(q); }catch(e){ anyaSay('Sorry, something went wrong: ' + (e && e.message ? e.message : e)); }
   anya.busy = false; anyaDraw();
+  try{ const said = anya.log.slice(from).filter(m => m.who === 'anya').map(m => m.text).slice(0, 2).join('. '); if(said) anyaSpeak(said); }catch(e){}
 }
 function anyaGuide(g, o){
   const extra = `<ol class="anya-steps">${g.steps.map(s => `<li>${anyaFmt(s)}</li>`).join('')}</ol>`;
@@ -8017,7 +8068,7 @@ const anyaLev = (a, b) => { if(Math.abs(a.length - b.length) > 2) return 9; cons
 let anyaVocabCache = null;
 function anyaVocab(){
   if(anyaVocabCache) return anyaVocabCache;
-  const v = new Set('amendment amendments agreement agreements contract invoice delivery quotation receipt signed attachment download export building request requests petty cash voucher travel fuel fueling litres submit process approve statement replenish replenishment balance pending vehicle report reimbursement reimburse purchase requisition business advance complaint handover weekly cleaning checklist leave stock create please tomorrow yesterday today foreign local refreshments repair printing supplies office garbage postage delivery subscription duplicate theme cyberpunk tron dark light'.split(' '));
+  const v = new Set('hands listening voice amendment amendments agreement agreements contract invoice delivery quotation receipt signed attachment download export building request requests petty cash voucher travel fuel fueling litres submit process approve statement replenish replenishment balance pending vehicle report reimbursement reimburse purchase requisition business advance complaint handover weekly cleaning checklist leave stock create please tomorrow yesterday today foreign local refreshments repair printing supplies office garbage postage delivery subscription duplicate theme cyberpunk tron dark light'.split(' '));
   ANYA_GUIDES.forEach(g => (g.title + ' ' + g.keys.join(' ')).toLowerCase().split(/[^a-z]+/).forEach(w => { if(w.length >= 4) v.add(w); }));
   anyaPages().forEach(n => n.label.toLowerCase().split(/[^a-z]+/).forEach(w => { if(w.length >= 4) v.add(w); }));
   return anyaVocabCache = v;
@@ -8652,6 +8703,161 @@ async function anyaComposeLetter(q){
     [['Open the letter', () => { anyaToggleSmall(); goTo('docs-letter'); openDocView(id); }], ['Download PDF', async () => { const d = docById(id); downloadBlob(await buildLetterPdf(d), (refNo.replace(/[()]/g, '').replace(/\//g, '.') + ' - ' + L.subject).replace(/[\\/:*?"<>|]+/g, '-') + '.pdf'); }], ['Edit', () => { anyaToggleSmall(); goTo('docs-letter'); openDocEdit(id); }]], extra);
   anyaDraw();
 }
+/* ---------- what each person does in the app (kept privately with Anya's memory), and what she learns from it ---------- */
+const anyaAct0 = () => { const d = anyaML.data(); d.act = d.act || { pages:{}, forms:{}, saves:{}, hours:{}, days:{}, daily:{}, dl:0, search:0, since:Date.now() }; return d.act; };
+let anyaPageAt = 0, anyaPageOn = '';
+function anyaTrack(kind, key, extra){
+  try{
+    if(typeof authUser === 'undefined' || !authUser) return;
+    const a = anyaAct0(), now = new Date(), day = localDateStr(now);
+    a.daily[day] = (a.daily[day] || 0) + 1; a.hours[now.getHours()] = (a.hours[now.getHours()] || 0) + 1; a.days[now.getDay()] = (a.days[now.getDay()] || 0) + 1;
+    if(kind === 'page'){
+      if(anyaPageOn && anyaPageAt){ const p = a.pages[anyaPageOn] = a.pages[anyaPageOn] || { n:0, ms:0 }; p.ms += Math.min(Date.now() - anyaPageAt, 30 * 60000); }   // time on the page left (idle over 30 min not counted)
+      const p = a.pages[key] = a.pages[key] || { n:0, ms:0 }; p.n++; p.last = Date.now(); anyaPageOn = key; anyaPageAt = Date.now();
+    } else if(kind === 'form'){ const t = String(key || '').replace(/\s+[·—-].*$/, '').slice(0, 60); const f = a.forms[t] = a.forms[t] || { n:0 }; f.n++; f.last = Date.now(); }
+    else if(kind === 'save'){ const s = a.saves[key] = a.saves[key] || { n:0, created:0 }; s.n++; if(extra) s.created++; s.last = Date.now(); anyaMilestone(key, s); }
+    else if(kind === 'dl') a.dl++; else if(kind === 'search') a.search++;
+    anyaML.save();
+  }catch(e){}
+}
+// celebrates round numbers of records created
+function anyaMilestone(key, s){
+  if(!s.created || ![5, 10, 25, 50, 100, 250, 500, 1000].includes(s.created)) return;
+  const lab = (VEH_COLS[key] || {}).label || key.replace(/([A-Z])/g, ' $1').toLowerCase();
+  anyaPeekMsg(`🎉 That's your **${s.created}th** ${lab.replace(/s$/, '')} — nice work${anyaFirst() ? ', ' + anyaFirst() : ''}!`);
+}
+const anyaFmtMs = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : (m / 60).toFixed(1).replace(/\.0$/, '') + ' h'; };
+const ANYA_DAYN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function anyaActivity(o){
+  const a = anyaAct0(), pages = Object.entries(a.pages), daysOn = Object.keys(a.daily).length;
+  if(!pages.length){ anyaSay('I haven\'t seen enough yet — use the app for a while and ask me again. I\'ll watch which pages and forms you use (privately, only for you).', [], '', o); anyaDraw(); return; }
+  const lbl = id => anyaPageLabel(id) || id;
+  const byTime = pages.slice().sort((x, y) => y[1].ms - x[1].ms).slice(0, 5), byVisits = pages.slice().sort((x, y) => y[1].n - x[1].n).slice(0, 5);
+  const top = (obj) => Object.entries(obj).sort((x, y) => y[1] - x[1])[0];
+  const hr = top(a.hours), dy = top(a.days);
+  const week = k => { let n = 0; for(let i = 0; i < 7; i++) n += a.daily[anyaAddDays(vToday(), -i - k * 7)] || 0; return n; }, w0 = week(0), w1 = week(1);
+  const made = Object.entries(a.saves).filter(([, s]) => s.created).sort((x, y) => y[1].created - x[1].created).slice(0, 4);
+  // insights: forms opened more often than they were saved, slow steps in the processes, habits worth a shortcut
+  const tips = [];
+  const newOpens = Object.entries(a.forms).filter(([t]) => /^(new|add)\b/i.test(t));
+  newOpens.forEach(([t, f]) => { const col = /petty cash/i.test(t) ? 'pettyCash' : /fuel entry/i.test(t) ? 'fuelRecords' : /trip|travel/i.test(t) ? 'travelRequests' : ''; const s = col && a.saves[col]; if(col && f.n >= 4 && (!s || s.created < f.n * 0.6)) tips.push([`You opened **${t}** ${f.n} times but created ${s ? s.created : 0}. Tell me the details in one line (e.g. "petty cash for tea MVR 85 hod Ahmed and submit it") and I'll fill and save it for you.`, null]); });
+  try{ const done = state.pettyCash.filter(r => pcHasInvoice(r) && r.date), lag = done.map(r => { const d = pcInvoices(r).map(i => i.date).filter(Boolean).sort().pop(); return d ? anyaDays(r.date) - anyaDays(d) : null; }).filter(x => x != null && x >= 0);
+    if(lag.length >= 3){ const avg = lag.reduce((s, x) => s + x, 0) / lag.length; if(avg > 3) tips.push([`Petty cash invoices come back **${avg.toFixed(1)} days** after the request on average. Asking for the invoice on the day the cash is given would speed up statements.`, null]); } }catch(e){}
+  const daily = byVisits.find(([, p]) => p.n >= daysOn * 0.8 && daysOn >= 5); if(daily) tips.push([`You open **${lbl(daily[0])}** almost every day — it's one tap from the ★ shortcuts below.`, null]);
+  const errs = anyaTopErrors(); if(errs[0]) tips.push([`Your most common save problem is "${errs[0].msg}" (${errs[0].n}×). 💡 ${anyaErrTip(errs[0].msg)}`, null]);
+  const extra = `<div class="anya-sub2">Where your time goes</div><ul class="anya-list">${byTime.map(([id, p]) => `<li><b>${esc(lbl(id))}</b> — ${anyaFmtMs(p.ms)} <span>(${p.n} visit${p.n === 1 ? '' : 's'})</span></li>`).join('')}</ul>` +
+    (made.length ? `<div class="anya-sub2">What you create most</div><ul class="anya-list">${made.map(([k, s]) => `<li>${s.created} ${esc((VEH_COLS[k] || {}).label || k)}</li>`).join('')}</ul>` : '') +
+    (tips.length ? `<div class="anya-sub2">Suggestions</div><ul class="anya-list">${tips.map(([t]) => `<li>${anyaFmt(t)}</li>`).join('')}</ul>` : '');
+  anyaSay(`Here's how you use the app (since ${fmtDate(localDateStr(new Date(a.since)))}): active on **${daysOn}** day${daysOn === 1 ? '' : 's'}, busiest around **${hr ? (+hr[0] % 12 || 12) + (hr[0] < 12 ? ' am' : ' pm') : '—'}** and on **${dy ? ANYA_DAYN[dy[0]] + 's' : '—'}**. This week **${w0}** actions${w1 ? ` (${w0 >= w1 ? '▲' : '▼'} from ${w1} last week)` : ''}.`, byVisits.slice(0, 3).map(([id]) => ['Open ' + lbl(id), `goTo('${id}')`]), extra, o);
+  anyaDraw();
+}
+
+/* ---------- more engaging: a daily brief, page nudges, varied greetings and tips ---------- */
+const ANYA_TIPS = [
+  'Say "petty cash for tea MVR 85 hod Ahmed and submit it" and I\'ll fill and save the whole request.',
+  'Ask "download the last amendment for the post building agreement" — I find the file myself.',
+  '"Compose a letter regarding …" writes, registers and files a letter on the letterhead.',
+  '"Check for mistakes" scans the records and offers one-tap fixes.',
+  'Tap the 🎤 and just talk to me — or say "Hey Anya" when hands-free is on.',
+  'Your most used commands become ★ shortcuts under the chat.',
+  '"What do I do most?" shows how you use the app and where time goes.',
+  'Press Ctrl+K anywhere to search everything.',
+];
+const anyaHello = () => { const h = new Date().getHours(), n = anyaFirst(); return (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + (n ? ', ' + n : '') + '!'; };
+function anyaBrief(){
+  const items = anyaPages().filter(n => Number(n.badge) > 0), nf = (() => { try{ return anyaFindings().filter(f => f.sev !== 'info').length; }catch(e){ return 0; } })();
+  const tip = ANYA_TIPS[Math.floor(Date.now() / 864e5) % ANYA_TIPS.length], a = anyaAct0(), y = a.daily[anyaAddDays(vToday(), -1)] || 0;
+  const lines = [`${anyaHello()} Here's your brief for **${anyaLongDate(vToday())}**:`];
+  lines.push(items.length ? `• **${items.reduce((s, n) => s + Number(n.badge), 0)}** item${items.length === 1 && Number(items[0].badge) === 1 ? '' : 's'} waiting across ${items.length} page${items.length === 1 ? '' : 's'}` : '• Nothing waiting on any page ✓');
+  if(nf) lines.push(`• ⚠ **${nf}** possible mistake${nf === 1 ? '' : 's'} in the records`);
+  if(y) lines.push(`• Yesterday you did ${y} thing${y === 1 ? '' : 's'} in the app`);
+  lines.push(`💡 Tip: ${tip}`);
+  const acts = []; if(items.length) acts.push(['What\'s pending', () => anyaExec('s:pending', '')]); if(nf) acts.push(['Show what\'s wrong', () => anyaAnalyze()]); acts.push(['My activity', () => anyaActivity()]);
+  anyaSay(lines.join('\n'), acts);
+}
+// a short nudge when opening a page that has something waiting (once per page per day, a few a day at most)
+function anyaPageNudge(tab){
+  try{
+    if(!authUser || anya.open || anyaML.data().nudge === false) return;
+    const d = anyaML.data(), day = vToday(); d.nudged = d.nudged && d.nudged.day === day ? d.nudged : { day, pages:{} };
+    if(d.nudged.pages[tab] || Object.keys(d.nudged.pages).length >= 4) return;
+    const n = anyaPages().find(x => x.id === tab); if(!n || !(Number(n.badge) > 0)) return;
+    d.nudged.pages[tab] = 1; anyaML.save();
+    setTimeout(() => { if(ui.tab === tab && !anya.open) anyaPeekMsg(`**${n.badge}** here ${Number(n.badge) === 1 ? 'needs' : 'need'} attention${n.hint ? ' — ' + n.hint.toLowerCase() : ''}. Want a hand?`, [['Yes, show me', () => { anyaToggle(true); anyaExec(ANYA_PAGE_GUIDE[tab] ? 'g:' + ANYA_PAGE_GUIDE[tab] : 's:pending', ''); }]]); }, 1200);
+  }catch(e){}
+}
+
+/* ---------- voice: Anya speaks her answers and listens for commands ---------- */
+const anyaVoiceCfg = () => { const d = anyaML.data(); d.voice = d.voice || { speak:false, hands:false }; return d.voice; };
+const anyaCanSpeak = () => 'speechSynthesis' in window;
+const anyaRecCls = () => window.SpeechRecognition || window.webkitSpeechRecognition || null;
+function anyaPickVoice(){
+  const vs = speechSynthesis.getVoices(); if(!vs.length) return null;
+  const en = vs.filter(v => /^en/i.test(v.lang));
+  return en.find(v => /(female|samantha|zira|aria|jenny|libby|sonia|natasha|google uk english female|serena|karen|moira|tessa)/i.test(v.name)) || en.find(v => /en-GB/i.test(v.lang)) || en[0] || vs[0];
+}
+function anyaSpeak(text){
+  if(!anyaCanSpeak() || !anyaVoiceCfg().speak) return;
+  const t = String(text || '').replace(/<[^>]+>/g, ' ').replace(/\*\*/g, '').replace(/[\u{1F300}-\u{1FAFF}☀-➿✦★▲▼●◆⚠✓✕➤↺◈]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 420);
+  if(!t) return;
+  try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t), v = anyaPickVoice(); if(v) u.voice = v; u.rate = 1.03; u.pitch = 1.08;
+    const fab = document.getElementById('anya-fab'); u.onstart = () => fab && fab.classList.add('anya-talking'); u.onend = u.onerror = () => fab && fab.classList.remove('anya-talking');
+    speechSynthesis.speak(u); }catch(e){}
+}
+function anyaToggleSpeak(){
+  if(!anyaCanSpeak()){ anyaSay('This browser can\'t speak. Try Chrome, Edge or Safari.'); anyaDraw(); return; }
+  const c = anyaVoiceCfg(); c.speak = !c.speak; anyaML.save(); anyaVoiceUi();
+  anyaSay(c.speak ? 'Voice on — I\'ll read my answers out loud. 🔊' : 'Voice off — I\'ll stay quiet.'); anyaDraw();
+  if(c.speak) anyaSpeak('Voice on. I will read my answers out loud.');
+}
+let anyaRec = null, anyaRecMode = '', anyaRecWant = false;
+function anyaVoiceUi(){
+  const c = anyaVoiceCfg(), sb = document.getElementById('anya-spk'), mb = document.getElementById('anya-mic'), fab = document.getElementById('anya-fab');
+  if(sb){ sb.textContent = c.speak ? '🔊' : '🔈'; sb.title = c.speak ? 'Voice on — tap to mute' : 'Voice off — tap to let Anya speak'; sb.classList.toggle('anya-hon', !!c.speak); }
+  if(mb){ mb.classList.toggle('anya-rec', anyaRecMode === 'one'); mb.title = anyaRecCls() ? (anyaRecMode === 'one' ? 'Listening… tap to stop' : 'Talk to Anya (hold for hands-free "Hey Anya")') : 'Voice input needs Chrome, Edge or Safari'; }
+  if(fab){ fab.classList.toggle('anya-listening', !!anyaRecMode); fab.classList.toggle('anya-hands', anyaRecMode === 'hands'); }
+}
+// one command: tap the mic, speak, it is sent
+function anyaListenOnce(){
+  const R = anyaRecCls(); if(!R){ anyaSay('Voice commands need Chrome, Edge or Safari (with microphone permission).'); anyaDraw(); return; }
+  if(anyaRecMode === 'one'){ anyaStopRec(); return; }
+  anyaStopRec(); anyaRecMode = 'one'; anyaVoiceUi();
+  const r = anyaRec = new R(); r.lang = navigator.language && /^en/.test(navigator.language) ? navigator.language : 'en-GB'; r.interimResults = true; r.maxAlternatives = 1;
+  const inp = document.getElementById('anya-in'); let finalT = '';
+  r.onresult = e => { let txt = ''; for(let i = 0; i < e.results.length; i++){ txt += e.results[i][0].transcript; if(e.results[i].isFinal) finalT = txt; } if(inp) inp.value = txt; };
+  r.onerror = e => { if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){ anyaSay('I need permission to use the microphone — allow it in the browser\'s address bar and tap 🎤 again.'); anyaDraw(); } };
+  r.onend = () => { anyaRec = null; anyaRecMode = ''; anyaVoiceUi(); const q = (finalT || (inp && inp.value) || '').trim(); if(q){ anyaVoiceCfg().spoke = true; anyaSend(q); } if(anyaVoiceCfg().hands) setTimeout(anyaHandsFree, 600); };
+  try{ r.start(); }catch(e){ anyaRecMode = ''; anyaVoiceUi(); }
+}
+// hands-free: listens in the background for "Anya …" / "Hey Anya …"
+function anyaHandsFree(){
+  const R = anyaRecCls(); if(!R || !anyaVoiceCfg().hands || anyaRecMode === 'one' || document.hidden) return;
+  if(anyaRecMode === 'hands' && anyaRec) return;
+  anyaRecMode = 'hands'; anyaRecWant = true; anyaVoiceUi();
+  const r = anyaRec = new R(); r.lang = navigator.language && /^en/.test(navigator.language) ? navigator.language : 'en-GB'; r.continuous = true; r.interimResults = false;
+  let armed = 0;
+  r.onresult = e => {
+    const res = e.results[e.results.length - 1]; if(!res.isFinal) return;
+    const said = res[0].transcript.trim(), m = /^(?:hey |hi |ok |okay )?(?:anya|anja|ania|anyah|aniya|onya)\b[,.!]?\s*(.*)$/i.exec(said);
+    if(m){ const cmd = m[1].trim(); if(!anya.open) anyaToggle(true); if(cmd){ anyaVoiceCfg().spoke = true; anyaSend(cmd); } else { armed = Date.now(); anyaSpeak('Yes?'); anyaPeekMsg('Listening… say your command.'); } }
+    else if(armed && Date.now() - armed < 8000){ armed = 0; anyaVoiceCfg().spoke = true; anyaSend(said); }
+  };
+  r.onerror = e => { if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){ anyaVoiceCfg().hands = false; anyaML.save(); anyaRecWant = false; anyaSay('Hands-free needs microphone permission. Allow it and turn it on again.'); anyaDraw(); } };
+  r.onend = () => { anyaRec = null; if(anyaRecMode === 'hands') anyaRecMode = ''; anyaVoiceUi(); if(anyaVoiceCfg().hands && anyaRecWant) setTimeout(anyaHandsFree, 700); };   // browsers stop listening now and then; start again
+  try{ r.start(); }catch(e){ anyaRecMode = ''; anyaVoiceUi(); }
+}
+function anyaStopRec(){ anyaRecWant = false; try{ if(anyaRec) anyaRec.stop(); }catch(e){} anyaRec = null; anyaRecMode = ''; anyaVoiceUi(); }
+function anyaSetHands(on){
+  if(!anyaRecCls()){ anyaSay('Hands-free listening needs Chrome or Edge on a computer or Android.'); anyaDraw(); return; }
+  const c = anyaVoiceCfg(); c.hands = !!on; anyaML.save();
+  if(on){ anyaSay('Hands-free is on 👂 — say **"Hey Anya"** followed by your command, e.g. "Hey Anya, what\'s pending?". The button glows while I\'m listening. Say "stop listening" to turn it off.'); anyaHandsFree(); }
+  else { anyaStopRec(); anyaSay('Hands-free is off. Tap 🎤 whenever you want to talk to me.'); }
+  anyaDraw();
+}
+// a long press on the mic toggles hands-free
+function anyaMicDown(){ anya._micT = setTimeout(() => { anya._micT = null; anyaSetHands(!anyaVoiceCfg().hands); }, 650); }
+function anyaMicUp(e){ if(anya._micT){ clearTimeout(anya._micT); anya._micT = null; anyaListenOnce(); } if(e) e.preventDefault(); }
+document.addEventListener('visibilitychange', () => { try{ if(document.hidden){ if(anyaRecMode === 'hands') anyaStopRec(); } else if(anyaVoiceCfg().hands) anyaHandsFree(); }catch(e){} });
 function anyaExec(i, q, chosen){
   const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
   if(!anyaIntentOk(i)){ anyaSay('You don\'t have access to that with your role.'); anyaDraw(); return; }
@@ -8664,6 +8870,8 @@ function anyaExec(i, q, chosen){
   else if(k === 'm'){ try{ localStorage.setItem(THEME_KEY, v); }catch(e){} applyTheme(v); anyaSay(`${v === 'dark' ? 'Dark' : 'Light'} mode is on.`, [], '', o); }
   else if(k === 's'){
     if(v === 'check'){ anyaAnalyze(o); return; }
+    if(v === 'activity'){ anyaActivity(o); return; }
+    if(v === 'brief'){ anyaBrief(); anyaDraw(); return; }
     if(v === 'pending'){ const items = anyaPages().filter(n => Number(n.badge) > 0);
       if(!items.length) anyaSay('All clear — nothing is waiting on any page right now. ✓', [], '', o);
       else anyaSay(`${items.length} page${items.length === 1 ? ' has' : 's have'} something waiting:`, items.slice(0, 4).map(n => ['Open ' + n.label, `goTo('${n.id}')`]), `<ul class="anya-list">${items.map(n => `<li><b>${esc(n.badge)}</b> · ${esc(n.label)}${n.hint ? ` <span>— ${esc(n.hint)}</span>` : ''}</li>`).join('')}</ul>`, o); }
@@ -8673,12 +8881,12 @@ function anyaExec(i, q, chosen){
     else if(v === 'trno'){ let no = ''; try{ no = trNextFormNo(); }catch(e){} anyaSay(no ? `The next travel request number is **${no}**.` : 'I could not work out the next number.', anyaCanSee('travel-foreign') ? [['+ New travel request', "goTo('travel-foreign'); openTravelForm('', 'foreign')"]] : [], '', o); }
     else if(v === 'me'){ anyaSay(`You're signed in as **${(authUser && (authUser.name || authUser.email)) || 'unknown'}** (${(authUser && authUser.role) || 'user'}).`); }
     else if(v === 'help'){
-      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
+      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
     }
     else if(v === 'learned'){
       const d = anyaML.data(), taught = d.ex.filter(e => e.w >= 2 && anyaIntentOk(e.i)).sort((a, b) => b.w - a.w), mine = anyaML.top(ui.tab, 6);
       const extra = (taught.length ? `<div class="anya-sub2">Phrases you taught me</div><ul class="anya-list">${taught.slice(0, 8).map(e => `<li>"${esc(e.q)}" → <b>${esc(anyaIntentLabel(e.i))}</b></li>`).join('')}</ul>` : '') + (mine.length ? `<div class="anya-sub2">Your shortcuts (most used)</div><ul class="anya-list">${mine.map(i => `<li>★ ${esc(anyaIntentLabel(i))}</li>`).join('')}</ul>` : '');
-      anyaSay(taught.length || mine.length ? `I've learned ${taught.length} phrase${taught.length === 1 ? '' : 's'} from you and ${Object.keys(d.use).length} command habit${Object.keys(d.use).length === 1 ? '' : 's'}. This stays on this device, for you only.` : 'I haven\'t learned anything from you yet. Use 👍 / 👎 on my answers, or pick from "Did you mean…" — I\'ll remember.', taught.length || mine.length ? [['Forget everything', () => { anyaML.forget(); anyaSay('Done — I\'ve forgotten what I learned from you.'); }]] : [], extra);
+      anyaSay(taught.length || mine.length ? `I've learned ${taught.length} phrase${taught.length === 1 ? '' : 's'} from you and ${Object.keys(d.use).length} command habit${Object.keys(d.use).length === 1 ? '' : 's'}. I keep all of it for good — on every device you sign in on — and our conversations too.` : 'I haven\'t learned anything from you yet. Use 👍 / 👎 on my answers, or pick from "Did you mean…" — I\'ll remember for good.', [], extra);
     }
   }
   anyaDraw();
@@ -8688,6 +8896,8 @@ function anyaRuleIntent(t){
   const how = /\b(how|steps|process|procedure|guide|explain|what is|whats|what are|walk me|teach|help me with|help with|show me how)\b/.test(t);
   if(/^(help|menu|commands|\?)$/.test(t) || /what can you do/.test(t)) return 's:help';
   if(/what (have )?you (learn|learned|learnt)|your (memory|shortcuts)|what do you know about me/.test(t)) return 's:learned';
+  if(/\bmy (activity|usage|habits|stats|statistics|work pattern)\b|what do i (do|use) (the )?most|how (do|did) i use|analy[sz]e (me|my)|usage report|where (does|did) my time go|how active (am|was) i/.test(t)) return 's:activity';
+  if(/\b(daily )?brief(ing)?\b|^good (morning|afternoon|evening)\b.{0,12}$|what'?s (up|new) today|my day\b/.test(t)) return 's:brief';
   if(/\b(check|analy[sz]e|audit|scan|review)\b.*\b(app|everything|records?|data|mistakes?|errors?|problems?|issues?|all)\b|\b(any|find|show)( the)? (mistakes?|errors?|problems?|issues?)\b|\bhealth ?check\b|^(mistakes|errors|problems|issues)\??$|what.{0,12}wrong/.test(t)) return 's:check';
   if(!how){
     if(/\b(cyberpunk|cp) ?(2027|2077)\b|\b2027\b/.test(t)) return 't:cp2027';
@@ -8722,13 +8932,17 @@ async function anyaReply(q){
   if(/\b(turn|switch) on\b.*\b(auto ?fill|pre ?fill)\b|\benable (auto ?fill|pre ?fill)\b|\bauto ?fill on\b/.test(t)){ anyaML.data().auto = true; anyaML.save(); anyaSay('Auto fill is on — when you open a new petty cash, travel or fuel form I\'ll draft what I can from your history.'); return; }
   if(/\bcheck everything again\b|\bunmute\b|\bshow ignored\b/.test(t)){ const d = anyaML.data(); d.mute = {}; d.dis = {}; anyaML.save(); anyaBadgeAt = 0; anyaAnalyze(); return; }
   if(/\b(compose|write|draft|prepare|generate|create|make|type|do)\b.{0,40}\bletter\b|^(an? )?(resignation|leave|appreciation|reminder|termination|complaint|invitation|apology|quotation request|request) letter\b|\bletter of (resignation|appreciation|apology|invitation)\b/.test(t)){ await anyaComposeLetter(q); return; }
+  if(/\b(voice|speak|talk|read (it|answers|out))\b.*\b(on|out loud|aloud|to me)\b|^(speak|talk to me|voice on|unmute)$/.test(t) && !/\boff\b/.test(t)){ if(!anyaVoiceCfg().speak) anyaToggleSpeak(); else { anyaSay('My voice is already on. 🔊'); } return; }
+  if(/\b(voice|speaking|talking) off\b|^(mute|be quiet|quiet|stop (speaking|talking)|shush)$/.test(t)){ if(anyaVoiceCfg().speak) anyaToggleSpeak(); else anyaSay('I\'m already quiet.'); return; }
+  if(/\b(hands? ?free|always listen|listen for (hey )?anya|wake word)\b/.test(t) && !/\b(off|stop)\b/.test(t)){ anyaSetHands(true); return; }
+  if(/\b(stop listening|hands? ?free off|don'?t listen|turn off (the )?(mic|microphone|listening))\b/.test(t)){ anyaSetHands(false); return; }
   if(anyaDownload(t)) return;
   if(/^(show|open|view|see|preview)\b/.test(t) && ANYA_FILEISH.test(t) && anyaGetFile(t)) return;
   const pm = /^process (?:voucher |request )?([a-z0-9\/\- ]*\d[a-z0-9\/\- ]*)$/.exec(t); if(pm){ anyaProcessVoucher(pm[1].trim()); return; }
   if(formOpen && (/^(fill|set|put|use|change|make it)\b/.test(t) || !/^(new|create|start|raise|open|go|show|find|search|how|what|where|who|i (want|need))\b/.test(t)) && anyaFillOpen(t.replace(/^(fill( in| it)?( with)?|set|put|use|change|make it)\s+/, ''))) return;
   if(/^(hi|hello|hey|salaam|assalaamu? ?alaikum|good (morning|afternoon|evening))\b/.test(t) && t.split(' ').length <= 4){ anyaSay(`Hello${anyaFirst() ? ' ' + anyaFirst() : ''}! What can I do for you?`); return; }
   if(/^(thanks|thank you|thx|ok|okay|great|cool|nice)\b/.test(t) && t.split(' ').length <= 4){ anyaSay('Any time. 👍'); return; }
-  if(/^(forget|reset) (everything|what you learned|learning|memory)/.test(t)){ anyaML.forget(); anyaSay('Done — I\'ve forgotten what I learned from you.'); return; }
+  if(/^(forget|reset|erase|delete|clear) (everything|what you learned|learning|memory|your memory|all)/.test(t)){ anyaSay('I don\'t forget what you teach me — it keeps me getting better. If I answered something wrongly, type 👎 or "wrong" and pick the right option; I\'ll correct myself.'); return; }
   // find (records are looked up, not learned)
   const fm = /^(find|search( for)?|look ?up|lookup|where is|wheres|locate)\s+(.+)$/.exec(t);
   if(fm){
@@ -18567,6 +18781,7 @@ function handoverFileName(h, ext){
   return safe ? 'Handover_' + safe + '.' + ext : 'Handover.' + ext;
 }
 function downloadBlob(blob, filename){
+  try{ if(typeof anyaTrack === 'function') anyaTrack('dl'); }catch(e){}
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;

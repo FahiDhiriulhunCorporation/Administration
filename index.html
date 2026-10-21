@@ -47,6 +47,8 @@ const COLOR_SCHEMES = [
   // themes: a look of their own (glow, fonts, background) on top of the colours — best in dark mode, which they switch on
   { id:'cyberpunk',        name:'Cyberpunk ✦ theme', swatches:['#0D0221','#FF2A6D','#F9F002','#05D9E8'], accent:'#FF2A6D', chrome:'#0D0221', chromeHover:'#26084a', tintFrom:'#3a0d6b', tint:.07, darkBase:.15, theme:true },
   { id:'tron',             name:'Tron ✦ theme',      swatches:['#000508','#00E5FF','#6FFFE9','#0B2A33'], accent:'#00C8E0', chrome:'#00060a', chromeHover:'#062430', tintFrom:'#004a5c', tint:.045, darkBase:.12, theme:true },
+  { id:'tronhud',          name:'Tron HUD ✦ theme',  swatches:['#0a141d','#13283a','#00d8ff','#7fa6c2'], accent:'#00C2E8', chrome:'#08121a', chromeHover:'#13283a', tintFrom:'#1d4a6b', tint:.06, darkBase:.15, theme:true },
+  { id:'cp2027',           name:'Cyberpunk 2027 ✦ theme', swatches:['#070508','#0f1f66','#FF3B3B','#5c0f14'], accent:'#FF3B3B', chrome:'#0a0507', chromeHover:'#2a0a10', tintFrom:'#4a0a12', tint:.05, darkBase:.12, theme:true },
 ];
 
 /* --- OKLCH helpers: every scheme gets the same lightness ladder as the default,
@@ -129,9 +131,10 @@ function applyColorScheme(id){
 // Shrink the sidebar title until it fits beside the header buttons (wide fonts like Orbitron would overlap them)
 function fitAppTitle(){
   requestAnimationFrame(() => {
-    const el = document.getElementById('app-title'); if(!el) return;
-    el.style.fontSize = '';
+    const el = document.getElementById('app-title'), head = document.getElementById('sb-head'); if(!el) return;
+    el.style.fontSize = ''; if(head) head.classList.remove('sb-stack');
     if(!el.clientWidth) return;
+    if(el.scrollWidth > el.clientWidth + 1 && head) head.classList.add('sb-stack');     // first: give the name the whole row
     let size = parseFloat(getComputedStyle(el).fontSize) || 16;
     while(el.scrollWidth > el.clientWidth + 1 && size > 10){ size -= 0.5; el.style.fontSize = size + 'px'; }
   });
@@ -190,7 +193,7 @@ function refreshAppearanceModal(){
 }
 </script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;700&family=Orbitron:wght@500;700;800&family=Rajdhani:wght@500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;700&family=Orbitron:wght@500;700;800&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap');
   /* ---------- Cyberpunk theme: neon pink / cyan / yellow on deep violet, glowing edges, angled headings ---------- */
   html[data-color-scheme="cyberpunk"][data-theme="dark"] body{ font-family:'Rajdhani','Inter',sans-serif; font-size:15.5px; letter-spacing:.01em;
     background-color:#0b0220 !important; background-image: radial-gradient(1200px 600px at 85% -10%, rgba(255,42,109,.16), transparent 60%), radial-gradient(900px 500px at -10% 110%, rgba(5,217,232,.13), transparent 60%), repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px); background-attachment:fixed; }
@@ -207,7 +210,6 @@ function refreshAppearanceModal(){
   /* ---------- Tron theme: glowing cyan lines on black, the light-grid floor, clean futuristic headings ---------- */
   html[data-color-scheme="tron"][data-theme="dark"] body{ background-color:#00050a !important;
     background-image: linear-gradient(rgba(0,229,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,.07) 1px, transparent 1px), radial-gradient(1000px 500px at 50% 120%, rgba(0,229,255,.16), transparent 70%); background-size: 46px 46px, 46px 46px, 100% 100%; background-attachment:fixed; }
-  html[data-color-scheme="cyberpunk"][data-theme="dark"] #app-title, html[data-color-scheme="tron"][data-theme="dark"] #app-title{ letter-spacing:.02em !important; }
   html[data-color-scheme="tron"][data-theme="dark"] h1, html[data-color-scheme="tron"][data-theme="dark"] h2, html[data-color-scheme="tron"][data-theme="dark"] h3, html[data-color-scheme="tron"][data-theme="dark"] #app-title{ font-family:'Orbitron','Inter',sans-serif; letter-spacing:.08em; text-transform:uppercase; font-weight:700; }
   html[data-color-scheme="tron"][data-theme="dark"] h1{ color:#e6fdff; text-shadow: 0 0 12px rgba(0,229,255,.8); }
   html[data-color-scheme="tron"][data-theme="dark"] .bg-white{ background-color: rgba(0,14,20,.86) !important; border-color: rgba(0,229,255,.45) !important; box-shadow: 0 0 0 1px rgba(0,229,255,.15), 0 0 18px rgba(0,229,255,.18), inset 0 0 22px rgba(0,229,255,.05); }
@@ -218,6 +220,124 @@ function refreshAppearanceModal(){
   html[data-color-scheme="tron"][data-theme="dark"] .num, html[data-color-scheme="tron"][data-theme="dark"] .text-xl.font-extrabold, html[data-color-scheme="tron"][data-theme="dark"] .text-2xl.font-extrabold{ color:#6FFFE9; text-shadow:0 0 8px rgba(0,229,255,.55); }
   html[data-color-scheme="tron"][data-theme="dark"] input, html[data-color-scheme="tron"][data-theme="dark"] select, html[data-color-scheme="tron"][data-theme="dark"] textarea{ border-color: rgba(0,229,255,.35) !important; }
   html[data-color-scheme="tron"][data-theme="dark"] ::selection{ background:#00E5FF; color:#00131a; }
+  /* ---------- Tron HUD theme: flat steel-blue control panels, solid cyan title tabs, square edges, monospace numbers ---------- */
+  html[data-color-scheme="tronhud"][data-theme="dark"] body{ font-family:'Rajdhani','Inter',sans-serif; font-size:15.5px; background-color:#0a141d !important;
+    background-image: radial-gradient(1200px 700px at 50% 40%, rgba(40,80,110,.28), transparent 70%), linear-gradient(rgba(127,166,194,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(127,166,194,.045) 1px, transparent 1px); background-size:100% 100%, 22px 22px, 22px 22px; background-attachment:fixed; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] h1, html[data-color-scheme="tronhud"][data-theme="dark"] h2, html[data-color-scheme="tronhud"][data-theme="dark"] h3, html[data-color-scheme="tronhud"][data-theme="dark"] #app-title{ font-family:'Rajdhani','Inter',sans-serif; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] h1{ color:#e8f7ff; border-left:6px solid #00d8ff; padding-left:12px; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .bg-white{ background-color: rgba(19,40,58,.88) !important; border-color:#2b4a63 !important; border-radius:3px !important; box-shadow: inset 0 3px 0 #00d8ff, 0 0 0 1px rgba(0,0,0,.35); }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .rounded-xl, html[data-color-scheme="tronhud"][data-theme="dark"] .rounded-2xl, html[data-color-scheme="tronhud"][data-theme="dark"] .rounded-lg{ border-radius:3px !important; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .bg-brand-600{ background-color:#00c2e8 !important; color:#06121b !important; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .nav-item-on{ background:#00d8ff !important; color:#06121b !important; box-shadow:none; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .nav-item-on svg{ color:#06121b; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .nav-rail-on{ background:rgba(0,216,255,.16) !important; box-shadow: inset 3px 0 0 #00d8ff; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .nav-rail-on svg{ color:#00d8ff; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .app-chrome{ box-shadow: inset -1px 0 0 #2b4a63; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .num, html[data-color-scheme="tronhud"][data-theme="dark"] .text-xl.font-extrabold, html[data-color-scheme="tronhud"][data-theme="dark"] .text-2xl.font-extrabold{ font-family:'Share Tech Mono',ui-monospace,monospace; color:#00d8ff; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] input, html[data-color-scheme="tronhud"][data-theme="dark"] select, html[data-color-scheme="tronhud"][data-theme="dark"] textarea{ border-color:#2b4a63 !important; background-color:#0c1924 !important; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] ::selection{ background:#00d8ff; color:#06121b; }
+  /* ---------- Cyberpunk 2027 theme: red interface on a night-blue to black fade, chamfered red tiles ---------- */
+  html[data-color-scheme="cp2027"][data-theme="dark"] body{ font-family:'Rajdhani','Inter',sans-serif; font-size:15.5px; letter-spacing:.01em; background-color:#070508 !important;
+    background-image: linear-gradient(180deg, #0f1f66 0%, #0b1240 18%, #08061a 42%, #070508 70%), repeating-linear-gradient(0deg, rgba(255,59,59,.025) 0 1px, transparent 1px 3px); background-attachment:fixed; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] h1, html[data-color-scheme="cp2027"][data-theme="dark"] h2, html[data-color-scheme="cp2027"][data-theme="dark"] h3, html[data-color-scheme="cp2027"][data-theme="dark"] #app-title{ font-family:'Rajdhani','Inter',sans-serif; font-weight:700; letter-spacing:.05em; color:#ff4b4b !important; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] #app-title{ text-transform:uppercase; letter-spacing:.1em; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] h1{ text-shadow:0 0 12px rgba(255,59,59,.55); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .text-slate-900, html[data-color-scheme="cp2027"][data-theme="dark"] .text-slate-800{ color:#ff8080; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .text-slate-700, html[data-color-scheme="cp2027"][data-theme="dark"] .text-slate-600{ color:#e46a6a; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .text-slate-500, html[data-color-scheme="cp2027"][data-theme="dark"] .text-slate-400{ color:#a85a5e; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .bg-white{ background-color: rgba(38,8,12,.62) !important; border-color: rgba(255,59,59,.5) !important; border-radius:2px !important; box-shadow: 0 0 16px rgba(255,59,59,.10), inset 0 0 24px rgba(255,59,59,.05); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .rounded-xl, html[data-color-scheme="cp2027"][data-theme="dark"] .rounded-2xl, html[data-color-scheme="cp2027"][data-theme="dark"] .rounded-lg{ border-radius:2px !important; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .bg-brand-600{ background-color:#ff3b3b !important; color:#1a0508 !important; box-shadow:0 0 14px rgba(255,59,59,.5); clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .nav-item-on{ background:#ff3b3b !important; color:#1a0508 !important; box-shadow:0 0 14px rgba(255,59,59,.45); clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); border-radius:0 !important; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .nav-item-on svg{ color:#1a0508; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .nav-item:not(.nav-item-on){ color:#e46a6a; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .nav-rail-on{ background:rgba(255,59,59,.16) !important; box-shadow: inset 3px 0 0 #ff3b3b; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .nav-rail-on svg{ color:#ff3b3b; filter: drop-shadow(0 0 4px rgba(255,59,59,.8)); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .app-chrome{ box-shadow: inset -1px 0 0 rgba(255,59,59,.55); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .num, html[data-color-scheme="cp2027"][data-theme="dark"] .text-xl.font-extrabold, html[data-color-scheme="cp2027"][data-theme="dark"] .text-2xl.font-extrabold{ color:#ff3b3b; text-shadow:0 0 8px rgba(255,59,59,.45); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] input, html[data-color-scheme="cp2027"][data-theme="dark"] select, html[data-color-scheme="cp2027"][data-theme="dark"] textarea{ border-color: rgba(255,59,59,.4) !important; color:#ffb3b3 !important; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] ::selection{ background:#ff3b3b; color:#1a0508; }
+  /* sidebar header: when the name does not fit beside the buttons, the buttons drop to a row underneath */
+  #sb-head.sb-stack{ flex-wrap:wrap; row-gap:6px; padding-bottom:10px; }
+  #sb-head.sb-stack > div:first-child{ width:100%; }
+  #sb-head.sb-stack > div:last-child{ width:100%; padding-left:42px; justify-content:flex-start; }
+  /* ---------- Anya assistant: one HUD layout, coloured by the theme through these variables ---------- */
+  html{ --an-a:rgb(var(--brand-600)); --an-b:rgb(var(--brand-400)); --an-c:rgb(var(--brand-500)); --an-bg:#ffffff; --an-bg2:#f8fafc; --an-tx:#1e293b; --an-me:#0f172a; --an-mut:#64748b; --an-ink:#fff; --an-font:'Inter',system-ui,sans-serif; --an-hfont:'Orbitron','Inter',sans-serif; --an-fs:13.5px; --an-glow:0; --an-scan:transparent; --an-cut:14px; --an-core:rgba(99,102,241,.06); }
+  html[data-theme="dark"]{ --an-a:#4dff9a; --an-b:#22e3ff; --an-c:#22e3ff; --an-bg:#020807; --an-bg2:#03110c; --an-tx:#c9ffe0; --an-me:#bff6ff; --an-mut:#7fb8a0; --an-ink:#020807; --an-font:'Share Tech Mono',ui-monospace,monospace; --an-glow:1; --an-scan:rgba(34,227,255,.035); --an-core:rgba(77,255,154,.06); }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"]{ --an-a:#FF2A6D; --an-b:#05D9E8; --an-c:#F9F002; --an-bg:#12042a; --an-bg2:#1a0638; --an-tx:#ffd6e4; --an-me:#c9fbff; --an-mut:#b98aa8; --an-ink:#12042a; --an-font:'Rajdhani','Share Tech Mono',sans-serif; --an-fs:15px; --an-scan:rgba(255,42,109,.05); --an-core:rgba(255,42,109,.10); }
+  html[data-color-scheme="tron"][data-theme="dark"]{ --an-a:#00E5FF; --an-b:#6FFFE9; --an-c:#ffffff; --an-bg:#00070c; --an-bg2:#001018; --an-tx:#d6fbff; --an-me:#9ff3ff; --an-mut:#5fa9b5; --an-ink:#00070c; --an-scan:rgba(0,229,255,.05); --an-core:rgba(0,229,255,.08); }
+  html[data-color-scheme="tronhud"][data-theme="dark"]{ --an-a:#00d8ff; --an-b:#7fa6c2; --an-c:#00d8ff; --an-bg:#0e1c28; --an-bg2:#13283a; --an-tx:#cfe6f5; --an-me:#e8f7ff; --an-mut:#6f8ea6; --an-ink:#06121b; --an-font:'Rajdhani','Inter',sans-serif; --an-fs:15px; --an-glow:.4; --an-scan:rgba(127,166,194,.04); --an-cut:6px; --an-core:rgba(0,216,255,.07); }
+  html[data-color-scheme="cp2027"][data-theme="dark"]{ --an-a:#ff3b3b; --an-b:#ff6b6b; --an-c:#ff3b3b; --an-bg:#0a0710; --an-bg2:#1a0508; --an-tx:#ff8f8f; --an-me:#ffc4c4; --an-mut:#b05a5a; --an-ink:#12040a; --an-font:'Rajdhani','Share Tech Mono',sans-serif; --an-fs:15.5px; --an-glow:.7; --an-scan:rgba(255,59,59,.045); --an-core:rgba(255,59,59,.08); }
+  .anya-ring .ar-a{ stroke:var(--an-a); fill:none; } .anya-ring .ar-b{ stroke:var(--an-b); } .anya-ring .ar-core{ fill:var(--an-core); } .anya-ring .ar-fill{ fill:var(--an-a); }
+  .anya-ring .ar-txt{ fill:var(--an-a); font-family:'Orbitron','Share Tech Mono',monospace; font-weight:700; }
+  #anya-fab{ position:fixed; right:18px; bottom:18px; z-index:45; width:62px; height:62px; padding:0; border:0; border-radius:50%; background:radial-gradient(circle,var(--an-bg2) 0 58%,var(--an-bg) 60%); box-shadow:0 0 0 1px color-mix(in srgb,var(--an-b) 40%,transparent),0 0 calc(22px * var(--an-glow)) color-mix(in srgb,var(--an-b) 40%,transparent),0 6px 18px rgba(0,0,0,.3); cursor:pointer; transition:transform .15s; }
+  #anya-fab:hover{ transform:scale(1.06); } #anya-fab.anya-on{ box-shadow:0 0 0 2px var(--an-a),0 0 calc(26px * var(--an-glow)) color-mix(in srgb,var(--an-a) 55%,transparent),0 6px 18px rgba(0,0,0,.3); }
+  #anya-fab .anya-tag{ position:absolute; right:56px; bottom:-2px; padding:2px 10px 2px 8px; font:700 11px/1.4 'Orbitron','Share Tech Mono',monospace; letter-spacing:.2em; color:var(--an-b); background:var(--an-bg); border:1px solid var(--an-b); clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px); pointer-events:none; }
+  html[data-theme="dark"] #anya-fab .anya-tag{ text-shadow:0 0 6px var(--an-b); }
+  /* each ring turns at its own pace and direction; some speed up and slow down, the core breathes */
+  .anya-ring .al{ transform-origin:50px 50px; transform-box:view-box; }
+  .anya-ring .al1{ animation:anyaSpin 24s linear infinite reverse; }
+  .anya-ring .al2{ animation:anyaSpin 2.6s cubic-bezier(.6,0,.4,1) infinite; }
+  .anya-ring .al3{ animation:anyaSpin 7s cubic-bezier(.7,.1,.3,.9) infinite; }
+  .anya-ring .al4{ animation:anyaSpin 13s linear infinite reverse; }
+  .anya-ring .al5{ animation:anyaSpin 4.5s linear infinite reverse; }
+  .anya-ring .al6{ animation:anyaSpin 9.5s cubic-bezier(.45,0,.55,1) infinite; }
+  .anya-ring .al2 circle{ animation:anyaDash 5s linear infinite; }
+  .anya-ring .ar-core{ animation:anyaCore 3.2s ease-in-out infinite; transform-origin:50px 50px; transform-box:view-box; }
+  .anya-ring .ar-txt{ animation:anyaTxt 3.2s ease-in-out infinite; }
+  @keyframes anyaSpin{ to{ transform:rotate(360deg); } }
+  @keyframes anyaDash{ to{ stroke-dashoffset:-200; } }
+  @keyframes anyaCore{ 0%,100%{ transform:scale(1); opacity:1; } 50%{ transform:scale(.94); opacity:.7; } }
+  @keyframes anyaTxt{ 0%,100%{ opacity:1; } 50%{ opacity:.75; } }
+  #anya-fab:hover .anya-ring .al3{ animation-duration:2.5s; } #anya-fab:hover .anya-ring .al5{ animation-duration:1.6s; } #anya-fab:hover .anya-ring .al1{ animation-duration:9s; }
+  #anya-fab:hover .anya-ring .al2{ animation-duration:1.2s; } #anya-fab:hover .anya-ring .al4{ animation-duration:5s; } #anya-fab:hover .anya-ring .al6{ animation-duration:3.5s; }
+  #anya-peek{ position:fixed; right:92px; bottom:44px; z-index:46; max-width:270px; padding:10px 13px; font:var(--an-fs)/1.45 var(--an-font); color:var(--an-tx); background:var(--an-bg); border:1px solid var(--an-a); box-shadow:0 0 calc(18px * var(--an-glow)) color-mix(in srgb,var(--an-a) 35%,transparent),0 8px 24px rgba(0,0,0,.18); clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); cursor:pointer; animation:anyaIn .35s ease-out; }
+  .anya-peek-k{ color:var(--an-b); font-weight:700; }
+  @keyframes anyaIn{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
+  #anya-panel{ position:fixed; right:18px; bottom:92px; z-index:55; width:390px; max-width:calc(100vw - 24px); height:min(600px,calc(100vh - 120px)); display:flex; flex-direction:column; color:var(--an-tx); font:var(--an-fs)/1.5 var(--an-font);
+    background:linear-gradient(var(--an-scan) 1px,transparent 1px) 0 0/100% 4px, radial-gradient(120% 70% at 50% 0,color-mix(in srgb,var(--an-b) calc(10% * var(--an-glow)),transparent),transparent 60%), var(--an-bg); border:1px solid color-mix(in srgb,var(--an-b) 60%,transparent);
+    box-shadow:0 0 calc(30px * var(--an-glow)) color-mix(in srgb,var(--an-b) 25%,transparent),0 18px 40px rgba(0,0,0,.35);
+    clip-path:polygon(var(--an-cut) 0,100% 0,100% calc(100% - var(--an-cut)),calc(100% - var(--an-cut)) 100%,0 100%,0 var(--an-cut)); animation:anyaIn .25s ease-out; }
+  #anya-panel[hidden]{ display:none; }
+  .anya-head{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid color-mix(in srgb,var(--an-b) 35%,transparent); }
+  .anya-id{ flex:1; min-width:0; } .anya-name{ font:700 17px/1.1 var(--an-hfont); letter-spacing:.22em; color:var(--an-b); }
+  html[data-theme="dark"] .anya-name{ text-shadow:0 0 calc(10px * var(--an-glow)) var(--an-b); }
+  .anya-sub{ font-size:11px; color:var(--an-mut); letter-spacing:.06em; } .anya-sub i{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--an-a); box-shadow:0 0 8px var(--an-a); margin-right:6px; vertical-align:1px; animation:anyaBlink 2s infinite; }
+  @keyframes anyaBlink{ 50%{ opacity:.35; } }
+  .anya-hbtn{ width:30px; height:30px; flex:none; color:var(--an-b); border:1px solid color-mix(in srgb,var(--an-b) 40%,transparent); background:transparent; font-size:14px; } .anya-hbtn:hover{ background:color-mix(in srgb,var(--an-b) 14%,transparent); }
+  .anya-log{ flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; scrollbar-width:thin; scrollbar-color:color-mix(in srgb,var(--an-b) 40%,transparent) transparent; }
+  .anya-msg{ align-self:flex-start; max-width:94%; padding:8px 11px; border-left:2px solid var(--an-a); background:color-mix(in srgb,var(--an-a) 7%,transparent); }
+  .anya-msg b{ color:var(--an-a); font-weight:700; }
+  .anya-me{ align-self:flex-end; max-width:85%; padding:7px 11px; color:var(--an-me); background:color-mix(in srgb,var(--an-b) 11%,transparent); border-right:2px solid var(--an-b); text-align:right; white-space:pre-wrap; word-break:break-word; }
+  .anya-me::before{ content:'> '; color:var(--an-b); }
+  .anya-steps{ margin:6px 0 0; padding-left:20px; list-style:decimal; } .anya-steps li{ margin:3px 0; } .anya-steps li::marker{ color:var(--an-b); }
+  .anya-list{ margin:6px 0 0; padding:0; list-style:none; } .anya-list li{ margin:3px 0; padding-left:12px; position:relative; } .anya-list li::before{ content:'▸'; position:absolute; left:0; color:var(--an-b); } .anya-list span{ color:var(--an-mut); font-size:.9em; }
+  .anya-sub2{ margin-top:8px; font-size:.82em; letter-spacing:.12em; text-transform:uppercase; color:var(--an-b); }
+  .anya-acts,.anya-topics{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .anya-acts button,.anya-topics button,.anya-chips button{ padding:4px 10px; font:.9em/1.4 var(--an-font); color:var(--an-b); background:color-mix(in srgb,var(--an-b) 7%,transparent); border:1px solid color-mix(in srgb,var(--an-b) 60%,transparent); clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); cursor:pointer; text-align:left; }
+  .anya-acts button:hover,.anya-topics button:hover,.anya-chips button:hover{ background:var(--an-b); color:var(--an-ink); }
+  .anya-topics button,.anya-chips button.anya-mine{ color:var(--an-a); border-color:color-mix(in srgb,var(--an-a) 55%,transparent); background:color-mix(in srgb,var(--an-a) 7%,transparent); }
+  .anya-topics button:hover,.anya-chips button.anya-mine:hover{ background:var(--an-a); color:var(--an-ink); }
+  .anya-fb{ display:flex; gap:4px; justify-content:flex-end; margin-top:6px; font-size:.82em; color:var(--an-mut); } .anya-fb button{ padding:0 6px; border:1px solid color-mix(in srgb,var(--an-mut) 45%,transparent); background:transparent; opacity:.7; font-size:12px; line-height:20px; } .anya-fb button:hover{ opacity:1; border-color:var(--an-a); }
+  .anya-busy{ color:var(--an-mut); font-size:.9em; } .anya-busy span{ display:inline-block; width:6px; height:6px; margin-right:3px; background:var(--an-a); animation:anyaBlink .9s infinite; } .anya-busy span:nth-child(2){ animation-delay:.2s; } .anya-busy span:nth-child(3){ animation-delay:.4s; }
+  .anya-chips{ display:flex; gap:6px; overflow-x:auto; padding:6px 12px; border-top:1px solid color-mix(in srgb,var(--an-b) 20%,transparent); scrollbar-width:none; } .anya-chips button{ white-space:nowrap; flex:none; }
+  .anya-cmd{ display:flex; align-items:center; gap:8px; margin:6px 12px 12px; padding:6px 8px 6px 10px; border:1px solid var(--an-a); background:color-mix(in srgb,var(--an-a) 7%,transparent); clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px),0 10px); }
+  .anya-cmd-lbl{ color:var(--an-a); white-space:nowrap; font-size:.92em; font-weight:600; }
+  .anya-cmd input{ flex:1; min-width:0; background:transparent !important; border:0 !important; outline:none !important; box-shadow:none !important; color:var(--an-me) !important; font:var(--an-fs) var(--an-font); caret-color:var(--an-a); padding:4px 0; }
+  .anya-cmd input::placeholder{ color:var(--an-mut); opacity:.8; }
+  .anya-cmd button{ color:var(--an-ink); background:var(--an-a); border:0; width:30px; height:28px; font-size:13px; clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
+  /* Tron HUD: flat steel panels with solid cyan title tabs */
+  html[data-color-scheme="tronhud"][data-theme="dark"] .anya-name{ background:var(--an-a); color:var(--an-ink); display:inline-block; padding:1px 10px; text-shadow:none; letter-spacing:.18em; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .anya-head{ background:var(--an-bg2); }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .anya-msg{ background:var(--an-bg2); border-left:3px solid var(--an-a); }
+  /* Cyberpunk 2027: red on a night-blue fade, the selected tile solid red */
+  html[data-color-scheme="cp2027"][data-theme="dark"] #anya-panel{ background:linear-gradient(var(--an-scan) 1px,transparent 1px) 0 0/100% 4px, linear-gradient(180deg,#0d1a5c 0%,#0a0d2a 22%,#0a0508 55%,#0a0508 100%); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .anya-name{ font-family:'Rajdhani',sans-serif; font-size:22px; letter-spacing:.12em; color:var(--an-a); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .anya-msg{ border:1px solid color-mix(in srgb,var(--an-a) 45%,transparent); border-left:3px solid var(--an-a); background:rgba(60,8,12,.45); }
+  html[data-color-scheme="cp2027"][data-theme="dark"] .anya-cmd button,html[data-color-scheme="cp2027"][data-theme="dark"] .anya-acts button:first-child{ background:var(--an-a); color:#1a0508; }
+  #toast-wrap{ bottom:92px !important; }
+  @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ display:none; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
+  @media print{ #anya-fab,#anya-panel,#anya-peek{ display:none !important; } }
 
   :root{ --brand-50:238 242 255; --brand-100:224 231 255; --brand-200:199 210 254; --brand-300:165 180 252; --brand-400:129 140 248; --brand-500:99 102 241; --brand-600:79 70 229; --brand-700:67 56 202; --brand-800:55 48 163; --brand-900:49 46 129; --chrome:15 23 42; --chrome-hover:30 41 59;
          --s-bg:15 23 42; --s-surface:30 41 59; --s-raised:51 65 85; --s-line:71 85 105; --s-hover:39 52 73; --s-hover2:61 76 99; --s-tip:11 18 32;
@@ -508,7 +628,7 @@ function refreshAppearanceModal(){
 
   <!-- Sidebar -->
   <aside id="sidebar" style="width:18rem" class="fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 left-0 w-72 shrink-0 app-chrome text-slate-200 flex flex-col z-40 -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-out">
-    <div class="px-4 py-5 border-b border-white/10 flex items-center justify-between gap-2">
+    <div id="sb-head" class="px-4 py-5 border-b border-white/10 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2.5 min-w-0"><img data-logo alt="" class="w-9 h-9 rounded-lg shrink-0"><div id="app-title" style="cursor:default;-webkit-user-select:none;user-select:none" class="text-[16px] font-extrabold tracking-tight text-white whitespace-nowrap min-w-0 overflow-hidden text-ellipsis">Administration</div></div>
       <div class="flex items-center gap-0.5"><button onclick="gsOpen()" title="Search everything (Ctrl+K)" aria-label="Search" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17" stroke-linecap="round"/></svg></button><button onclick="ntToggle(this)" title="Notifications" aria-label="Notifications" class="nt-btn relative w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M5 8.5a5 5 0 0 1 10 0c0 4 1.5 5.5 1.5 5.5h-13S5 12.5 5 8.5Z"/><path d="M8.3 16.5a1.8 1.8 0 0 0 3.4 0" stroke-linecap="round"/></svg><span class="nt-badge absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9.5px] font-bold leading-4 text-center" style="display:none">0</span></button>
       <button onclick="openAppearanceModal()" id="theme-toggle-btn" title="Appearance: light/dark mode and colour scheme" aria-label="Appearance" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white">
@@ -1699,7 +1819,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.248';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.252';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3427,12 +3547,15 @@ const pcUserOptions = (sel, blank) => `${blank ? `<option value="">${esc(blank)}
 
 /* ---------- the Petty Cash Request page ---------- */
 // assigned balance, what has been spent since the last statement, what is still waiting for its invoice, and what is left
-function pcBalancesHtml(){
-  const rows = pcFundList().map(f => {
+function pcBalanceRows(){
+  return pcFundList().map(f => {
     const mine = state.pettyCash.filter(r => r.locationId === f.id && !pcInClosed(r)), assigned = pcFloatOf(f);
     const spent = pcRound(mine.filter(pcHasInvoice).reduce((s, r) => s + pcInvoiceTotal(r), 0) + pcStatements(f.id).reduce((s, x) => s + pcStmtPending(x), 0)), awaiting = pcRound(mine.filter(r => !pcHasInvoice(r)).reduce((s, r) => s + pcTotal(r), 0));
     return { f, assigned, spent, awaiting, left:pcRound(assigned - spent - awaiting) };
   }).filter(x => x.assigned || x.spent || x.awaiting);
+}
+function pcBalancesHtml(){
+  const rows = pcBalanceRows();
   if(!rows.length) return '';
   return vPanel('Assigned petty cash balance', 'Spent and requested amounts count until their statement is closed and replenished', `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Location / fund' }, { t:'Assigned', n:1 }, { t:'Spent (not yet replenished)', n:1 }, { t:'Requested, awaiting invoice', n:1 }, { t:'Available', n:1 }])}<tbody>${rows.map(x => `<tr class="${vTr}">${vTd(`<span class="inline-flex items-center gap-2"><i class="w-2.5 h-2.5 rounded-full" style="background:${esc(x.f.color)}"></i><span class="font-semibold">${esc(x.f.name)}</span></span>`, { first:1 })}${vTd(fmtMVR(x.assigned), { n:1 })}${vTd(fmtMVR(x.spent), { n:1 })}${vTd(fmtMVR(x.awaiting), { n:1 })}${vTd(`<b class="${x.left < 0 ? 'text-rose-600' : 'text-slate-900'}">${fmtMVR(x.left)}</b>`, { n:1, last:1 })}</tr>`).join('')}</tbody></table></div>`);
 }
@@ -7438,6 +7561,430 @@ function gsOpen(){
   };
 }
 function gsClose(){ const w = document.getElementById('gs-wrap'); if(w) w.remove(); }
+
+/* =====================================================================
+   ANYA — the in-app assistant (bottom-right). Guides users through the
+   processes and carries out simple requests (open a page, start a form,
+   look something up, show what is waiting). Works without a server; if the
+   AI reader (AI_READ_URL) is set up, questions it cannot answer go to it as 'chat'.
+===================================================================== */
+const ANYA_RING = (size, cls) => `<svg class="anya-ring ${cls || ''}" width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true">
+  <g class="al al1"><circle cx="50" cy="50" r="47" fill="none" class="ar-a" stroke-width=".8" stroke-dasharray="58 8 30 8" opacity=".75"/><path d="M50 1.5 l2.6 4.4h-5.2z" class="ar-fill"/></g>
+  <g class="al al2"><circle cx="50" cy="50" r="43.5" fill="none" class="ar-b" stroke-width="1.2" stroke-dasharray="14 60 6 120" opacity=".9"/></g>
+  <g class="al al3"><circle cx="50" cy="50" r="40" fill="none" class="ar-b" stroke-width="5" stroke-dasharray="34 10 12 16 40 14 18 8"/></g>
+  <g class="al al4"><circle cx="50" cy="50" r="35" fill="none" class="ar-b" stroke-width=".8" stroke-dasharray="40 6 2 6 60 6" opacity=".8"/></g>
+  <g class="al al5"><circle cx="50" cy="50" r="31" fill="none" class="ar-a" stroke-width="3" stroke-dasharray=".8 2.4" opacity=".7"/></g>
+  <g class="al al6"><circle cx="50" cy="50" r="27.5" fill="none" class="ar-a" stroke-width=".7" stroke-dasharray="20 8 4 8" opacity=".6"/></g>
+  <circle cx="50" cy="50" r="25" class="ar-a ar-core" stroke-width="1"/>
+  <text x="50" y="59" text-anchor="middle" class="ar-txt" font-size="24">A</text>
+</svg>`;
+
+// step-by-step guides; 'page' is where the work happens, 'act' starts it
+const ANYA_GUIDES = [
+  { id:'pc-new', title:'Petty cash request (voucher)', page:'petty-cash', keys:['petty cash','voucher','cash request','new request','advance cash','pc request'],
+    steps:['Open **Finance → Petty Cash Requests** and press **+ New Request**.', 'Choose the petty cash location (fund), the requester and the items with their amounts, then save.', 'Sign it (**Add my signature**) and get it approved; then **Process** it to hand over the cash.', 'When the requester brings the invoice and the change, attach the invoice — the app reads it and fills the empty boxes.', 'Settled vouchers are then added to the open statement under **Statements**.'],
+    acts:[['+ New request', "goTo('petty-cash'); openPcForm()"]] },
+  { id:'pc-ext', title:'Approved request from another department', page:'petty-cash', keys:['another department','other department','external','other dept','hod approved','approved request','department request'],
+    steps:['The requester fills the petty cash form in their department and gets it approved by their HOD.', 'In **Petty Cash Requests** press **+ Approved request (other dept.)** and attach the approved form (PDF or photo).', 'The app reads the form and creates the voucher — no re-typing. Check what it read and save.', 'Hand over the cash with **Process**.', 'When the requester returns with the invoice and the change, attach the invoice and enter the change — then it goes on the statement.'],
+    acts:[['Receive an approved request', "goTo('petty-cash'); openPcIntake()"]] },
+  { id:'pc-fuel', title:'Fueling petty cash', page:'petty-cash', keys:['fueling petty cash','fuel petty cash','fuel cash'],
+    steps:['In **Petty Cash Requests** press **+ Fueling Petty Cash**.', 'Pick the vehicle and the amount; process it to give the cash.', 'Attach the fuel invoice when it comes back — litres and the rate per litre are read from it.'],
+    acts:[['+ Fueling petty cash', "goTo('petty-cash'); openPcForm(null,'fuel')"]] },
+  { id:'pc-stmt', title:'Petty cash statement', page:'petty-statement', keys:['statement','excel statement','close statement','add to statement','preview statement'],
+    steps:['Open **Finance → Statements** and pick the location tab.', 'Use **Add all ready** to put every settled voucher on the open statement (or **Start statement** if none is open).', 'Press **Preview** to see the Excel workbook before downloading; **Download PDF** or Excel when it looks right.', 'Close the statement when it is complete and send it for replenishment.'],
+    acts:[['Open Statements', "goTo('petty-statement')"]] },
+  { id:'pc-repl', title:'Replenishment', page:'petty-statement', keys:['replenish','replenishment','top up','refill','reimburse fund'],
+    steps:['In **Statements**, open the closed statement.', 'When finance pays, press **Mark replenished** and enter the amount received.', 'Attach the signed replenishment form (PDF or photo) so it is filed with the statement.'],
+    acts:[['Open Statements', "goTo('petty-statement')"]] },
+  { id:'pc-count', title:'Cash count', page:'petty-count', keys:['cash count','count cash','count the cash','balance not matching','unbalanced'],
+    steps:['Open **Finance → Cash Count**.', 'Press **Count cash** for the fund and enter the notes and coins you hold.', 'The app compares the count with the expected balance and flags any difference.', 'Attach the signed cash count sheet; use **Export PDF** if you need a copy.'],
+    acts:[['Open Cash Count', "goTo('petty-count')"]] },
+  { id:'ba', title:'Business advance', page:'business-advance', keys:['business advance','advance','ba statement'],
+    steps:['Open **Finance → Business Advance** and press **+ Business advance**.', 'Record money in with **+ Money received** and each payment with **+ Payment (transferred)** — choose its category and voucher no.', 'Attach the invoice for every payment; the badge shows payments still without one.', 'Press **Excel** (choose the layout) or **PDF** for the statement.'],
+    acts:[['+ Business advance', "goTo('business-advance'); openBaForm()"]] },
+  { id:'pr', title:'Purchase requisition (PR)', page:'purchase-requisitions', keys:['purchase requisition','pr form','requisition','pr ','purchase request'],
+    steps:['Open **Finance → Purchase Requisitions** and press **+ New Purchase Requisition**.', 'Attach the PR form from the finance system — the app reads it and fills every field, including the approvals.', 'Check the highlighted fields and save. Later attach the PO and invoices as they arrive.'],
+    acts:[['+ New PR', "goTo('purchase-requisitions'); openPurchaseRequisitionForm()"]] },
+  { id:'travel', title:'Travel request & DSA', page:'travel-foreign', keys:['travel','trip','dsa','subsistence','allowance','per diem','pocket money','incidental','trf'],
+    steps:['Open **Travel → Local** or **Foreign Travel** and press **+ Travel request**. The next request number (FDC/TRF/…) is filled in for you.', 'Add the travellers, dates and destination. Turn on DSA to enter the daily rate, incidental allowance and pocket money — totals update as you type, and empty columns are left off the memo.', 'Print the DSA memo, get it signed and attach the signed memo.', 'Press **✉ Email to Finance** to make an email draft (to Finance, CC Rukham, Administration, Sama). It is never sent — you review and send it yourself.'],
+    acts:[['+ Foreign travel', "goTo('travel-foreign'); openTravelForm('', 'foreign')"], ['+ Local travel', "goTo('travel-local'); openTravelForm('', 'local')"]] },
+  { id:'fuel', title:'Fuel entry', page:'fueling', keys:['fuel','fueling','diesel','petrol','litres','rate per litre','delivery note'],
+    steps:['Open **Fleet → Fueling** and press **+ Add Fuel Entry**.', 'Pick the vehicle and charge it to the PR / requisition.', 'Attach the files in the order they come: **PO** → **Delivery note** → **Invoice** (the invoice can be added later).', 'Enter litres and the rate per litre — the total is worked out (litres × rate). A rate under MVR 8/L usually means litres and rate are swapped.'],
+    acts:[['+ Fuel entry', "goTo('fueling'); openVehFuelForm()"]] },
+  { id:'vlog', title:'Vehicle log & live tracking', page:'vehicle-log', keys:['vehicle log','vehicle out','trip log','return vehicle','tracking','track','geolocation','gps','location link'],
+    steps:['Open **Fleet → Vehicle Log** and press **+ Vehicle out** when a vehicle leaves.', 'Press **📍 Track** to get a tracking link for the driver\'s phone. **Start Tracking** records the place and time; the route is sampled while the page is open; **Stop Tracking** records the end.', 'When the vehicle comes back press **Return** and enter the reading.', 'Use **Generate log (PDF)** for the monthly log.'],
+    acts:[['+ Vehicle out', "goTo('vehicle-log'); openVlForm()"]] },
+  { id:'service', title:'Vehicle servicing & issues', page:'servicing', keys:['service','servicing','repair','issue','breakdown','maintenance vehicle'],
+    steps:['Open **Fleet → Servicing**.', 'Press **+ Periodic Service** for routine service or **+ Report Issue** for a fault.', 'Attach the report or invoice; open issues show as a badge until closed.'],
+    acts:[['Open Servicing', "goTo('servicing')"]] },
+  { id:'cleaning', title:'Cleaning checklist', page:'cleaning', keys:['cleaning','checklist','janitor','clean'],
+    steps:['Open **Facilities → Cleaning Checklist** and pick the location (set rooms with **Rooms & tasks**).', 'Print the week\'s checklist and have it signed.', 'Press **📎 Attach signed copy**, then **Mark week complete**.'],
+    acts:[['Open Cleaning Checklist', "goTo('cleaning')"]] },
+  { id:'leave', title:'Staff leave plan', page:'leave-plan', keys:['leave','holiday','annual leave','leave plan','time off'],
+    steps:['Open **Team → Staff Leave Plan**.', 'Press **+ Add by dates** to enter a leave period for a staff member.', 'Manage **Leave types & shifts** and **Public holidays** from the same page; **Export CSV** for a copy.'],
+    acts:[['Add leave', "goTo('leave-plan'); openLvRange()"]] },
+  { id:'stock', title:'Stock in / out', page:'movements', keys:['stock','stock in','stock out','inventory','issue items','receive items','item'],
+    steps:['Open **Inventory → Stock Movements**.', 'Press **+ Stock In** when items arrive or **+ Stock Out** when they are issued.', 'Choose the item, location and quantity; levels update in **Stock Levels**.'],
+    acts:[['+ Stock in', "goTo('movements'); openMovementForm('in')"], ['+ Stock out', "goTo('movements'); openMovementForm('out')"]] },
+  { id:'handover', title:'Handover', page:'handovers', keys:['handover','hand over','handing over'],
+    steps:['Open **Docs → Handovers** and press **+ New Handover**.', 'List what is handed over, then both people sign.', 'Unsigned handovers show as a badge until complete.'],
+    acts:[['+ New handover', "goTo('handovers'); openHandoverForm()"]] },
+  { id:'weekly', title:'Weekly report', page:'weekly-report', keys:['weekly report','report to','admin report','week report'],
+    steps:['Open **Team → Weekly Report** and press **+ Weekly report**.', 'Fill in the week\'s items, then download the **PDF**.', 'Press **✉ Mail** to make an email draft with the PDF attached — review it and send it yourself.'],
+    acts:[['+ Weekly report', "goTo('weekly-report'); openWrNew()"]] },
+  { id:'tasks', title:'Tasks', page:'tasks', keys:['task','to-do','todo','assign'],
+    steps:['Open **Team → Tasks** and press **+ Task**.', 'Give it an owner and a due date; overdue tasks show in red on the menu.'],
+    acts:[['+ Task', "goTo('tasks'); openTkEdit('')"]] },
+  { id:'complaint', title:'Admin complaints', page:'complaints', keys:['complaint','complain','feedback'],
+    steps:['Open **Team → Admin Complaints** and press **+ Complaint**.', 'Describe it and attach photos; set the status as it is handled.'],
+    acts:[['+ Complaint', "goTo('complaints'); openCpEdit('')"]] },
+  { id:'attach', title:'Attachments & PDFs', page:null, keys:['attach','attachment','upload','pdf','download pdf','scan','photo','link'],
+    steps:['Every form uses **📎 Attach** instead of links — choose a PDF or a photo.', 'Most attachments are read automatically and fill the empty fields (never what you typed). Check highlighted fields before saving.', 'Each attachment has **View** and **PDF** — open or download it as a PDF.'],
+    acts:[] },
+  { id:'search', title:'Finding anything', page:null, keys:['search','find','where is','look for','look up'],
+    steps:['Press the 🔍 icon at the top of the menu (or **Ctrl+K**) and type a name, plate, item, staff or request.', 'Or just ask me: "find Ahmed" or "find P1234".'],
+    acts:[['Open search', 'gsOpen()']] },
+  { id:'theme', title:'Appearance & themes', page:null, keys:['theme','dark mode','light mode','colour','color','cyberpunk','tron','appearance'],
+    steps:['Press the 🎨 palette icon at the top of the menu.', 'Choose light or dark and a colour scheme — **Cyberpunk ✦** and **Tron ✦** are full neon themes.', 'Or ask me: "tron theme", "cyberpunk theme", "dark mode".'],
+    acts:[['Open appearance', 'openAppearanceModal()']] },
+];
+const ANYA_PAGE_GUIDE = { 'petty-cash':'pc-new', 'petty-statement':'pc-stmt', 'petty-count':'pc-count', 'business-advance':'ba', 'purchase-requisitions':'pr', 'travel-local':'travel', 'travel-foreign':'travel', 'fueling':'fuel', 'vehicle-log':'vlog', 'servicing':'service', 'cleaning':'cleaning', 'leave-plan':'leave', 'movements':'stock', 'handovers':'handover', 'weekly-report':'weekly', 'tasks':'tasks', 'complaints':'complaint' };
+
+let anya = { open:false, log:[], acts:[], busy:false, greeted:false };
+const anyaNorm = t => String(t || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9/+\-\s]/g, ' ').replace(/\s+/g, ' ').trim();
+const anyaFirst = () => { const n = authUser && (authUser.name || authUser.displayName) || ''; return String(n).trim().split(/\s+/)[0] || ''; };
+const anyaPages = () => { try{ return currentNav().filter(n => n.id); }catch(e){ return []; } };
+const anyaCanSee = id => !id || anyaPages().some(n => n.id === id);
+const anyaPageLabel = id => (anyaPages().find(n => n.id === id) || {}).label || '';
+const anyaFmt = t => esc(String(t)).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+
+// things Anya can start directly ("new …", "add …")
+const ANYA_ACTIONS = [
+  { id:'pc-fuel', k:['fueling petty cash','fuel petty cash'], g:'pc-fuel' },
+  { id:'pc-ext', k:['approved request','other department','another department','external request'], g:'pc-ext' },
+  { id:'pc-new', k:['petty cash','voucher','cash request','pc request'], g:'pc-new' },
+  { id:'tr-foreign', k:['foreign travel','overseas','abroad'], js:"goTo('travel-foreign'); openTravelForm('', 'foreign')", page:'travel-foreign', label:'a foreign travel request' },
+  { id:'tr-local', k:['local travel','island'], js:"goTo('travel-local'); openTravelForm('', 'local')", page:'travel-local', label:'a local travel request' },
+  { id:'tr-any', k:['travel','trip','dsa'], js:"goTo('travel-foreign'); openTravelForm('', 'foreign')", page:'travel-foreign', label:'a travel request (foreign — say "local travel" for local)' },
+  { id:'fuel', k:['fuel'], g:'fuel' }, { id:'vlog', k:['vehicle out','vehicle log','trip log'], g:'vlog' },
+  { id:'pr', k:['purchase requisition','pr'], g:'pr' }, { id:'ba', k:['business advance'], g:'ba' },
+  { id:'stock-out', k:['stock out','issue items'], js:"goTo('movements'); openMovementForm('out')", page:'movements', label:'a stock out' },
+  { id:'stock-in', k:['stock in','stock','receive'], js:"goTo('movements'); openMovementForm('in')", page:'movements', label:'a stock in' },
+  { id:'handover', k:['handover'], g:'handover' }, { id:'weekly', k:['weekly report','report'], g:'weekly' }, { id:'task', k:['task'], g:'tasks' }, { id:'complaint', k:['complaint'], g:'complaint' },
+  { id:'leave', k:['leave'], g:'leave' },
+];
+const anyaActInfo = id => {
+  const a = ANYA_ACTIONS.find(x => x.id === id); if(!a) return null;
+  if(a.g){ const g = ANYA_GUIDES.find(x => x.id === a.g); if(!g || !g.acts.length) return null; return { js:g.acts[0][1], page:g.page, label:g.title.toLowerCase(), short:g.acts[0][0] }; }
+  return { js:a.js, page:a.page, label:a.label, short:'+ ' + a.label.replace(/^an? /, '').replace(/ \(.*$/, '') };
+};
+const ANYA_SYS = { pending:'What\'s pending', balance:'Petty cash balance', trno:'Next travel number', help:'What Anya can do', me:'Who am I', learned:'What Anya has learned' };
+const ANYA_THEMES = { cyberpunk:'Cyberpunk ✦', tron:'Tron ✦', tronhud:'Tron HUD ✦', cp2027:'Cyberpunk 2027 ✦' };
+// a readable name for an intent ("g:fuel" → "Fuel entry (steps)")
+function anyaIntentLabel(i){
+  const [k, v] = [i.slice(0, 1), i.slice(2)];
+  if(k === 'g'){ const g = ANYA_GUIDES.find(x => x.id === v); return g ? g.title + ' — steps' : ''; }
+  if(k === 'a'){ const a = anyaActInfo(v); return a ? a.short : ''; }
+  if(k === 'p'){ const l = anyaPageLabel(v); return l ? 'Open ' + l : ''; }
+  if(k === 's') return ANYA_SYS[v] || '';
+  if(k === 't') return (ANYA_THEMES[v] || v) + ' theme';
+  if(k === 'm') return (v === 'dark' ? 'Dark' : 'Light') + ' mode';
+  return '';
+}
+const anyaIntentOk = i => { const k = i.slice(0, 1), v = i.slice(2); if(k === 'p') return anyaCanSee(v); if(k === 'a'){ const a = anyaActInfo(v); return !!a && anyaCanSee(a.page); } return !!anyaIntentLabel(i); };
+
+/* ---------- learning: a naive Bayes text classifier + personal phrase memory + usage habits, per user ---------- */
+const ANYA_STOP = new Set('a an the to of for and or i im me my we our you your it is are be do does can could would please pls want need like how what whats where wheres show me this that on in at with from new add create start make open go get some any'.split(' '));
+const anyaStem = w => w.length > 5 ? w.replace(/(ments?|ings?|ed|es|s)$/, '') : w.length > 3 ? w.replace(/s$/, '') : w;
+// words (stemmed) plus word pairs; verbs like "new"/"open" are kept as separate cue tokens
+function anyaTokens(t){
+  const all = anyaNorm(t).split(' ').filter(Boolean), cues = all.filter(w => /^(new|add|create|start|make|raise|open|go|show|how|find|steps)$/.test(w)).map(w => '#' + (/^(new|add|create|start|make|raise)$/.test(w) ? 'new' : /^(open|go|show)$/.test(w) ? 'open' : w === 'steps' ? 'how' : w));
+  const words = all.filter(w => !ANYA_STOP.has(w)).map(anyaStem);
+  const pairs = []; for(let i = 0; i + 1 < words.length; i++) pairs.push(words[i] + '_' + words[i + 1]);
+  return [...words, ...pairs, ...cues];
+}
+const anyaJacc = (a, b) => { const A = new Set(a.filter(x => !x.startsWith('#'))), B = new Set(b.filter(x => !x.startsWith('#'))); if(!A.size || !B.size) return 0; let n = 0; A.forEach(x => { if(B.has(x)) n++; }); return n / (A.size + B.size - n); };
+const anyaML = {
+  key(){ return 'anya_ml_' + ((authUser && (authUser.uid || authUser.email)) || 'anon'); },
+  _d:null, _dk:'', _model:null,
+  data(){ const k = this.key(); if(this._dk !== k){ this._dk = k; this._model = null; try{ this._d = JSON.parse(localStorage.getItem(k) || 'null'); }catch(e){ this._d = null; } if(!this._d || this._d.v !== 1) this._d = { v:1, ex:[], use:{}, page:{} }; } return this._d; },
+  save(){ try{ localStorage.setItem(this.key(), JSON.stringify(this._d)); }catch(e){} this._model = null; },
+  // remember that this phrasing meant this intent (w > 0) or did not (w < 0)
+  learn(q, i, w){
+    if(!q || !i) return; const d = this.data(), t = anyaNorm(q); if(!t) return;
+    let e = d.ex.find(x => x.q === t && x.i === i);
+    if(e){ e.w = Math.max(-6, Math.min(12, e.w + w)); e.t = Date.now(); } else d.ex.push(e = { q:t, i, w, t:Date.now() });
+    if(d.ex.length > 400){ d.ex.sort((a, b) => Math.abs(b.w) * (b.t / 1e12) - Math.abs(a.w) * (a.t / 1e12)); d.ex.length = 400; }
+    this.save();
+  },
+  // habits: how often (fading over ~30 days) each intent is used, overall and on each page
+  used(i, page){
+    const d = this.data(), now = Date.now(), fade = (o, k) => { const u = o[k] || { n:0, t:now }; u.n = u.n * Math.exp(-(now - u.t) / 2.6e9) + 1; u.t = now; o[k] = u; };
+    fade(d.use, i); if(page){ d.page[page] = d.page[page] || {}; fade(d.page[page], i); }
+    this.save();
+  },
+  score(u){ return u ? u.n * Math.exp(-(Date.now() - u.t) / 2.6e9) : 0; },
+  // the user's own phrasing, if one close enough was taught before
+  recall(q){
+    const d = this.data(), tk = anyaTokens(q); let best = null, bs = 0;
+    d.ex.forEach(e => { if(e.w < 2) return; const j = anyaJacc(tk, anyaTokens(e.q)); const s = j + e.w / 100; if(j >= .75 && s > bs && anyaIntentOk(e.i)){ bs = s; best = e; } });
+    return best ? best.i : null;
+  },
+  rejected(q, i){ const tk = anyaTokens(q); return this.data().ex.some(e => e.i === i && e.w < 0 && anyaJacc(tk, anyaTokens(e.q)) >= .75); },
+  // seed examples from the guides, actions, pages and system commands, plus everything learned from this user (weighted higher)
+  model(){
+    if(this._model) return this._model;
+    const docs = [], add = (i, text, w) => docs.push({ i, tk:anyaTokens(text), w });
+    ANYA_GUIDES.forEach(g => { add('g:' + g.id, 'how ' + g.title, 1); g.keys.forEach(k => add('g:' + g.id, 'how ' + k, 1)); });
+    ANYA_ACTIONS.forEach(a => a.k.forEach(k => add('a:' + a.id, 'new ' + k, 1.2)));
+    anyaPages().forEach(n => add('p:' + n.id, 'open ' + n.label, 1));
+    [['pending', 'pending waiting attention overdue outstanding to do left'], ['balance', 'petty cash balance float cash left available money'], ['trno', 'next travel request number trf'], ['help', 'help commands what can you do'], ['learned', 'what have you learned learning memory']].forEach(([k, t]) => add('s:' + k, t, 1));
+    Object.keys(ANYA_THEMES).forEach(k => add('t:' + k, k + ' ' + ANYA_THEMES[k] + ' theme', 1));
+    this.data().ex.forEach(e => { if(e.w > 0) add(e.i, e.q, 1 + e.w); });
+    const cls = {}, vocab = new Set();
+    docs.forEach(d => { const c = cls[d.i] = cls[d.i] || { n:0, tot:0, f:{} }; c.n += d.w; d.tk.forEach(t => { c.f[t] = (c.f[t] || 0) + d.w; c.tot += d.w; vocab.add(t); }); });
+    const N = Object.values(cls).reduce((s, c) => s + c.n, 0);
+    return this._model = { cls, V:vocab.size || 1, N };
+  },
+  // probabilities for the likeliest intents (only tokens the model knows count, so unknown words do not dilute the answer)
+  predict(q, n){
+    const m = this.model(), tk = anyaTokens(q).filter(t => Object.values(m.cls).some(c => c.f[t])); if(!tk.length) return [];
+    const a = .5, out = Object.entries(m.cls).map(([i, c]) => {
+      let lp = Math.log(c.n / m.N); tk.forEach(t => { lp += Math.log(((c.f[t] || 0) + a) / (c.tot + a * m.V)); });
+      const hab = this.score(this.data().use[i]); lp += Math.log(1 + hab * .15);   // a nudge toward what this user uses
+      return { i, lp };
+    }).filter(x => anyaIntentOk(x.i));
+    const mx = Math.max(...out.map(x => x.lp)), z = out.reduce((s, x) => s + Math.exp(x.lp - mx), 0);
+    return out.map(x => ({ i:x.i, p:Math.exp(x.lp - mx) / z })).sort((x, y) => y.p - x.p).slice(0, n || 3);
+  },
+  // the user's shortcuts: most used overall, with extra weight for what they do on this page
+  top(page, n){
+    const d = this.data(), sc = {};
+    Object.entries(d.use).forEach(([i, u]) => { sc[i] = (sc[i] || 0) + this.score(u); });
+    Object.entries((d.page[page] || {})).forEach(([i, u]) => { sc[i] = (sc[i] || 0) + 1.5 * this.score(u); });
+    return Object.entries(sc).filter(([i, s]) => s >= 1 && anyaIntentOk(i) && !/^s:(help|learned|me)$/.test(i)).sort((a, b) => b[1] - a[1]).slice(0, n).map(x => x[0]);
+  },
+  habitHere(page){ const p = this.data().page[page] || {}; const best = Object.entries(p).filter(([i]) => anyaIntentOk(i)).sort((a, b) => this.score(b[1]) - this.score(a[1]))[0]; return best && this.score(best[1]) >= 3 ? best[0] : null; },
+  forget(){ this._d = { v:1, ex:[], use:{}, page:{} }; this.save(); }
+};
+
+/* ---------- the window ---------- */
+function anyaMount(){
+  if(document.getElementById('anya-fab')) return;
+  const fab = document.createElement('button');
+  fab.id = 'anya-fab'; fab.type = 'button'; fab.title = 'Anya — assistant'; fab.setAttribute('aria-label', 'Open Anya, the assistant');
+  fab.innerHTML = ANYA_RING(62) + '<span class="anya-tag">ANYA</span>';
+  fab.onclick = () => anyaToggle();
+  document.body.appendChild(fab);
+  const p = document.createElement('div');
+  p.id = 'anya-panel'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Anya assistant'); p.hidden = true;
+  p.innerHTML = `<div class="anya-head">${ANYA_RING(40)}<div class="anya-id"><div class="anya-name">ANYA</div><div class="anya-sub"><i></i>assistant · online · learning</div></div>
+      <button type="button" class="anya-hbtn" title="What I've learned" onclick="anyaExec('s:learned','')">◈</button><button type="button" class="anya-hbtn" title="Clear the conversation" onclick="anyaClear()">↺</button><button type="button" class="anya-hbtn" title="Close" onclick="anyaToggle(false)">✕</button></div>
+    <div id="anya-log" class="anya-log" aria-live="polite"></div>
+    <div id="anya-chips" class="anya-chips"></div>
+    <form class="anya-cmd" onsubmit="event.preventDefault(); anyaSend()"><input id="anya-in" autocomplete="off" aria-label="Message Anya" placeholder="Ask or tell me what to do…" maxlength="400"><button type="submit" title="Send">➤</button></form>`;
+  document.body.appendChild(p);
+  p.addEventListener('keydown', e => { if(e.key === 'Escape') anyaToggle(false); });
+}
+function anyaSync(){
+  const on = !!(typeof authUser !== 'undefined' && authUser);
+  if(on) anyaMount();
+  const fab = document.getElementById('anya-fab'); if(fab) fab.style.display = on ? '' : 'none';
+  if(!on){ anyaToggle(false); return; }
+  if(!anya.greeted){ anya.greeted = true; anyaPeek(); }
+}
+function anyaPeek(){
+  let day = ''; try{ day = localStorage.getItem('anya_peek_day') || ''; }catch(e){}
+  if(day === vToday()) return;
+  try{ localStorage.setItem('anya_peek_day', vToday()); }catch(e){}
+  setTimeout(() => {
+    if(anya.open || document.getElementById('anya-peek')) return;
+    const b = document.createElement('div'); b.id = 'anya-peek';
+    b.innerHTML = `<span class="anya-peek-k">&gt; ANYA:</span> Hi${anyaFirst() ? ' ' + esc(anyaFirst()) : ''}, I can guide you through any process or do it for you. Tap me.`;
+    b.onclick = () => { b.remove(); anyaToggle(true); };
+    document.body.appendChild(b); setTimeout(() => b.remove(), 9000);
+  }, 2500);
+}
+function anyaToggle(force){
+  const p = document.getElementById('anya-panel'), fab = document.getElementById('anya-fab'); if(!p) return;
+  anya.open = force === undefined ? !anya.open : !!force;
+  p.hidden = !anya.open; if(fab) fab.classList.toggle('anya-on', anya.open);
+  const pk = document.getElementById('anya-peek'); if(pk) pk.remove();
+  if(anya.open){
+    if(!anya.log.length) anyaWelcome();
+    anyaDraw(); setTimeout(() => { const i = document.getElementById('anya-in'); if(i && matchMedia('(pointer:fine)').matches) i.focus(); }, 30);
+  }
+}
+function anyaClear(){ anya.log = []; anya.acts = []; anyaWelcome(); anyaDraw(); }
+function anyaWelcome(){
+  const g = ANYA_GUIDES.find(x => x.id === ANYA_PAGE_GUIDE[ui.tab]), here = anyaPageLabel(ui.tab), habit = anyaML.habitHere(ui.tab);
+  const acts = [];
+  if(habit) acts.push([anyaIntentLabel(habit), () => anyaExec(habit, '')]);
+  if(g && here) acts.push(['Show the steps', () => anyaGuide(g)]);
+  anyaSay(`Hi${anyaFirst() ? ' ' + anyaFirst() : ''}, I'm **Anya**. Ask me how a process works, or tell me what to do — e.g. "new petty cash request", "open fueling", "find Ahmed", "what's pending?".` +
+    (habit ? `\nOn **${here || 'this page'}** you usually go for **${anyaIntentLabel(habit)}**.` : g && here ? `\nYou're on **${here}** — want the steps for ${g.title.toLowerCase()}?` : '') +
+    `\nI learn from you: rate my answers with 👍 / 👎 and I'll get better at your way of asking.`, acts);
+}
+function anyaAct(fn){ anya.acts.push(fn); return anya.acts.length - 1; }
+// acts: [label, fn | 'js string']; opts.intent / opts.q let the user rate the answer
+function anyaSay(text, acts, extra, opts){
+  const o = opts || {};
+  anya.log.push({ who:'anya', text, extra:extra || '', intent:o.intent || '', q:o.q || '', fb:'',
+    acts:(acts || []).map(([l, f]) => ({ label:l, n:anyaAct(() => { if(o.intent && o.q) anyaML.learn(o.q, o.intent, .5); return typeof f === 'function' ? f() : (anyaToggleSmall(), (0, eval)(f)); }) })) });
+}
+function anyaToggleSmall(){ if(innerWidth < 640) anyaToggle(false); }
+function anyaRun(n){ const f = anya.acts[n]; if(!f) return; try{ f(); }catch(e){ anyaSay('That did not work: ' + (e && e.message ? e.message : e)); } anyaDraw(); }
+function anyaDraw(){
+  const L = document.getElementById('anya-log'); if(!L) return;
+  L.innerHTML = anya.log.map((m, k) => m.who === 'me' ? `<div class="anya-me">${esc(m.text)}</div>` :
+    `<div class="anya-msg"><div>${anyaFmt(m.text)}</div>${m.extra || ''}${m.acts && m.acts.length ? `<div class="anya-acts">${m.acts.map(a => `<button type="button" onclick="anyaRun(${a.n})">${esc(a.label)}</button>`).join('')}</div>` : ''}${m.intent && m.q ? `<div class="anya-fb">${m.fb === 'up' ? '<span>✓ learned — thanks</span>' : m.fb === 'down' ? '<span>noted — I won\'t answer that way again</span>' : `<button type="button" title="Right answer" onclick="anyaRate(${k},1)">👍</button><button type="button" title="Not what I meant" onclick="anyaRate(${k},-1)">👎</button>`}</div>` : ''}</div>`).join('') +
+    (anya.busy ? '<div class="anya-msg anya-busy"><span></span><span></span><span></span> processing</div>' : '');
+  L.scrollTop = L.scrollHeight;
+  const C = document.getElementById('anya-chips');
+  if(C){
+    const mine = anyaML.top(ui.tab, 4), base = ['s:pending', 's:balance', 'a:pc-new', 'g:travel', 's:help'].filter(i => anyaIntentOk(i) && !mine.includes(i));
+    C.innerHTML = [...mine.map(i => [i, 1]), ...base.map(i => [i, 0])].slice(0, 6).map(([i, my]) => `<button type="button" class="${my ? 'anya-mine' : ''}" title="${my ? 'One of your shortcuts' : ''}" onclick="anyaChip('${i}')">${my ? '★ ' : ''}${esc(anyaIntentLabel(i).replace(/ — steps$/, ' steps'))}</button>`).join('');
+  }
+}
+function anyaChip(i){ anya.log.push({ who:'me', text:anyaIntentLabel(i) }); anyaExec(i, ''); }
+// 👍 teaches the phrasing; 👎 un-teaches it and offers the next best guesses
+function anyaRate(k, v){
+  const m = anya.log[k]; if(!m || !m.intent || m.fb) return;
+  if(v > 0){ anyaML.learn(m.q, m.intent, 2); m.fb = 'up'; anyaDraw(); return; }
+  anyaML.learn(m.q, m.intent, -3); m.fb = 'down';
+  const alts = anyaAlternatives(m.q, [m.intent]);
+  anyaSay(alts.length ? 'Sorry about that. Did you mean one of these? Pick one and I\'ll remember it.' : 'Sorry about that. Could you say it another way? I\'ll learn from your next pick.', alts.map(i => [anyaIntentLabel(i), () => anyaChoose(m.q, i)]));
+  anyaDraw();
+}
+function anyaAlternatives(q, not){
+  const seen = new Set(not || []), out = [];
+  anyaML.predict(q, 6).forEach(x => { if(!seen.has(x.i) && out.length < 3 && x.p > .02){ seen.add(x.i); out.push(x.i); } });
+  const { g } = anyaBestGuide(anyaNorm(q)); if(g && !seen.has('g:' + g.id) && out.length < 4) out.push('g:' + g.id);
+  return out;
+}
+// the user picked what they meant: learn it strongly, then do it
+function anyaChoose(q, i){ anyaML.learn(q, i, 3); anya.log.push({ who:'me', text:anyaIntentLabel(i) }); anyaExec(i, q, true); }
+async function anyaSend(text){
+  const inp = document.getElementById('anya-in');
+  const q = String(text != null ? text : (inp ? inp.value : '')).trim(); if(!q || anya.busy) return;
+  if(inp) inp.value = '';
+  anya.log.push({ who:'me', text:q }); anya.busy = true; anyaDraw();
+  await new Promise(r => setTimeout(r, 380));
+  try{ await anyaReply(q); }catch(e){ anyaSay('Sorry, something went wrong: ' + (e && e.message ? e.message : e)); }
+  anya.busy = false; anyaDraw();
+}
+function anyaGuide(g, o){
+  const extra = `<ol class="anya-steps">${g.steps.map(s => `<li>${anyaFmt(s)}</li>`).join('')}</ol>`;
+  const acts = (g.acts || []).filter(() => !g.page || anyaCanSee(g.page));
+  anyaSay(`**${g.title}** — here's how:`, acts.length ? acts : (g.page && anyaCanSee(g.page) ? [['Open ' + anyaPageLabel(g.page), `goTo('${g.page}')`]] : []), extra, o);
+}
+function anyaBestGuide(t){
+  let best = null, bs = 0;
+  const df = kk => ANYA_GUIDES.filter(x => x.keys.some(k => anyaNorm(k).includes(kk)) || anyaNorm(x.title).includes(kk)).length || 1;
+  ANYA_GUIDES.forEach(g => {
+    let s = 0; g.keys.forEach(k => { const kk = anyaNorm(k); if(kk && (' ' + t + ' ').includes(' ' + kk + ' ')) s += (kk.split(' ').length + 1) / df(kk); else if(kk.length > 4 && t.includes(kk)) s += 1 / df(kk); });
+    if(s > bs){ bs = s; best = g; }
+  });
+  return { g:best, s:bs };
+}
+function anyaBestPage(t){
+  const strip = t.replace(/\b(the|page|section|tab|screen|menu|please|my|to|me|take|go|open|show|navigate|view)\b/g, ' ').replace(/\s+/g, ' ').trim(); if(!strip) return null;
+  let best = null, bs = 0;
+  anyaPages().forEach(n => {
+    const l = anyaNorm(n.label), words = l.split(' '); let s = 0;
+    if(l === strip) s = 100; else if(l.includes(strip)) s = 50; else strip.split(' ').forEach(w => { if(w.length > 2 && words.some(x => x.startsWith(w) || w.startsWith(x) && x.length > 3)) s += 10; });
+    if(s > bs){ bs = s; best = n; }
+  });
+  return bs >= 10 ? best : null;
+}
+function anyaFind(term){ const t = anyaNorm(term); if(!t) return []; const words = t.split(' '); return gsIndex().filter(r => words.every(w => r.hay.includes(w))).slice(0, 6); }
+
+// carries out an intent; q is what the user typed (for rating), chosen = picked by the user
+function anyaExec(i, q, chosen){
+  const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
+  if(!anyaIntentOk(i)){ anyaSay('You don\'t have access to that with your role.'); anyaDraw(); return; }
+  if(k !== 's' || !/^(help|learned|me)$/.test(v)) anyaML.used(i, ui.tab);
+  if(k === 'g'){ anyaGuide(ANYA_GUIDES.find(x => x.id === v), o); }
+  else if(k === 'a'){ const a = anyaActInfo(v); try{ anyaToggleSmall(); (0, eval)(a.js); anyaSay(`Done — I've opened ${a.label}. Fill it in and save; ask me if you get stuck.`, [['Show the steps', () => { const g = ANYA_GUIDES.find(x => x.page === a.page); if(g) anyaGuide(g); }]], '', o); }catch(e){ anyaSay('I could not open it: ' + (e && e.message ? e.message : e)); } }
+  else if(k === 'p'){ anyaToggleSmall(); goTo(v); const gid = ANYA_PAGE_GUIDE[v]; anyaSay(`Opened **${anyaPageLabel(v)}**.`, gid ? [['Show the steps', () => anyaGuide(ANYA_GUIDES.find(x => x.id === gid))]] : [], '', o); }
+  else if(k === 't'){ setColorScheme(v); anyaSay(`Switched to the **${ANYA_THEMES[v] || v}** theme.`, [], '', o); }
+  else if(k === 'm'){ try{ localStorage.setItem(THEME_KEY, v); }catch(e){} applyTheme(v); anyaSay(`${v === 'dark' ? 'Dark' : 'Light'} mode is on.`, [], '', o); }
+  else if(k === 's'){
+    if(v === 'pending'){ const items = anyaPages().filter(n => Number(n.badge) > 0);
+      if(!items.length) anyaSay('All clear — nothing is waiting on any page right now. ✓', [], '', o);
+      else anyaSay(`${items.length} page${items.length === 1 ? ' has' : 's have'} something waiting:`, items.slice(0, 4).map(n => ['Open ' + n.label, `goTo('${n.id}')`]), `<ul class="anya-list">${items.map(n => `<li><b>${esc(n.badge)}</b> · ${esc(n.label)}${n.hint ? ` <span>— ${esc(n.hint)}</span>` : ''}</li>`).join('')}</ul>`, o); }
+    else if(v === 'balance'){ let rows = []; try{ rows = pcBalanceRows(); }catch(e){}
+      if(!rows.length) anyaSay('No petty cash balance is assigned to any location yet.', anyaCanSee('petty-cash') ? [['Open Petty Cash', "goTo('petty-cash')"]] : [], '', o);
+      else anyaSay('Petty cash balance by location:', [['Open Petty Cash', "goTo('petty-cash')"]], `<ul class="anya-list">${rows.map(x => `<li><b>${esc(x.f.name)}</b>: ${esc(fmtMVR(x.left))} available <span>(assigned ${esc(fmtMVR(x.assigned))}, spent ${esc(fmtMVR(x.spent))}, awaiting invoice ${esc(fmtMVR(x.awaiting))})</span></li>`).join('')}</ul>`, o); }
+    else if(v === 'trno'){ let no = ''; try{ no = trNextFormNo(); }catch(e){} anyaSay(no ? `The next travel request number is **${no}**.` : 'I could not work out the next number.', anyaCanSee('travel-foreign') ? [['+ New travel request', "goTo('travel-foreign'); openTravelForm('', 'foreign')"]] : [], '', o); }
+    else if(v === 'me'){ anyaSay(`You're signed in as **${(authUser && (authUser.name || authUser.email)) || 'unknown'}** (${(authUser && authUser.role) || 'user'}).`); }
+    else if(v === 'help'){
+      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
+    }
+    else if(v === 'learned'){
+      const d = anyaML.data(), taught = d.ex.filter(e => e.w >= 2 && anyaIntentOk(e.i)).sort((a, b) => b.w - a.w), mine = anyaML.top(ui.tab, 6);
+      const extra = (taught.length ? `<div class="anya-sub2">Phrases you taught me</div><ul class="anya-list">${taught.slice(0, 8).map(e => `<li>"${esc(e.q)}" → <b>${esc(anyaIntentLabel(e.i))}</b></li>`).join('')}</ul>` : '') + (mine.length ? `<div class="anya-sub2">Your shortcuts (most used)</div><ul class="anya-list">${mine.map(i => `<li>★ ${esc(anyaIntentLabel(i))}</li>`).join('')}</ul>` : '');
+      anyaSay(taught.length || mine.length ? `I've learned ${taught.length} phrase${taught.length === 1 ? '' : 's'} from you and ${Object.keys(d.use).length} command habit${Object.keys(d.use).length === 1 ? '' : 's'}. This stays on this device, for you only.` : 'I haven\'t learned anything from you yet. Use 👍 / 👎 on my answers, or pick from "Did you mean…" — I\'ll remember.', taught.length || mine.length ? [['Forget everything', () => { anyaML.forget(); anyaSay('Done — I\'ve forgotten what I learned from you.'); }]] : [], extra);
+    }
+  }
+  anyaDraw();
+}
+// the rules: returns an intent for clear requests, or null
+function anyaRuleIntent(t){
+  const how = /\b(how|steps|process|procedure|guide|explain|what is|whats|what are|walk me|teach|help me with|help with|show me how)\b/.test(t);
+  if(/^(help|menu|commands|\?)$/.test(t) || /what can you do/.test(t)) return 's:help';
+  if(/what (have )?you (learn|learned|learnt)|your (memory|shortcuts)|what do you know about me/.test(t)) return 's:learned';
+  if(!how){
+    if(/\b(cyberpunk|cp) ?(2027|2077)\b|\b2027\b/.test(t)) return 't:cp2027';
+    if(/\btron ?hud\b|\bhud\b/.test(t)) return 't:tronhud';
+    const th = /\b(cyberpunk|tron)\b/.exec(t); if(th) return 't:' + th[1];
+    const dm = /\b(dark|light) (mode|theme)\b/.exec(t); if(dm) return 'm:' + dm[1];
+    if(/\b(pending|waiting|attention|overdue|outstanding)\b/.test(t) || /what.*(to do|left to|needs)/.test(t)) return 's:pending';
+  }
+  if(/\b(balance|float|cash left|how much cash|money left)\b/.test(t)) return 's:balance';
+  if(/\bnext\b.*\b(travel|trf|request) ?(no|number|#)?/.test(t) || /\btravel (request )?number\b/.test(t)) return 's:trno';
+  if(/\b(who am i|my role)\b/.test(t)) return 's:me';
+  if(!how && /^(new|create|add|start|make|raise|log|record|open a|open new|i (want|need) to (add|create|make|raise|start|submit|request)|submit|request)\b/.test(t)){
+    const a = ANYA_ACTIONS.find(x => x.k.some(k => (' ' + t + ' ').includes(' ' + k + ' '))); if(a) return 'a:' + a.id;
+  }
+  const gm = /^(go to|goto|open|take me to|navigate to|show me|show|view)\s+(.+)$/.exec(t);
+  if(gm && !how){ const pg = anyaBestPage(gm[2]); if(pg) return 'p:' + pg.id; }
+  const { g, s } = anyaBestGuide(t);
+  if(g && (s >= 1.5 || how)) return 'g:' + g.id;
+  return null;
+}
+async function anyaReply(q){
+  const t = anyaNorm(q);
+  if(/^(hi|hello|hey|salaam|assalaamu? ?alaikum|good (morning|afternoon|evening))\b/.test(t) && t.split(' ').length <= 4){ anyaSay(`Hello${anyaFirst() ? ' ' + anyaFirst() : ''}! What can I do for you?`); return; }
+  if(/^(thanks|thank you|thx|ok|okay|great|cool|nice)\b/.test(t) && t.split(' ').length <= 4){ anyaSay('Any time. 👍'); return; }
+  if(/^(forget|reset) (everything|what you learned|learning|memory)/.test(t)){ anyaML.forget(); anyaSay('Done — I\'ve forgotten what I learned from you.'); return; }
+  // find (records are looked up, not learned)
+  const fm = /^(find|search( for)?|look ?up|lookup|where is|wheres|locate)\s+(.+)$/.exec(t);
+  if(fm){
+    const term = fm[3].replace(/^(the|a|an)\s+/, ''), r = anyaFind(term);
+    if(!r.length){ anyaSay(`I couldn't find anything matching "${term}". Try a shorter word, a plate number or a name.`, [['Open search', 'gsOpen()']]); return; }
+    anyaSay(`Found ${r.length === 6 ? 'these (top 6)' : r.length} for "${term}":`, r.map(x => [x.type + ': ' + x.title.slice(0, 40), x.go]));
+    return;
+  }
+  // 1. a phrasing this user taught me  2. the rules (unless the user rejected that answer for this phrasing)  3. the learned classifier
+  let i = anyaML.recall(t);
+  if(!i){ const r = anyaRuleIntent(t); if(r && !anyaML.rejected(t, r)) i = r; }
+  if(!i){ const p = anyaML.predict(t, 3).filter(x => !anyaML.rejected(t, x.i)); if(p[0] && p[0].p >= .55) i = p[0].i; }
+  if(i){ anyaExec(i, q); return; }
+  if(AI_READ_URL){
+    try{
+      const d = await aiPost([], 'chat', { messages:anya.log.filter(m => m.text).slice(-10).map(m => ({ role:m.who === 'me' ? 'user' : 'assistant', text:m.text })), page:anyaPageLabel(ui.tab), user:anyaFirst(), guides:ANYA_GUIDES.map(x => ({ title:x.title, steps:x.steps })) });
+      if(d && typeof d.text === 'string' && d.text.trim()){ anyaSay(d.text.trim()); return; }
+    }catch(e){}
+  }
+  const alts = anyaAlternatives(t, []);
+  const r = anyaFind(t);
+  if(alts.length){ anyaSay('I\'m not sure yet. Did you mean one of these? Pick one and I\'ll remember it for next time.', alts.map(x => [anyaIntentLabel(x), () => anyaChoose(q, x)]).concat(r.slice(0, 2).map(x => [x.type + ': ' + x.title.slice(0, 30), x.go]))); return; }
+  if(r.length){ anyaSay('These records match:', r.map(x => [x.type + ': ' + x.title.slice(0, 40), x.go])); return; }
+  anyaSay('Sorry, I didn\'t catch that. Try "how do I …", "new …", "open …" or "find …" — or pick a topic:', [], `<div class="anya-topics">${ANYA_GUIDES.slice(0, 10).map(x => `<button type="button" onclick="anya.log.push({who:'me',text:${esc(JSON.stringify(x.title))}}); anyaML.learn(${esc(JSON.stringify(q))},'g:${x.id}',3); anyaExec('g:${x.id}','',true)">${esc(x.title)}</button>`).join('')}</div>`);
+}
+
+try{ setInterval(() => { try{ anyaSync(); }catch(e){} }, 3000); }catch(e){}
 function gsDraw(keep){
   const q = (document.getElementById('gs-q') || {}).value || '', terms = q.toLowerCase().trim().split(/\s+/).filter(Boolean);
   if(!keep) gsSel = 0;
@@ -12669,6 +13216,7 @@ let lastRenderedTab = null;
 let isPopStateNav = false;
 const DETAIL_TABS = ['item-detail','asset-detail','vehicle-detail'];
 function render(){
+  try{ setTimeout(() => { try{ anyaSync(); }catch(e){} }, 0); }catch(e){}
   const activeEl = document.activeElement;
   const activeId = (activeEl && activeEl.id && el_contains_main(activeEl)) ? activeEl.id : null;
   const selStart = (activeId && typeof activeEl.selectionStart === 'number') ? activeEl.selectionStart : null;

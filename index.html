@@ -44,6 +44,9 @@ const COLOR_SCHEMES = [
   { id:'cool-revival',     name:'Cool revival',      swatches:['#00FFFF','#00AEFF','#00DE94','#00FF52'], accent:'#00DE94', chromeFrom:'#00AEFF', tint:.03 },
   { id:'cobalt-sky',       name:'Cobalt sky',        swatches:['#0047AB','#000080','#82C8E5','#6D8196'], accent:'#0047AB', chrome:'#000080', tintFrom:'#000080', tint:.075 },
   { id:'neon-noir',        name:'Neon noir',         swatches:['#000000','#2CFF05','#BF00FF','#2D2D2D'], accent:'#BF00FF', chrome:'#141414', chromeHover:'#2D2D2D', tint:0, darkBase:.17 },
+  // themes: a look of their own (glow, fonts, background) on top of the colours — best in dark mode, which they switch on
+  { id:'cyberpunk',        name:'Cyberpunk ✦ theme', swatches:['#0D0221','#FF2A6D','#F9F002','#05D9E8'], accent:'#FF2A6D', chrome:'#0D0221', chromeHover:'#26084a', tintFrom:'#3a0d6b', tint:.07, darkBase:.15, theme:true },
+  { id:'tron',             name:'Tron ✦ theme',      swatches:['#000508','#00E5FF','#6FFFE9','#0B2A33'], accent:'#00C8E0', chrome:'#00060a', chromeHover:'#062430', tintFrom:'#004a5c', tint:.045, darkBase:.12, theme:true },
 ];
 
 /* --- OKLCH helpers: every scheme gets the same lightness ladder as the default,
@@ -125,6 +128,8 @@ function applyColorScheme(id){
 function setColorScheme(id){
   try{ localStorage.setItem(COLOR_SCHEME_KEY, id); }catch(e){}
   applyColorScheme(id);
+  const sc = COLOR_SCHEMES.find(s => s.id === id);
+  if(sc && sc.theme && document.documentElement.getAttribute('data-theme') !== 'dark' && typeof setThemeMode === 'function'){ try{ localStorage.setItem(THEME_KEY, 'dark'); }catch(e){} applyTheme('dark'); }
   refreshAppearanceModal();
 }
 applyColorScheme(getColorSchemeId());
@@ -158,7 +163,7 @@ function appearanceBodyHtml(){
     <div class="flex gap-1 border border-slate-200 rounded-lg p-1 bg-slate-50 mb-6">${modeBtn('light','Light',sun)}${modeBtn('dark','Dark',moon)}</div>
     <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Colour scheme</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${cards}</div>
-    <p class="text-xs text-slate-500 mt-4">Changes the accent colour (buttons, links, highlights) and the sidebar. Saved on this device only.</p>`;
+    <p class="text-xs text-slate-500 mt-4">Changes the accent colour (buttons, links, highlights) and the sidebar. The ✦ themes also change the look — neon glow, fonts and background — and switch to dark mode. Saved on this device only.</p>`;
 }
 function openAppearanceModal(){
   if(typeof toggleSidebar === 'function') toggleSidebar(false);
@@ -173,7 +178,33 @@ function refreshAppearanceModal(){
 }
 </script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;700&family=Orbitron:wght@500;700;800&family=Rajdhani:wght@500;600;700&display=swap');
+  /* ---------- Cyberpunk theme: neon pink / cyan / yellow on deep violet, glowing edges, angled headings ---------- */
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] body{ font-family:'Rajdhani','Inter',sans-serif; font-size:15.5px; letter-spacing:.01em;
+    background-color:#0b0220 !important; background-image: radial-gradient(1200px 600px at 85% -10%, rgba(255,42,109,.16), transparent 60%), radial-gradient(900px 500px at -10% 110%, rgba(5,217,232,.13), transparent 60%), repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px); background-attachment:fixed; }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] h1, html[data-color-scheme="cyberpunk"][data-theme="dark"] h2, html[data-color-scheme="cyberpunk"][data-theme="dark"] h3, html[data-color-scheme="cyberpunk"][data-theme="dark"] #app-title{ font-family:'Orbitron','Rajdhani',sans-serif; letter-spacing:.04em; text-transform:uppercase; }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] h1{ color:#fff; text-shadow: 0 0 10px rgba(255,42,109,.75), 2px 2px 0 rgba(5,217,232,.55); }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] .bg-white{ background-color: rgba(26,8,52,.78) !important; border-color: rgba(255,42,109,.35) !important; box-shadow: 0 0 0 1px rgba(255,42,109,.12), 0 0 22px rgba(255,42,109,.10), inset 0 1px 0 rgba(5,217,232,.10); }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] .bg-brand-600{ box-shadow: 0 0 14px rgba(255,42,109,.55); }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] .nav-item-on{ box-shadow: inset 3px 0 0 #F9F002, 0 0 14px rgba(255,42,109,.35); }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] .nav-rail-on svg{ color:#F9F002; filter: drop-shadow(0 0 4px rgba(249,240,2,.8)); }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] .app-chrome{ box-shadow: inset -1px 0 0 rgba(255,42,109,.45), 0 0 30px rgba(255,42,109,.12); }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] .num, html[data-color-scheme="cyberpunk"][data-theme="dark"] .text-xl.font-extrabold, html[data-color-scheme="cyberpunk"][data-theme="dark"] .text-2xl.font-extrabold{ color:#05D9E8; text-shadow:0 0 8px rgba(5,217,232,.5); }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] input, html[data-color-scheme="cyberpunk"][data-theme="dark"] select, html[data-color-scheme="cyberpunk"][data-theme="dark"] textarea{ border-color: rgba(5,217,232,.35) !important; }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] ::selection{ background:#FF2A6D; color:#fff; }
+  /* ---------- Tron theme: glowing cyan lines on black, the light-grid floor, clean futuristic headings ---------- */
+  html[data-color-scheme="tron"][data-theme="dark"] body{ background-color:#00050a !important;
+    background-image: linear-gradient(rgba(0,229,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,.07) 1px, transparent 1px), radial-gradient(1000px 500px at 50% 120%, rgba(0,229,255,.16), transparent 70%); background-size: 46px 46px, 46px 46px, 100% 100%; background-attachment:fixed; }
+  html[data-color-scheme="tron"][data-theme="dark"] h1, html[data-color-scheme="tron"][data-theme="dark"] h2, html[data-color-scheme="tron"][data-theme="dark"] h3, html[data-color-scheme="tron"][data-theme="dark"] #app-title{ font-family:'Orbitron','Inter',sans-serif; letter-spacing:.08em; text-transform:uppercase; font-weight:700; }
+  html[data-color-scheme="tron"][data-theme="dark"] h1{ color:#e6fdff; text-shadow: 0 0 12px rgba(0,229,255,.8); }
+  html[data-color-scheme="tron"][data-theme="dark"] .bg-white{ background-color: rgba(0,14,20,.86) !important; border-color: rgba(0,229,255,.45) !important; box-shadow: 0 0 0 1px rgba(0,229,255,.15), 0 0 18px rgba(0,229,255,.18), inset 0 0 22px rgba(0,229,255,.05); }
+  html[data-color-scheme="tron"][data-theme="dark"] .bg-brand-600{ box-shadow: 0 0 12px rgba(0,229,255,.7); color:#00131a !important; }
+  html[data-color-scheme="tron"][data-theme="dark"] .nav-item-on{ box-shadow: inset 3px 0 0 #6FFFE9, 0 0 12px rgba(0,229,255,.35); }
+  html[data-color-scheme="tron"][data-theme="dark"] .nav-rail-on svg{ color:#6FFFE9; filter: drop-shadow(0 0 5px rgba(0,229,255,.9)); }
+  html[data-color-scheme="tron"][data-theme="dark"] .app-chrome{ box-shadow: inset -1px 0 0 rgba(0,229,255,.55), 0 0 26px rgba(0,229,255,.15); }
+  html[data-color-scheme="tron"][data-theme="dark"] .num, html[data-color-scheme="tron"][data-theme="dark"] .text-xl.font-extrabold, html[data-color-scheme="tron"][data-theme="dark"] .text-2xl.font-extrabold{ color:#6FFFE9; text-shadow:0 0 8px rgba(0,229,255,.55); }
+  html[data-color-scheme="tron"][data-theme="dark"] input, html[data-color-scheme="tron"][data-theme="dark"] select, html[data-color-scheme="tron"][data-theme="dark"] textarea{ border-color: rgba(0,229,255,.35) !important; }
+  html[data-color-scheme="tron"][data-theme="dark"] ::selection{ background:#00E5FF; color:#00131a; }
 
   :root{ --brand-50:238 242 255; --brand-100:224 231 255; --brand-200:199 210 254; --brand-300:165 180 252; --brand-400:129 140 248; --brand-500:99 102 241; --brand-600:79 70 229; --brand-700:67 56 202; --brand-800:55 48 163; --brand-900:49 46 129; --chrome:15 23 42; --chrome-hover:30 41 59;
          --s-bg:15 23 42; --s-surface:30 41 59; --s-raised:51 65 85; --s-line:71 85 105; --s-hover:39 52 73; --s-hover2:61 76 99; --s-tip:11 18 32;
@@ -186,6 +217,10 @@ function refreshAppearanceModal(){
   html:not([data-theme="dark"]) .border-slate-300{ border-color: rgb(var(--l-line-strong)); }
   html:not([data-theme="dark"]) .divide-slate-100 > :not([hidden]) ~ :not([hidden]){ border-color: rgb(var(--l-line-soft)); }
   .app-chrome{ background-color: rgb(var(--chrome)); transition: background-color .2s; }
+  .nav-panel{ background: rgba(255,255,255,.035); }
+  .nav-rail-on{ background: rgba(255,255,255,.10); color:#fff; }
+  .nav-rail-on svg{ color: rgb(var(--brand-400)); }
+  .nav-item-on{ background: rgba(255,255,255,.10); color:#fff; box-shadow: inset 3px 0 0 rgb(var(--brand-500)); }
   .app-chrome .hover\:bg-slate-800:hover{ background-color: rgb(var(--chrome-hover)); }
   body{ font-family:'Inter', ui-sans-serif, system-ui, sans-serif; }
   ::-webkit-scrollbar{ width:8px; height:8px; }
@@ -1650,7 +1685,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.245';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.247';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -1964,27 +1999,39 @@ function toggleNavSection(name){
 function navIsActive(n){ return ui.tab===n.id || (n.id==='assets' && ui.tab==='asset-detail') || (n.id==='products' && ui.tab==='item-detail') || (n.id==='vehicles' && ui.tab==='vehicle-detail'); }
 // sections fold open/closed (remembered per browser); the section holding the open page always stays open,
 // and a folded section shows the total of its badges so nothing waiting is hidden
+// two-level menu: a slim rail of areas on the left, and the pages of the chosen area beside it, grouped under small headings
+const NAV_HUBS = [
+  { key:'home', label:'Home', icon:'dashboard', sections:[null] },
+  { key:'team', label:'Team', icon:'users', sections:['Department', 'Performance'] },
+  { key:'docs', label:'Docs', icon:'doc_memo', sections:['Documentation'] },
+  { key:'stock', label:'Inventory', icon:'products', sections:['Stock', 'Assets'] },
+  { key:'fleet', label:'Fleet', icon:'vehicle', sections:['Fleet'] },
+  { key:'facil', label:'Facilities', icon:'bolt', sections:['Facilities', 'Maintenance'] },
+  { key:'travel', label:'Travel', icon:'plane', sections:['Travel'] },
+  { key:'finance', label:'Finance', icon:'cash', sections:['Finance'] },
+  { key:'settings', label:'Settings', icon:'admin', sections:['Settings'] }
+];
+function navStruct(){
+  const nav = currentNav(), groups = [];
+  nav.forEach(n => { if(n.section){ groups.push({ name:n.section, items:[] }); return; } if(!groups.length) groups.push({ name:null, items:[] }); groups[groups.length - 1].items.push(n); });
+  const hubs = NAV_HUBS.map(h => Object.assign({}, h, { groups:[] }));
+  groups.forEach(g => { let h = hubs.find(x => x.sections.includes(g.name)); if(!h){ h = { key:'x-' + g.name, label:g.name, icon:'folder', sections:[g.name], groups:[] }; hubs.splice(hubs.length - 1, 0, h); } h.groups.push(g); });
+  return hubs.filter(h => h.groups.some(g => g.items.length));
+}
+function navPickHub(key){ ui.navHub = key; renderNav(); }
 function renderNav(){
-  const nav = currentNav(), collapsed = new Set(navCollapsed()), groups = [];
-  nav.forEach(n => {
-    if(n.section){ groups.push({ name:n.section, items:[] }); return; }
-    if(!groups.length) groups.push({ name:null, items:[] });               // items before the first section (Dashboard)
-    groups[groups.length - 1].items.push(n);
-  });
-  const item = n => `
-    <a href="#" onclick="goTo('${n.id}');return false;"
-       class="flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors ${navIsActive(n) ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
-      ${ICONS[n.icon]}<span class="flex-1">${n.label}</span>${n.badge ? `<span ${n.hint ? `title="${esc(n.hint)}"` : ''} class="ml-auto min-w-[1.25rem] text-center px-1.5 py-0.5 rounded-full text-[10.5px] font-bold nav-badge" style="${n.tone==='crit' ? 'background:#dc2626;color:#fff;font-weight:800' : 'background:#fbbf24;color:#1c1917'}">${n.badge}</span>` : ''}
-    </a>`;
-  document.getElementById('nav-list').innerHTML = groups.map(g => {
-    if(!g.name) return g.items.map(item).join('');
-    const active = g.items.some(navIsActive), shut = collapsed.has(g.name) && !active;
-    const badge = g.items.reduce((t, n) => t + (Number(n.badge) || 0), 0), crit = g.items.some(n => n.badge && n.tone === 'crit');
-    return `<button type="button" onclick="toggleNavSection('${g.name}')" class="w-full flex items-center gap-2 px-3 pt-3.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300">
-        <span class="flex-1 text-left">${g.name}</span>${shut && badge ? `<span class="min-w-[1.1rem] text-center px-1.5 rounded-full text-[10px] font-bold normal-case tracking-normal nav-badge" style="${crit ? 'background:#dc2626;color:#fff;font-weight:800' : 'background:#fbbf24;color:#1c1917'}">${badge}</span>` : ''}
-        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" class="transition-transform ${shut ? '-rotate-90' : ''}"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8l5 5 5-5"/></svg>
-      </button>${shut ? '' : g.items.map(item).join('')}`;
-  }).join('');
+  const hubs = navStruct(), el = document.getElementById('nav-list'); if(!el) return;
+  const activeHub = (hubs.find(h => h.groups.some(g => g.items.some(navIsActive))) || hubs[0] || {}).key;
+  if(!ui.navHub || !hubs.some(h => h.key === ui.navHub) || ui.navHubFor !== ui.tab){ ui.navHub = activeHub; ui.navHubFor = ui.tab; }
+  const hub = hubs.find(h => h.key === ui.navHub) || hubs[0];
+  const count = h => h.groups.reduce((t, g) => t + g.items.reduce((u, n) => u + (Number(n.badge) || 0), 0), 0), crit = h => h.groups.some(g => g.items.some(n => n.badge && n.tone === 'crit'));
+  const rail = hubs.map(h => { const on = h.key === hub.key, c = count(h);
+    return `<button type="button" onclick="navPickHub('${h.key}')" title="${esc(h.label)}" style="position:relative" class="nav-rail-btn w-full flex flex-col items-center gap-1 py-2.5 rounded-xl text-[10.5px] font-semibold transition-colors ${on ? 'nav-rail-on' : 'text-slate-400 hover:text-white hover:bg-white/5'}">${ICONS[h.icon] || ICONS.folder}<span class="leading-tight">${esc(h.label)}</span>${c && !on ? `<span style="position:absolute;top:4px;right:6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:9.5px;line-height:16px;font-weight:800;color:#fff;background:${crit(h) ? '#ef4444' : '#d97706'}">${c > 99 ? '99+' : c}</span>` : ''}</button>`; }).join('');
+  const item = n => { const on = navIsActive(n);
+    return `<a href="#" onclick="goTo('${n.id}');return false;" class="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] transition-colors ${on ? 'nav-item-on font-semibold' : 'text-slate-300 hover:text-white hover:bg-white/5'}">${ICONS[n.icon] || ICONS.folder}<span class="flex-1 truncate">${n.label}</span>${n.badge ? `<span ${n.hint ? `title="${esc(n.hint)}"` : ''} class="text-[11px] font-bold ${n.tone === 'crit' ? 'text-rose-400' : 'text-amber-400'}">${n.badge}</span>` : ''}</a>`; };
+  el.className = 'flex-1 flex min-h-0';
+  el.innerHTML = `<div class="nav-rail w-[4.5rem] shrink-0 flex flex-col gap-1 px-1.5 py-3 overflow-y-auto border-r border-white/10">${rail}</div>
+    <div class="nav-panel flex-1 min-w-0 px-2.5 py-3 overflow-y-auto"><div class="px-3 pt-1 pb-2 text-[15px] font-bold text-white">${esc(hub.key === 'home' ? 'Overview' : hub.label)}</div>${hub.groups.map(g => `${g.name && hub.groups.length > 1 ? `<div class="px-3 pt-4 pb-1.5 first:pt-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">${esc(g.name)}</div>` : ''}<div class="space-y-0.5">${g.items.map(item).join('')}</div>`).join('')}</div>`;
 }
 function goTo(tab){
   if(tab === 'weekly-report' && typeof vehUi !== 'undefined') vehUi.wrId = '';      // the menu always opens the list of reports

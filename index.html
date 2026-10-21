@@ -410,6 +410,7 @@ function refreshAppearanceModal(){
   .anya-crit{ border-color:color-mix(in srgb,#f43f5e 50%,transparent); }
   .anya-tip{ margin-top:3px; font-size:.88em; color:var(--an-mut); }
   .anya-find .anya-acts{ margin-top:5px; } .anya-acts button.anya-quiet{ color:var(--an-mut); border-color:color-mix(in srgb,var(--an-mut) 40%,transparent); background:transparent; }
+  .anya-letter{ margin-top:8px; padding:10px 12px; background:color-mix(in srgb,var(--an-bg) 70%,#fff 4%); border:1px dashed color-mix(in srgb,var(--an-mut) 45%,transparent); font-size:.92em; } .anya-letter p{ margin:6px 0; }
   #toast-wrap{ bottom:92px !important; }
   @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ right:46px; bottom:-4px; font-size:9.5px; padding:1px 7px; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
   @media print{ #anya-fab,#anya-panel,#anya-peek{ display:none !important; } }
@@ -1895,7 +1896,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.260';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.262';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -8545,6 +8546,112 @@ function anyaOnModal(title){
   const kind = /^new petty cash request$/.test(t) ? 'pc' : /^new .*(travel|trip) request$/.test(t) ? 'travel' : /^add fuel entry$/.test(t) ? 'fuel' : '';
   if(kind) setTimeout(() => anyaAutoFill(kind), 350);
 }
+/* ---------- Anya composes a letter from one sentence, registers it and attaches it as a PDF on the letterhead ---------- */
+const ANYA_ORG = 'Fahi Dhiriulhun Corporation';
+function anyaMe(){
+  const me = authUser || {}, p = sdAll().find(x => x.name === me.name) || {};
+  return { name:me.name || '', desig:p.designation || me.designation || '', dept:p.department || me.department || 'Administration' };
+}
+const anyaLongDate = iso => { const p = mmDateParts(iso); return p ? p.d.replace(/^0/, '') + p.suf + p.rest : ''; };
+const anyaAddDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return localDateStr(d); };
+// what the letter is about, and its words; returns { subject, to:[lines], party, salutation, paras:[...], closing }
+function anyaLetterDraft(raw){
+  const t = ' ' + anyaFix(anyaNorm(raw), true) + ' ', me = anyaMe();
+  const dm = new RegExp('\\b(?:dated|date|on|for)\\s+' + ANYA_DATE_RX).exec(t), date = (dm && anyaDate(dm[1])) || vToday();
+  const lastM = new RegExp('\\b(?:last (?:working )?day|effective|from|until|till)\\s+(?:is\\s+|on\\s+|from\\s+)?' + ANYA_DATE_RX).exec(t);
+  const rng = new RegExp('\\bfrom ' + ANYA_DATE_RX + '\\s+(?:to|till|until|-)\\s+' + ANYA_DATE_RX).exec(t);
+  const noticeM = /\b(\d+)\s*(day|days|week|weeks|month|months)\b/.exec(t);
+  // topic: whatever follows "regarding / about / for / on"
+  let topic = (/\b(?:regarding|about|concerning|re|on the subject of|for)\s+(?:my\s+|the\s+|a\s+|an\s+|our\s+)?(.+?)(?:\s+(?:to|addressed to|dated|effective|from|and save|and register)\b|$)/.exec(t) || [])[1] || '';
+  topic = topic.replace(/\b(letter|please|for me|thanks?)\b/g, '').replace(/\s+/g, ' ').trim();
+  // who it goes to: "to Maldives Post", else the party of a known agreement/letter, else the head of the organisation
+  let party = ''; const toM = /\b(?:to|addressed to)\s+(?:the\s+)?([a-z][a-z0-9 &.'-]{2,50}?)(?=\s+(?:regarding|about|concerning|for|re|on|dated|asking|requesting|and)\b|\s*$)/.exec(t);
+  if(toM && !/^(me|my|compose|write|draft|resign)/.test(toM[1])) party = toM[1].trim().split(' ').map(anyaCap).join(' ');
+  const known = state.documents.map(d => (d.extra || {}).party).filter(Boolean).find(p => t.includes(' ' + anyaNorm(p) + ' ') || (party && anyaNorm(p).includes(anyaNorm(party))));
+  if(known) party = known;
+  const kind = /\bresign/.test(t) ? 'resign' : /\b(annual |sick |emergency )?leave\b/.test(t) && !/\bleave (it|the)\b/.test(t) ? 'leave' : /\bquot(ation|e)\b|\brfq\b/.test(t) ? 'rfq' : /\b(payment|outstanding|overdue|dues|invoice)\b/.test(t) && /\b(remind|reminder|overdue|outstanding|pending|due)\b/.test(t) ? 'pay'
+    : /\b(terminat|cancel)/.test(t) ? 'term' : /\b(renew|extension|extend)\b/.test(t) ? 'ext' : /\bcomplain|complaint\b/.test(t) ? 'compl' : /\b(thank|appreciat)/.test(t) ? 'thanks' : /\b(experience|employment|salary) (certificate|letter)\b/.test(t) ? 'cert' : /\bapolog/.test(t) ? 'sorry' : /\binvit/.test(t) ? 'invite' : 'gen';
+  const subj = s => anyaCap(s);
+  const lastDay = lastM ? anyaDate(lastM[1]) : noticeM ? anyaAddDays(date, (+noticeM[1]) * ({ day:1, days:1, week:7, weeks:7, month:30, months:30 })[noticeM[2]]) : anyaAddDays(date, 30);
+  const head = ['The Managing Director', ANYA_ORG];
+  const D = { date, to:party ? ['The Manager', party] : head, party:party || ANYA_ORG, salutation:'Dear Sir / Madam,', closing:'Yours sincerely,' };
+  topic = topic.replace(/^(a |an |the )?(reminder|request|complaint|notice|apology|invitation|appreciation|thanks?)\s+(of|for|about|regarding|on|to)\s+/, '').replace(/^(the|a|an)\s+/, '');
+  const what = topic ? 'the ' + topic : 'the matter below';
+  if(kind === 'resign') return Object.assign(D, { to:head, party:ANYA_ORG, subject:'Resignation — ' + me.name, paras:[
+    `Please accept this letter as formal notice of my resignation from ${me.desig ? 'the position of ' + me.desig : 'my position'}${me.dept ? ' in the ' + me.dept + ' Department' : ''} at ${ANYA_ORG}.`,
+    `In line with my notice period, my last working day will be ${anyaLongDate(lastDay)}. Until then I will continue to carry out my duties and will make sure my work is handed over properly.`,
+    `I am grateful for the opportunities, guidance and support I have received during my time at ${ANYA_ORG}, and I wish the organisation continued success.`,
+    'Please let me know the handover arrangements and any formalities I need to complete before I leave.'] });
+  if(kind === 'leave'){ const f = rng ? anyaDate(rng[1]) : '', to = rng ? anyaDate(rng[2]) : ''; const lt = (/\b(annual|sick|emergency|maternity|paternity|no pay)\b/.exec(t) || [])[1] || '';
+    return Object.assign(D, { to:head, party:ANYA_ORG, subject:'Request for ' + (lt ? lt + ' ' : '') + 'leave', paras:[
+    `I would like to request ${lt ? lt + ' ' : ''}leave${f ? ` from ${anyaLongDate(f)} to ${anyaLongDate(to)}` : ''}${topic && !/leave/.test(topic) ? ' ' + topic : ''}.`,
+    'I will make sure my pending work is completed or handed over before I go, and I will be reachable for anything urgent.',
+    'I kindly request your approval.'] }); }
+  if(kind === 'rfq') return Object.assign(D, { subject:'Request for quotation' + (topic ? ' — ' + subj(topic.replace(/^(quotation|quote|rfq)( for)?\s*/, '')) : ''), paras:[
+    `${ANYA_ORG} would like to request a quotation for ${topic.replace(/^(quotation|quote|rfq)( for)?\s*/, '') || 'the items below'}.`,
+    'Please include the unit price, total price, delivery time, payment terms and the validity of the quotation.',
+    'We would appreciate receiving your quotation at your earliest convenience.'] });
+  if(kind === 'pay') return Object.assign(D, { subject:'Reminder — ' + subj(topic || 'payment'), paras:[
+    `This is a reminder regarding ${what}${/outstanding|overdue|due|pending/.test(what) ? '' : ', which is now outstanding according to our records'}.`,
+    'We kindly request you to settle it at the earliest, or let us know if it has already been processed so we can update our records.',
+    'Thank you for your prompt attention to this matter.'] });
+  if(kind === 'term') return Object.assign(D, { subject:'Notice of termination — ' + subj(topic || 'agreement'), paras:[
+    `We are writing to formally notify you of the termination of ${what}, in line with the terms of the agreement.`,
+    'Please arrange to settle any outstanding matters and return any property belonging to us before the termination takes effect.',
+    'We thank you for your services and cooperation.'] });
+  if(kind === 'ext') return Object.assign(D, { subject:'Request for extension — ' + subj(topic || 'agreement'), paras:[
+    `We would like to request an extension of ${what}.`, 'We would be grateful if you could confirm the extension and any revised terms in writing.', 'Thank you for your continued cooperation.'] });
+  if(kind === 'compl') return Object.assign(D, { subject:'Complaint — ' + subj(topic || 'service'), paras:[
+    `We would like to bring to your attention our concern regarding ${what}.`, 'We request that this be looked into and resolved at the earliest, and that you inform us of the action taken.', 'We look forward to your response.'] });
+  if(kind === 'thanks') return Object.assign(D, { subject:'Letter of appreciation' + (topic ? ' — ' + subj(topic) : ''), paras:[
+    `On behalf of ${ANYA_ORG}, I would like to express our sincere appreciation for ${what}.`, 'Your support and commitment are greatly valued.', 'We look forward to working with you again.'] });
+  if(kind === 'cert') return Object.assign(D, { to:['The Human Resources Section', ANYA_ORG], party:ANYA_ORG, subject:'Request for ' + subj((/\b(experience|employment|salary) (certificate|letter)\b/.exec(t) || ['certificate'])[0]), paras:[
+    `I kindly request a ${(/\b(experience|employment|salary) (certificate|letter)\b/.exec(t) || ['certificate'])[0]} confirming my employment as ${me.desig || 'a staff member'}${me.dept ? ' in the ' + me.dept + ' Department' : ''}.`, topic && !/certificate|letter/.test(topic) ? `It is required for ${topic}.` : 'It is required for official purposes.', 'Thank you for your assistance.'] });
+  if(kind === 'sorry') return Object.assign(D, { subject:'Apology — ' + subj(topic || 'inconvenience'), paras:[`Please accept our sincere apologies regarding ${what}.`, 'We have taken steps to make sure it does not happen again.', 'We value our relationship and thank you for your understanding.'] });
+  if(kind === 'invite') return Object.assign(D, { subject:'Invitation' + (topic ? ' — ' + subj(topic) : ''), paras:[`${ANYA_ORG} is pleased to invite you to ${what}.`, 'We would be honoured by your presence. Kindly confirm your attendance.', 'We look forward to welcoming you.'] });
+  return Object.assign(D, { subject:subj(topic || 'Letter'), paras:[`We are writing regarding ${what}.`, 'We would appreciate your kind attention to this matter and look forward to your response.'] });
+}
+// the letter as a PDF on the letterhead (the same page and fonts as the memo)
+async function buildLetterPdf(d){
+  const x = d.extra || {}, L = 72, R = 523.3, FS = 10.5, LH = 19, BOT = 772, K = [0, 0, 0], pages = []; let pg, y;
+  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = 118; }, need = h => { if(y + h > BOT) newPage(); };
+  newPage();
+  pg.text(R - pdfTextWidth(d.refNo || '', true, 10), y, d.refNo || '', { bold:true, size:10 }); y += 16;
+  const dt = anyaLongDate(d.date); pg.text(R - pdfTextWidth(dt, false, FS), y, dt, { size:FS }); y += 30;
+  String(x.letterTo || '').split('\n').filter(Boolean).forEach(l => { need(16); pg.text(L, y, l, { size:FS, bold:false }); y += 15; }); y += 14;
+  if(x.salutation){ pg.text(L, y, x.salutation, { size:FS }); y += 24; }
+  pdfWrap('Subject: ' + (d.title || ''), true, FS, R - L).forEach(ln => { need(18); pg.text(L, y, ln, { bold:true, size:FS }); pg.line(L, y + 2, L + pdfTextWidth(ln, true, FS), y + 2, K, 0.6); y += 18; }); y += 8;
+  String(d.summary || '').split('\n').forEach(p => { const lines = pdfWrap(p, false, FS, R - L); if(!lines.length){ y += 8; return; }
+    lines.forEach((ln, i) => { need(LH); const last = i === lines.length - 1, gaps = (ln.match(/ /g) || []).length, ws = !last && gaps ? (R - L - pdfTextWidth(ln, false, FS)) / gaps : 0; pg.text(L, y, ln, ws ? { size:FS, ws } : { size:FS }); y += LH; }); y += 8; });
+  docSignBottom(pg, () => { newPage(); return pg; }, y, L, BOT, FS, x.closing || 'Yours sincerely,', x.signName, docSignDesigLine(x.signDesig, x.signDept));
+  return lhPdfFinish(pages, 'Letter ' + (d.refNo || ''), R, { italic:true });
+}
+// composes, registers and files the letter in one go
+async function anyaComposeLetter(q){
+  if(!anyaCanSee('docs-letter')){ anyaSay('You don\'t have access to Letters with your role.'); anyaDraw(); return; }
+  let L = anyaLetterDraft(q);
+  if(AI_READ_URL){ try{ const me = anyaMe(); const a = await aiPost([], 'compose-letter', { prompt:q, sender:me, organisation:ANYA_ORG, date:vToday() }); if(a && a.body){ L = Object.assign(L, { subject:a.subject || L.subject, paras:String(a.body).split(/\n+/), to:a.to ? String(a.to).split('\n') : L.to, salutation:a.salutation || L.salutation }); } }catch(e){} }
+  const me = anyaMe(), date = L.date || vToday();
+  const refNo = docNextNo('letter');
+  const rec = { type:'letter', refNo, title:L.subject, date, department:me.dept, status:'Draft', summary:L.paras.join('\n'), link:'',
+    extra:{ direction:'Outgoing', party:L.party, dueDate:'', letterTo:L.to.join('\n'), salutation:L.salutation, closing:L.closing, signName:me.name, signDesig:me.desig, signDept:me.dept ? me.dept + ' Department' : '', composedBy:'Anya' },
+    history:[{ at:Date.now(), by:me.name, text:'Composed by Anya and registered' }] };
+  anyaSay(`Composing **${L.subject}** and registering it as **${refNo}**…`); anyaDraw();
+  let id;
+  try{ id = await vehSave('documents', rec); }catch(e){ anyaSay('I could not register the letter: ' + (e && e.message ? e.message : e)); anyaDraw(); return; }
+  // the PDF is made and attached as the letter's file
+  let filed = false;
+  try{
+    const blob = await buildLetterPdf(Object.assign({ id }, rec)), name = (refNo.replace(/[()]/g, '').replace(/\//g, '.') + ' - ' + L.subject).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 100) + '.pdf';
+    const att = await agPrepare([new File([blob], name, { type:'application/pdf' })]), st = await agStore(att, refNo);
+    await vehSave('documents', { id, docFile:Object.assign({ fileName:name }, st) }); filed = true;
+  }catch(e){ console.error(e); }
+  try{ rerenderMain(); }catch(e){}
+  const extra = `<div class="anya-letter"><div><b>To:</b> ${esc(L.to.join(', '))}</div><div><b>Date:</b> ${esc(anyaLongDate(date))}</div><div><b>Subject:</b> ${esc(L.subject)}</div><p>${esc(L.salutation)}</p>${L.paras.map(p => `<p>${esc(p)}</p>`).join('')}<p>${esc(L.closing)}<br><br>${esc(me.name)}<br>${esc(me.desig)}</p></div>`;
+  anyaSay(`Done ✓ — **${refNo}** "${L.subject}" is composed and registered in Letters (status Draft)${filed ? ', with the letter attached as a PDF on the letterhead' : ''}. Check it, sign it, and set the status when it is sent.`,
+    [['Open the letter', () => { anyaToggleSmall(); goTo('docs-letter'); openDocView(id); }], ['Download PDF', async () => { const d = docById(id); downloadBlob(await buildLetterPdf(d), (refNo.replace(/[()]/g, '').replace(/\//g, '.') + ' - ' + L.subject).replace(/[\\/:*?"<>|]+/g, '-') + '.pdf'); }], ['Edit', () => { anyaToggleSmall(); goTo('docs-letter'); openDocEdit(id); }]], extra);
+  anyaDraw();
+}
 function anyaExec(i, q, chosen){
   const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
   if(!anyaIntentOk(i)){ anyaSay('You don\'t have access to that with your role.'); anyaDraw(); return; }
@@ -8566,7 +8673,7 @@ function anyaExec(i, q, chosen){
     else if(v === 'trno'){ let no = ''; try{ no = trNextFormNo(); }catch(e){} anyaSay(no ? `The next travel request number is **${no}**.` : 'I could not work out the next number.', anyaCanSee('travel-foreign') ? [['+ New travel request', "goTo('travel-foreign'); openTravelForm('', 'foreign')"]] : [], '', o); }
     else if(v === 'me'){ anyaSay(`You're signed in as **${(authUser && (authUser.name || authUser.email)) || 'unknown'}** (${(authUser && authUser.role) || 'user'}).`); }
     else if(v === 'help'){
-      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
+      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
     }
     else if(v === 'learned'){
       const d = anyaML.data(), taught = d.ex.filter(e => e.w >= 2 && anyaIntentOk(e.i)).sort((a, b) => b.w - a.w), mine = anyaML.top(ui.tab, 6);
@@ -8609,6 +8716,7 @@ async function anyaReply(q){
   if(/\b(turn|switch|stop|disable|don ?t)\b.*\b(auto ?fill|pre ?fill|filling)\b|\bstop (auto|pre) ?filling\b/.test(t) && !/\b(turn|switch) on\b|enable/.test(t)){ anyaML.data().auto = false; anyaML.save(); anyaSay('OK — I won\'t pre-fill forms by myself. Say "turn on auto fill" to bring it back.'); return; }
   if(/\b(turn|switch) on\b.*\b(auto ?fill|pre ?fill)\b|\benable (auto ?fill|pre ?fill)\b|\bauto ?fill on\b/.test(t)){ anyaML.data().auto = true; anyaML.save(); anyaSay('Auto fill is on — when you open a new petty cash, travel or fuel form I\'ll draft what I can from your history.'); return; }
   if(/\bcheck everything again\b|\bunmute\b|\bshow ignored\b/.test(t)){ const d = anyaML.data(); d.mute = {}; d.dis = {}; anyaML.save(); anyaBadgeAt = 0; anyaAnalyze(); return; }
+  if(/\b(compose|write|draft|prepare|generate|create|make|type|do)\b.{0,40}\bletter\b|^(an? )?(resignation|leave|appreciation|reminder|termination|complaint|invitation|apology|quotation request|request) letter\b|\bletter of (resignation|appreciation|apology|invitation)\b/.test(t)){ await anyaComposeLetter(q); return; }
   if(anyaDownload(t)) return;
   if(/^(show|open|view|see|preview)\b/.test(t) && ANYA_FILEISH.test(t) && anyaGetFile(t)) return;
   const pm = /^process (?:voucher |request )?([a-z0-9\/\- ]*\d[a-z0-9\/\- ]*)$/.exec(t); if(pm){ anyaProcessVoucher(pm[1].trim()); return; }
@@ -9972,7 +10080,7 @@ function mmDocxXml(M){
   const FT = { font:'Poppins', sz:20 }, f = o => Object.assign({}, FT, o || {}), TW = 9026;
   const runs = (s, o) => exRuns(s).map(r => wR(r.t, f(Object.assign({}, o, r.bold ? { b:true } : {})))).join('');
   const bdr = side => `<w:pBdr><w:${side} w:val="single" w:sz="8" w:space="4" w:color="000000"/></w:pBdr>`;
-  const P = (inner, o) => { o = o || {}; return `<w:p><w:pPr>${o.bdr || ''}<w:spacing w:before="${o.before || 0}" w:after="${o.after || 0}" w:line="${o.line || 276}" w:lineRule="auto"/>${o.ind || ''}${o.jc ? `<w:jc w:val="${o.jc}"/>` : ''}${o.bidi ? '<w:bidi/>' : ''}</w:pPr>${inner || ''}</w:p>`; };
+  const P = (inner, o) => { o = o || {}; return `<w:p><w:pPr>${o.frame || ''}${o.bdr || ''}<w:spacing w:before="${o.before || 0}" w:after="${o.after || 0}" w:line="${o.line || 276}" w:lineRule="auto"/>${o.ind || ''}${o.jc ? `<w:jc w:val="${o.jc}"/>` : ''}${o.bidi ? '<w:bidi/>' : ''}</w:pPr>${inner || ''}</w:p>`; };
   const dp = mmDateParts(M.date), out = [];
   if(M.bismillah) out.push(P(`<w:r><w:rPr><w:rFonts w:ascii="Traditional Arabic" w:hAnsi="Traditional Arabic" w:cs="Traditional Arabic"/><w:rtl/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t>${xe(MEMO_BISMILLAH)}</w:t></w:r>`, { jc:'center', after:120, bidi:true }));
   out.push(P(wR(M.no || (M.blank ? '(MEMO)FDC/FDC/' + vToday().slice(0, 4) + '/' : ''), f({ b:true, sz:21 })), { jc:'right', after:60 }));
@@ -9989,15 +10097,24 @@ function mmDocxXml(M){
   }
   out.push(P('', { after:120 }));
   out.push(P(wR(M.closing, f())));
-  out.push(P('') + P('') + P(''));
-  out.push(P(wR(M.signOff, f())));
-  out.push(P('') + P('') + P(''));
-  out.push(P(wR(M.signName, f())) + P(wR(M.signDesig, f())));
   if(M.attachments.length || M.blank){ out.push(P('') + P(wR('List of Attachments:', f({ u:true })), { before:120 }));
     (M.attachments.length ? M.attachments : ['']).forEach((a, i) => out.push(P(wR((i + 1) + '.', f({ i:true })) + '<w:r><w:tab/></w:r>' + wR(a, f({ i:true })), { ind:'<w:ind w:left="720" w:hanging="360"/>' }))); }
+  // the sign-off is held at the foot of the last page (a frame anchored to the bottom margin)
+  const FR = '<w:framePr w:w="9026" w:wrap="around" w:vAnchor="margin" w:hAnchor="margin" w:yAlign="bottom"/>';
+  const PF = inner => P(inner, { frame:FR });
+  out.push(PF(wR(M.signOff, f())) + PF('') + PF('') + PF('') + PF(wR(M.signName, f())) + PF(wR(docSignDesigLine(M.signDesig, M.signDept || M.from), f())));
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1400" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/></w:sectPr></w:body></w:document>`;
 }
 const buildMemoDocx = d => lhDocx(mmDocxXml(mmData(d)), LH_NS);
+// the sign-off always sits at the foot of the last page: "Yours sincerely" / space to sign / name / designation, department
+const docSignDesigLine = (desig, dept) => { desig = String(desig || '').trim(); dept = String(dept || '').trim(); if(!dept || desig.toLowerCase().includes(dept.toLowerCase().replace(/ department$/, ''))) return desig; if(!/department|section|unit|office|division/i.test(dept)) dept += ' Department'; return desig ? desig + ', ' + dept : dept; };
+function docSignBottom(pg, addPage, y, L, BOT, FS, signOff, name, desigLine){
+  const H = 62 + 16 + (desigLine ? 14 : 0), top = BOT - H;
+  if(y > top - 12) pg = addPage();
+  if(signOff) pg.text(L, top, signOff, { size:FS });
+  if(name) pg.text(L, top + 62, name, { size:FS });
+  if(desigLine) pg.text(L, top + 78, desigLine, { size:FS });
+}
 async function buildMemoPdf(d){
   const M = mmData(d), L = 72, R = 523.3, FS = 10, LH = 19, BOT = 772, K = [0, 0, 0], pages = []; let pg, y;
   const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = 118; };
@@ -10024,11 +10141,10 @@ async function buildMemoPdf(d){
       need(h); let x = L; lines.forEach((ls, i) => { const st = y + (h - ls.length * 11) / 2 + 8; ls.forEach((ln, j) => { const tw = pdfTextWidth(ln, bold, 8); pg.text(i === 0 ? x + 5 : x + (ws[i] - tw) / 2, st + j * 11, ln, { bold, size:8 }); }); x += ws[i]; });
       pg.line(L, y, R, y, K, 0.5); pg.line(L, y + h, R, y + h, K, 0.5); let xx = L; pg.line(xx, y, xx, y + h, K, 0.5); ws.forEach(w => { xx += w; pg.line(xx, y, xx, y + h, K, 0.5); }); y += h; });
     y += 12; }
-  y += 6; if(M.closing){ need(LH); pg.text(L, y, M.closing, { size:FS }); } y += 70;
-  need(LH * 4); if(M.signOff) pg.text(L, y, M.signOff, { size:FS }); y += 62;
-  if(M.signName) pg.text(L, y, M.signName, { size:FS }); y += 16; if(M.signDesig) pg.text(L, y, M.signDesig, { size:FS }); y += 30;
-  if(M.attachments.length || M.blank){ need(40); pg.text(L, y, 'List of Attachments:', { size:FS }); pg.line(L, y + 2, L + pdfTextWidth('List of Attachments:', false, FS), y + 2, K, 0.5); y += 17;
+  y += 6; if(M.closing){ need(LH); pg.text(L, y, M.closing, { size:FS }); y += LH + 8; }
+  if(M.attachments.length || M.blank){ y += 6; need(40); pg.text(L, y, 'List of Attachments:', { size:FS }); pg.line(L, y + 2, L + pdfTextWidth('List of Attachments:', false, FS), y + 2, K, 0.5); y += 17;
     (M.attachments.length ? M.attachments : ['']).forEach((a, i) => { need(16); pg.text(L + 16, y, (i + 1) + '.', { size:FS, italic:true }); pdfWrap(a, false, FS, R - L - 40).forEach((ln, j) => { if(j) need(15); pg.text(L + 34, y, ln, { size:FS, italic:true }); y += 15; }); if(!a) y += 15; }); }
+  docSignBottom(pg, () => { newPage(); return pg; }, y, L, BOT, FS, M.signOff, M.signName, docSignDesigLine(M.signDesig, M.signDept || M.from));
   return lhPdfFinish(pages, 'Memo ' + (M.no || ''), R, { italic:true });
 }
 async function memoDownload(id, kind, btn){

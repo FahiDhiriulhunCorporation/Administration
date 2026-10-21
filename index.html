@@ -1895,7 +1895,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.258';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.260';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -8016,7 +8016,7 @@ const anyaLev = (a, b) => { if(Math.abs(a.length - b.length) > 2) return 9; cons
 let anyaVocabCache = null;
 function anyaVocab(){
   if(anyaVocabCache) return anyaVocabCache;
-  const v = new Set('request requests petty cash voucher travel fuel fueling litres submit process approve statement replenish replenishment balance pending vehicle report reimbursement reimburse purchase requisition business advance complaint handover weekly cleaning checklist leave stock create please tomorrow yesterday today foreign local refreshments repair printing supplies office garbage postage delivery subscription duplicate theme cyberpunk tron dark light'.split(' '));
+  const v = new Set('amendment amendments agreement agreements contract invoice delivery quotation receipt signed attachment download export building request requests petty cash voucher travel fuel fueling litres submit process approve statement replenish replenishment balance pending vehicle report reimbursement reimburse purchase requisition business advance complaint handover weekly cleaning checklist leave stock create please tomorrow yesterday today foreign local refreshments repair printing supplies office garbage postage delivery subscription duplicate theme cyberpunk tron dark light'.split(' '));
   ANYA_GUIDES.forEach(g => (g.title + ' ' + g.keys.join(' ')).toLowerCase().split(/[^a-z]+/).forEach(w => { if(w.length >= 4) v.add(w); }));
   anyaPages().forEach(n => n.label.toLowerCase().split(/[^a-z]+/).forEach(w => { if(w.length >= 4) v.add(w); }));
   return anyaVocabCache = v;
@@ -8229,9 +8229,90 @@ async function anyaDlRun(label, fn){
 function anyaDlChoose(what, items, labelFn, runFn){
   anyaSay(`Which ${what}?`, items.slice(0, 6).map(r => [labelFn(r), () => anyaDlRun(labelFn(r), () => runFn(r))]));
 }
+/* ---------- every attached file in the app, so Anya can find "the last amendment of the post building agreement" ---------- */
+const ANYA_KEY_WORDS = { invoiceFile:'invoice', deliveryFile:'delivery note', poFile:'po purchase order', memoFile:'memo signed dsa', formFile:'form signed', docFile:'document file signed copy', amendments:'amendment extension', payments:'payment receipt', obligations:'obligation', docs:'document', invoices:'invoice', entries:'entry invoice', signedFile:'signed copy', replFile:'replenishment form signed', ccFile:'cash count signed' };
+const ANYA_COL_WORDS = { documents:'document', pettyCash:'petty cash voucher', fuelRecords:'fuel', travelRequests:'travel trip', businessAdvances:'business advance', purchaseRequisitions:'purchase requisition pr', handovers:'handover', vehicles:'vehicle', vehicleLogs:'vehicle log trip', serviceRecords:'service repair', utilityBills:'utility bill', pettyStatements:'statement', cleaningSheets:'cleaning checklist', complaints:'complaint', assets:'asset', weeklyReports:'weekly report' };
+const ANYA_DOC_TYPES = { agreement:'agreement contract lease', memo:'memo', exco:'exco paper', tor:'tor terms of reference', sop:'sop procedure', srf:'staff request form', letter:'letter', minutes:'meeting minutes' };
+function anyaRecLabel(r){ return [r.refNo, r.number, r.no, r.formNumber, r.poNo, r.plate, r.title, r.subject, r.purpose, r.destination, r.name, r.party, (r.extra || {}).party, (r.extra || {}).counterparty].filter(Boolean).join(' · '); }
+function anyaFileIndex(){
+  const out = [];
+  Object.keys(state).forEach(col => {
+    const list = state[col]; if(!Array.isArray(list)) return;
+    list.forEach(r => {
+      if(!r || typeof r !== 'object') return;
+      const rec = anyaRecLabel(r), recWords = (ANYA_COL_WORDS[col] || col) + ' ' + (col === 'documents' ? (ANYA_DOC_TYPES[r.type] || r.type || '') : '');
+      const walk = (o, path, depth, idx) => {
+        if(!o || typeof o !== 'object' || depth > 4) return;
+        if(Array.isArray(o)){ o.forEach((x, i) => walk(x, path, depth + 1, i)); return; }
+        if(typeof o.fileId === 'string' && o.fileId){
+          const own = o === r ? '' : [o.title, o.type, o.ref, o.refNo, o.number, o.description, o.label, o.name, o.party].filter(x => typeof x === 'string').join(' ');
+          const what = path.map(k => ANYA_KEY_WORDS[k] || k.replace(/([A-Z])/g, ' $1').toLowerCase()).join(' ');
+          const nice = [o.title || o.label || o.description || o.type || '', o.ref || o.refNo || o.number || ''].filter(Boolean).join(' · ');
+          out.push({ fid:o.fileId, fileName:o.fileName || '', col, rec, rid:r.id, group:col + ':' + r.id + ':' + path.join('.'), idx:idx == null ? 0 : idx, title:(nice || o.fileName || what || 'File').trim(),
+            main:path.length <= 1, sub:anyaNorm(what + ' ' + own),
+            date:String(o.effective || o.date || o.invoiceDate || o.signedAt || o.at || r.date || r.formDate || '').slice(0, 10),
+            hay:anyaNorm([recWords, rec, what, own, o.fileName || ''].join(' ')) });
+        }
+        Object.keys(o).forEach(k => { if(k === 'fileId' || k === 'pages' || k === 'jpeg' || k === 'data') return; const v = o[k]; if(v && typeof v === 'object') walk(v, path.concat(k), depth + 1, Array.isArray(v) ? null : idx); });
+      };
+      try{ walk(r, [], 0, null); }catch(e){}
+    });
+  });
+  return out;
+}
+const ANYA_ORD = { first:1, second:2, third:3, fourth:4, fifth:5, sixth:6, '1st':1, '2nd':2, '3rd':3, '4th':4, '5th':5 };
+const anyaStemW = w => w.replace(/(ments?|ings?|ed|es|s)$/, '').slice(0, 6);
+// finds the file a sentence asks for; returns { best, others } or null
+function anyaFindFile(t){
+  const files = anyaFileIndex(); if(!files.length) return null;
+  const skip = /^(download|downlod|export|print|get|give|send|me|the|a|an|my|for|of|to|from|as|in|on|pdf|file|files|copy|attachment|attached|document|please|can|you|could|show|open|view|see|last|latest|newest|recent|first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|earliest|oldest|this|that|one|it|and|with|our|signed|scan|scanned)$/;
+  const words = t.split(' ').filter(w => w.length > 1 && !skip.test(w));
+  if(!words.length) return null;
+  const scored = files.map(f => { const hw = f.hay.split(' '); let s = 0; words.forEach(w => { const st = anyaStemW(w); if(hw.some(h => h === w || (st.length >= 3 && anyaStemW(h) === st))) s += w.length > 3 ? 2 : 1; }); return Object.assign({ s }, f); });
+  const max = Math.max(...scored.map(x => x.s)), need = words.reduce((n, w) => n + (w.length > 3 ? 2 : 1), 0);
+  if(max <= 0 || max < need * .5) return null;
+  let cand = scored.filter(x => x.s === max);
+  // no word about a part (amendment, invoice …): the record's own main file comes first
+  const partWord = words.some(w => { const st = anyaStemW(w); return cand.some(c => !c.main && c.sub.split(' ').some(h => h === w || (st.length >= 3 && anyaStemW(h) === st))); });
+  if(!partWord && cand.some(c => c.main)) cand = cand.filter(c => c.main);
+  // which one of several: an ordinal ("second amendment"), or the last/first by date
+  const ordW = (t.match(/\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\b/) || [])[1], wantLast = /\b(last|latest|newest|recent|current|final)\b/.test(t), wantFirst = /\b(earliest|oldest|original)\b/.test(t);
+  const byDate = (a, b) => String(a.date).localeCompare(String(b.date)) || a.idx - b.idx;
+  let best;
+  if(ordW){ const n = ANYA_ORD[ordW]; best = cand.find(x => anyaNorm(x.title).split(' ').includes(ordW)) || cand.slice().sort(byDate)[n - 1]; }
+  if(!best && wantFirst) best = cand.slice().sort(byDate)[0];
+  if(!best){
+    // "last", or nothing said: the latest — by an ordinal in the title (Third > Second), else by date
+    const ordOf = x => { const w = anyaNorm(x.title).split(' ').find(z => ANYA_ORD[z]); return w ? ANYA_ORD[w] : 0; };
+    best = cand.slice().sort((a, b) => (ordOf(b) - ordOf(a)) || -byDate(a, b))[0];
+    if(!wantLast && cand.length > 1 && new Set(cand.map(c => c.group)).size > 1) best = cand.slice().sort((a, b) => -byDate(a, b))[0];
+  }
+  return { best, others:scored.filter(x => x !== best && x.s >= max - 1).sort((a, b) => b.s - a.s || -byDate(a, b)).slice(0, 4) };
+}
+const anyaFileTitle = f => `${f.title}${f.rec ? ' — ' + f.rec : ''}`.replace(/\s+/g, ' ').slice(0, 120);
+// does it straight away; alternatives are offered only in case it picked the wrong one
+function anyaGetFile(t){
+  const r = anyaFindFile(t); if(!r || !r.best) return false;
+  const f = r.best, view = /\b(show|open|view|see|preview)\b/.test(t) && !/\b(download|export|save|print)\b/.test(t);
+  const others = r.others.map(o => ['Not this — ' + anyaFileTitle(o).slice(0, 48), () => anyaFileGo(o, view)]);
+  anyaFileGo(f, view, others);
+  return true;
+}
+async function anyaFileGo(f, view, others){
+  const name = anyaFileTitle(f);
+  if(view){ try{ anyaToggleSmall(); agOpenFile(f.fid, name); anyaSay(`Opened **${name}**${f.date ? ' (' + fmtDate(f.date) + ')' : ''}.`, [['Download PDF', () => anyaFileGo(f, false)]].concat(others || [])); }catch(e){ anyaSay('I could not open it: ' + (e && e.message ? e.message : e)); } anyaDraw(); return; }
+  anyaSay(`Downloading **${name}**${f.date ? ' (' + fmtDate(f.date) + ')' : ''}…`); anyaDraw();
+  try{ const b = await attPdfBlob(f.fid); downloadBlob(b.blob, attPdfName(b.name, name)); anyaSay(`Downloaded ✓ **${name}**.`, [['View it', () => anyaFileGo(f, true)]].concat(others || [])); }
+  catch(e){ anyaSay('I found it, but the file could not be loaded: ' + (e && e.message ? e.message : e), others || []); }
+  anyaDraw();
+}
+const ANYA_FILEISH = /\b(amendment|amendments|agreement|contract|lease|invoice|invoices|delivery note|po|purchase order|signed|attachment|attached|scan|scanned|receipt|quotation|quote|copy|letter|minutes|tor|sop|exco|checklist|agreement file|document)\b/;
 function anyaDownload(t){
-  if(!/\b(download|export|print|save|get|give|send)\b/.test(t) || !/\b(download|export|print|pdf|excel|xlsx|csv|word|docx|file|statement|statements|report|memo|form|backup|list|copy|sheet)\b/.test(t)) return false;
+  const strong = /\b(download|downlod|export|print)\b/.test(t);
+  if(!strong && !(/\b(save|get|give|send)\b/.test(t) && /\b(pdf|excel|xlsx|csv|word|docx|file|statement|statements|report|memo|form|backup|list|copy|sheet|amendment|agreement|contract|invoice|attachment)\b/.test(t))) return false;
   if(/^(how|what|where|why)\b/.test(t)) return false;
+  // an attached file (agreement, amendment, invoice, signed copy …): found and downloaded straight away
+  if(ANYA_FILEISH.test(t) && anyaGetFile(t)) return true;
   const fmt = /\b(excel|xlsx|sheet|spreadsheet|workbook)\b/.test(t) ? 'xlsx' : /\bcsv\b/.test(t) ? 'csv' : /\b(word|docx)\b/.test(t) ? 'docx' : /\b(pdf|print)\b/.test(t) ? 'pdf' : '';
   const no = (s, page) => { if(!anyaCanSee(page)){ anyaSay(`You don't have access to ${s} with your role.`); anyaDraw(); return true; } return false; };
   // business advance
@@ -8312,6 +8393,7 @@ function anyaDownload(t){
   const c = csv.find(([rx]) => rx.test(t));
   if(c){ if(no(c[2].toLowerCase(), c[1])) return true; anyaDlRun(c[2] + ' (CSV)', c[3]); return true; }
   if(/\bbackup\b/.test(t)){ if(no('backups', 'backups')) return true; anyaDlRun('Full backup', () => bkDownload()); return true; }
+  if(anyaGetFile(t)) return true;
   anyaSay('What should I download? For example: "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "voucher PTC-V-HO-26-01", "weekly report week 42", "staff list CSV" or "backup".');
   anyaDraw(); return true;
 }
@@ -8528,6 +8610,7 @@ async function anyaReply(q){
   if(/\b(turn|switch) on\b.*\b(auto ?fill|pre ?fill)\b|\benable (auto ?fill|pre ?fill)\b|\bauto ?fill on\b/.test(t)){ anyaML.data().auto = true; anyaML.save(); anyaSay('Auto fill is on — when you open a new petty cash, travel or fuel form I\'ll draft what I can from your history.'); return; }
   if(/\bcheck everything again\b|\bunmute\b|\bshow ignored\b/.test(t)){ const d = anyaML.data(); d.mute = {}; d.dis = {}; anyaML.save(); anyaBadgeAt = 0; anyaAnalyze(); return; }
   if(anyaDownload(t)) return;
+  if(/^(show|open|view|see|preview)\b/.test(t) && ANYA_FILEISH.test(t) && anyaGetFile(t)) return;
   const pm = /^process (?:voucher |request )?([a-z0-9\/\- ]*\d[a-z0-9\/\- ]*)$/.exec(t); if(pm){ anyaProcessVoucher(pm[1].trim()); return; }
   if(formOpen && (/^(fill|set|put|use|change|make it)\b/.test(t) || !/^(new|create|start|raise|open|go|show|find|search|how|what|where|who|i (want|need))\b/.test(t)) && anyaFillOpen(t.replace(/^(fill( in| it)?( with)?|set|put|use|change|make it)\s+/, ''))) return;
   if(/^(hi|hello|hey|salaam|assalaamu? ?alaikum|good (morning|afternoon|evening))\b/.test(t) && t.split(' ').length <= 4){ anyaSay(`Hello${anyaFirst() ? ' ' + anyaFirst() : ''}! What can I do for you?`); return; }
@@ -11056,9 +11139,9 @@ async function wrPdf(id, btn){
 const BA_TYPES = ['Transferred', 'Received'], BA_INV = ['Pending', 'Received'];
 // expense categories: the columns of the finance "Business Advance - Statement" sample
 // the budget categories (the statement columns, in this order)
-const BA_CATS = ['Refreshments', 'Repair Work', 'Email & Software Subscriptions', 'App Purchase', 'Bank Charges', 'Staff Visa / Work Permit', 'Travel Arrangements', 'Printing & Office Supplies', 'Garbage Disposal', 'Fuel', 'Medical', 'Small tool / Furnitures and Fittings'];
+const BA_CATS = ['Refreshments', 'Repair Work', 'Email & Software Subscriptions', 'App Purchase', 'Bank Charges', 'Staff Visa / Work Permit', 'Travel Arrangements', 'Printing & Office Supplies', 'Garbage Disposal', 'Fuel', 'Medical', 'Small tool', 'Furniture and Fittings'];
 // entries saved with the earlier category names count under the matching budget category
-const BA_CAT_OLD = { 'Small Tools and Equipment':'Small tool / Furnitures and Fittings', 'Printing and Office Supplies':'Printing & Office Supplies', 'Repair & Maintenance':'Repair Work', 'Transportation & Logistics':'Travel Arrangements' };
+const BA_CAT_OLD = { 'Small Tools and Equipment':'Small tool', 'Small tool / Furnitures and Fittings':'Small tool', 'Printing and Office Supplies':'Printing & Office Supplies', 'Repair & Maintenance':'Repair Work', 'Transportation & Logistics':'Travel Arrangements' };
 const baCat = c => BA_CAT_OLD[c] || c || '';
 const baById = id => (state.businessAdvances || []).find(r => r.id === id) || null;
 const baEntries = r => (r.entries || []).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.at || 0) - (b.at || 0));

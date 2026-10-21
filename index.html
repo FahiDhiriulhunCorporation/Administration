@@ -124,7 +124,19 @@ function applyColorScheme(id){
   root.setAttribute('data-color-scheme', scheme.id);
   const meta = document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', 'rgb(' + vars['--chrome'].split(' ').join(',') + ')');
+  fitAppTitle();
 }
+// Shrink the sidebar title until it fits beside the header buttons (wide fonts like Orbitron would overlap them)
+function fitAppTitle(){
+  requestAnimationFrame(() => {
+    const el = document.getElementById('app-title'); if(!el) return;
+    el.style.fontSize = '';
+    if(!el.clientWidth) return;
+    let size = parseFloat(getComputedStyle(el).fontSize) || 16;
+    while(el.scrollWidth > el.clientWidth + 1 && size > 10){ size -= 0.5; el.style.fontSize = size + 'px'; }
+  });
+}
+try{ document.fonts && document.fonts.ready.then(fitAppTitle); window.addEventListener('resize', () => fitAppTitle()); document.addEventListener('DOMContentLoaded', fitAppTitle); }catch(e){}
 function setColorScheme(id){
   try{ localStorage.setItem(COLOR_SCHEME_KEY, id); }catch(e){}
   applyColorScheme(id);
@@ -195,6 +207,7 @@ function refreshAppearanceModal(){
   /* ---------- Tron theme: glowing cyan lines on black, the light-grid floor, clean futuristic headings ---------- */
   html[data-color-scheme="tron"][data-theme="dark"] body{ background-color:#00050a !important;
     background-image: linear-gradient(rgba(0,229,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,.07) 1px, transparent 1px), radial-gradient(1000px 500px at 50% 120%, rgba(0,229,255,.16), transparent 70%); background-size: 46px 46px, 46px 46px, 100% 100%; background-attachment:fixed; }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] #app-title, html[data-color-scheme="tron"][data-theme="dark"] #app-title{ letter-spacing:.02em !important; }
   html[data-color-scheme="tron"][data-theme="dark"] h1, html[data-color-scheme="tron"][data-theme="dark"] h2, html[data-color-scheme="tron"][data-theme="dark"] h3, html[data-color-scheme="tron"][data-theme="dark"] #app-title{ font-family:'Orbitron','Inter',sans-serif; letter-spacing:.08em; text-transform:uppercase; font-weight:700; }
   html[data-color-scheme="tron"][data-theme="dark"] h1{ color:#e6fdff; text-shadow: 0 0 12px rgba(0,229,255,.8); }
   html[data-color-scheme="tron"][data-theme="dark"] .bg-white{ background-color: rgba(0,14,20,.86) !important; border-color: rgba(0,229,255,.45) !important; box-shadow: 0 0 0 1px rgba(0,229,255,.15), 0 0 18px rgba(0,229,255,.18), inset 0 0 22px rgba(0,229,255,.05); }
@@ -496,7 +509,7 @@ function refreshAppearanceModal(){
   <!-- Sidebar -->
   <aside id="sidebar" style="width:18rem" class="fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 left-0 w-72 shrink-0 app-chrome text-slate-200 flex flex-col z-40 -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-out">
     <div class="px-4 py-5 border-b border-white/10 flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2.5 min-w-0"><img data-logo alt="" class="w-9 h-9 rounded-lg shrink-0"><div id="app-title" style="cursor:default;-webkit-user-select:none;user-select:none" class="text-[16px] font-extrabold tracking-tight text-white whitespace-nowrap">Administration</div></div>
+      <div class="flex items-center gap-2.5 min-w-0"><img data-logo alt="" class="w-9 h-9 rounded-lg shrink-0"><div id="app-title" style="cursor:default;-webkit-user-select:none;user-select:none" class="text-[16px] font-extrabold tracking-tight text-white whitespace-nowrap min-w-0 overflow-hidden text-ellipsis">Administration</div></div>
       <div class="flex items-center gap-0.5"><button onclick="gsOpen()" title="Search everything (Ctrl+K)" aria-label="Search" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17" stroke-linecap="round"/></svg></button><button onclick="ntToggle(this)" title="Notifications" aria-label="Notifications" class="nt-btn relative w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M5 8.5a5 5 0 0 1 10 0c0 4 1.5 5.5 1.5 5.5h-13S5 12.5 5 8.5Z"/><path d="M8.3 16.5a1.8 1.8 0 0 0 3.4 0" stroke-linecap="round"/></svg><span class="nt-badge absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9.5px] font-bold leading-4 text-center" style="display:none">0</span></button>
       <button onclick="openAppearanceModal()" id="theme-toggle-btn" title="Appearance: light/dark mode and colour scheme" aria-label="Appearance" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white">
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path stroke-linejoin="round" d="M10 2.5a7.5 7.5 0 0 0 0 15c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.5 1.6-1.5h1.8a3.3 3.3 0 0 0 3.3-3.3C17.5 5.5 14.1 2.5 10 2.5z"/><circle cx="6.3" cy="9.3" r="1" fill="currentColor" stroke="none"/><circle cx="8.6" cy="6.1" r="1" fill="currentColor" stroke="none"/><circle cx="12.4" cy="6.1" r="1" fill="currentColor" stroke="none"/></svg>
@@ -603,6 +616,7 @@ const STORAGE_PREFIX = 'fdc_inventory_';
 const THEME_KEY = STORAGE_PREFIX + 'theme';
 function applyTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
+  if(typeof fitAppTitle === 'function') fitAppTitle();
   const sun = document.getElementById('theme-icon-sun');
   const moon = document.getElementById('theme-icon-moon');
   if(sun && moon){
@@ -1685,7 +1699,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.247';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.248';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;

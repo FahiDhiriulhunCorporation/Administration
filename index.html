@@ -401,6 +401,15 @@ function refreshAppearanceModal(){
   html[data-anya="red"] .anya-me::before{ content:'YOU'; position:absolute; top:3px; right:10px; font:700 12px 'Rajdhani',sans-serif; color:#1a0508; }
   html[data-anya="red"] .anya-busy::before{ content:none; } html[data-anya="red"] .anya-busy{ padding-top:8px; }
   html[data-anya="red"] .anya-acts button, html[data-anya="red"] .anya-topics button, html[data-anya="red"] .anya-chips button{ clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%); }
+  /* Anya's findings */
+  #anya-fab .anya-badge{ position:absolute; top:-3px; right:-3px; min-width:20px; height:20px; padding:0 5px; border-radius:999px; background:#e11d48; color:#fff; font:700 11px/20px 'Inter',system-ui,sans-serif; text-align:center; box-shadow:0 0 0 2px var(--an-bg); }
+  .anya-finds{ list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  .anya-find{ display:flex; gap:8px; padding:7px 8px; border:1px solid color-mix(in srgb,var(--an-mut) 30%,transparent); background:color-mix(in srgb,var(--an-bg) 60%,transparent); }
+  html[data-anya="modern"] .anya-find{ border-radius:10px; }
+  .anya-sev{ flex:none; width:14px; line-height:1.5; } .anya-crit .anya-sev{ color:#f43f5e; } .anya-warn .anya-sev{ color:#f59e0b; } .anya-info .anya-sev{ color:var(--an-b); }
+  .anya-crit{ border-color:color-mix(in srgb,#f43f5e 50%,transparent); }
+  .anya-tip{ margin-top:3px; font-size:.88em; color:var(--an-mut); }
+  .anya-find .anya-acts{ margin-top:5px; } .anya-acts button.anya-quiet{ color:var(--an-mut); border-color:color-mix(in srgb,var(--an-mut) 40%,transparent); background:transparent; }
   #toast-wrap{ bottom:92px !important; }
   @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ right:46px; bottom:-4px; font-size:9.5px; padding:1px 7px; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
   @media print{ #anya-fab,#anya-panel,#anya-peek{ display:none !important; } }
@@ -1886,7 +1895,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.256';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.258';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2281,6 +2290,7 @@ function openModal(title, bodyHtml, wide){
   stopModalScrollPadding();
   titleEl.textContent = title;
   document.getElementById('modal-body').innerHTML = bodyHtml;
+  try{ if(typeof anyaOnModal === 'function') anyaOnModal(title); }catch(e){}
   document.getElementById('modal-box').style.maxWidth = '';
   document.getElementById('modal-box').classList.toggle('max-w-lg', !wide);
   document.getElementById('modal-box').classList.toggle('max-w-2xl', !!wide);
@@ -2998,7 +3008,7 @@ const vSec = t => `<div class="text-[11px] font-bold uppercase tracking-wider te
 const vGrid = (n, inner) => `<div class="grid grid-cols-1 ${n === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3.5">${inner}</div>`;
 const vFormOpen = '<form id="vform" onsubmit="return false" novalidate><div id="vf-error" class="hidden bg-rose-50 text-rose-700 text-sm rounded-lg px-3.5 py-2.5 mb-4"></div>';
 const vFoot = (saveLabel, saveFn, delFn) => `<div class="flex items-center justify-between gap-2.5 mt-6">${delFn ? `<button type="button" onclick="${delFn}" class="px-4 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50">Delete</button>` : '<span></span>'}<div class="flex gap-2.5"><button type="button" onclick="closeModal()" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Cancel</button><button type="button" id="vf-save" onclick="${saveFn}" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">${saveLabel}</button></div></div></form>`;
-function vFail(msg){ const e = document.getElementById('vf-error'); if(e){ e.textContent = msg; e.classList.remove('hidden'); e.scrollIntoView({ block:'nearest' }); } else toast(msg, true); return false; }
+function vFail(msg){ try{ if(typeof anyaNoteError === 'function') anyaNoteError(msg); }catch(e){} const e = document.getElementById('vf-error'); if(e){ e.textContent = msg; e.classList.remove('hidden'); e.scrollIntoView({ block:'nearest' }); } else toast(msg, true); return false; }
 function vehFormObj(form){
   const o = {};
   new FormData(form).forEach((v, k) => { if(typeof v !== 'string') return; const p = k.split('.'); let t = o; while(p.length > 1){ const x = p.shift(); t = t[x] = t[x] || {}; } t[p[0]] = v.trim(); });
@@ -7777,7 +7787,7 @@ const anyaActInfo = id => {
   if(a.g){ const g = ANYA_GUIDES.find(x => x.id === a.g); if(!g || !g.acts.length) return null; return { js:g.acts[0][1], page:g.page, label:g.title.toLowerCase(), short:g.acts[0][0] }; }
   return { js:a.js, page:a.page, label:a.label, short:'+ ' + a.label.replace(/^an? /, '').replace(/ \(.*$/, '') };
 };
-const ANYA_SYS = { pending:'What\'s pending', balance:'Petty cash balance', trno:'Next travel number', help:'What Anya can do', me:'Who am I', learned:'What Anya has learned' };
+const ANYA_SYS = { check:'Check for mistakes', pending:'What\'s pending', balance:'Petty cash balance', trno:'Next travel number', help:'What Anya can do', me:'Who am I', learned:'What Anya has learned' };
 const ANYA_THEMES = { cyberpunk:'Cyberpunk ✦', tron:'Tron ✦', tronhud:'Tron HUD ✦', cp2027:'Cyberpunk 2027 ✦' };
 // a readable name for an intent ("g:fuel" → "Fuel entry (steps)")
 function anyaIntentLabel(i){
@@ -7837,7 +7847,7 @@ const anyaML = {
     ANYA_GUIDES.forEach(g => { add('g:' + g.id, 'how ' + g.title, 1); g.keys.forEach(k => add('g:' + g.id, 'how ' + k, 1)); });
     ANYA_ACTIONS.forEach(a => a.k.forEach(k => add('a:' + a.id, 'new ' + k, 1.2)));
     anyaPages().forEach(n => add('p:' + n.id, 'open ' + n.label, 1));
-    [['pending', 'pending waiting attention overdue outstanding to do left'], ['balance', 'petty cash balance float cash left available money'], ['trno', 'next travel request number trf'], ['help', 'help commands what can you do'], ['learned', 'what have you learned learning memory']].forEach(([k, t]) => add('s:' + k, t, 1));
+    [['check', 'check analyse analyze audit mistakes errors problems issues wrong fix health'], ['pending', 'pending waiting attention overdue outstanding to do left'], ['balance', 'petty cash balance float cash left available money'], ['trno', 'next travel request number trf'], ['help', 'help commands what can you do'], ['learned', 'what have you learned learning memory']].forEach(([k, t]) => add('s:' + k, t, 1));
     Object.keys(ANYA_THEMES).forEach(k => add('t:' + k, k + ' ' + ANYA_THEMES[k] + ' theme', 1));
     this.data().ex.forEach(e => { if(e.w > 0) add(e.i, e.q, 1 + e.w); });
     const cls = {}, vocab = new Set();
@@ -7891,6 +7901,7 @@ function anyaSync(){
   const fab = document.getElementById('anya-fab'); if(fab) fab.style.display = on ? '' : 'none';
   if(!on){ anyaToggle(false); return; }
   if(!anya.greeted){ anya.greeted = true; anyaPeek(); }
+  anyaBadge();
 }
 function anyaPeek(){
   let day = ''; try{ day = localStorage.getItem('anya_peek_day') || ''; }catch(e){}
@@ -7917,12 +7928,12 @@ function anyaToggle(force){
 function anyaClear(){ anya.log = []; anya.acts = []; anyaWelcome(); anyaDraw(); }
 function anyaWelcome(){
   const g = ANYA_GUIDES.find(x => x.id === ANYA_PAGE_GUIDE[ui.tab]), here = anyaPageLabel(ui.tab), habit = anyaML.habitHere(ui.tab);
-  const acts = [];
+  const acts = []; let nf = 0; try{ nf = anyaFindings().filter(f => f.sev !== 'info').length; }catch(e){}
   if(habit) acts.push([anyaIntentLabel(habit), () => anyaExec(habit, '')]);
   if(g && here) acts.push(['Show the steps', () => anyaGuide(g)]);
   anyaSay(`Hi${anyaFirst() ? ' ' + anyaFirst() : ''}, I'm **Anya**. Ask me how a process works, or tell me what to do — e.g. "new petty cash request", "open fueling", "find Ahmed", "what's pending?".` +
     (habit ? `\nOn **${here || 'this page'}** you usually go for **${anyaIntentLabel(habit)}**.` : g && here ? `\nYou're on **${here}** — want the steps for ${g.title.toLowerCase()}?` : '') +
-    `\nI learn from you: rate my answers with 👍 / 👎 and I'll get better at your way of asking.`, acts);
+    `\nI learn from you: rate my answers with 👍 / 👎 and I'll get better at your way of asking.` + (nf ? `\n⚠ I spotted **${nf}** thing${nf === 1 ? '' : 's'} in the records that may be wrong.` : ''), nf ? [['Show what\'s wrong', () => anyaAnalyze()], ...acts] : acts);
 }
 function anyaAct(fn){ anya.acts.push(fn); return anya.acts.length - 1; }
 // acts: [label, fn | 'js string']; opts.intent / opts.q let the user rate the answer
@@ -7941,7 +7952,7 @@ function anyaDraw(){
   L.scrollTop = L.scrollHeight;
   const C = document.getElementById('anya-chips');
   if(C){
-    const mine = anyaML.top(ui.tab, 4), base = ['s:pending', 's:balance', 'a:pc-new', 'g:travel', 's:help'].filter(i => anyaIntentOk(i) && !mine.includes(i));
+    const mine = anyaML.top(ui.tab, 4), base = ['s:check', 's:pending', 's:balance', 'a:pc-new', 'g:travel', 's:help'].filter(i => anyaIntentOk(i) && !mine.includes(i));
     C.innerHTML = [...mine.map(i => [i, 1]), ...base.map(i => [i, 0])].slice(0, 6).map(([i, my]) => `<button type="button" class="${my ? 'anya-mine' : ''}" title="${my ? 'One of your shortcuts' : ''}" onclick="anyaChip('${i}')">${my ? '★ ' : ''}${esc(anyaIntentLabel(i).replace(/ — steps$/, ' steps'))}</button>`).join('');
   }
 }
@@ -8304,6 +8315,154 @@ function anyaDownload(t){
   anyaSay('What should I download? For example: "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "voucher PTC-V-HO-26-01", "weekly report week 42", "staff list CSV" or "backup".');
   anyaDraw(); return true;
 }
+/* ---------- Anya checks the app for mistakes and suggests (or applies) the fix ---------- */
+const anyaDays = iso => { if(!iso) return 0; const d = new Date(String(iso).slice(0, 10) + 'T00:00:00'); return Math.floor((new Date(vToday() + 'T00:00:00') - d) / 864e5); };
+const anyaTsDays = ms => ms ? Math.floor((Date.now() - ms) / 864e5) : 0;
+// each check: what it is about, the page it belongs to, and run() → findings { key, sev:'crit'|'warn'|'info', text, fix:[label, js] }
+const ANYA_CHECKS = [
+  { id:'pc-dup', area:'Petty cash', page:'petty-cash', run(){ const seen = {}, out = []; state.pettyCash.forEach(r => { const n = String(r.number || '').trim(); if(!n) return; if(seen[n]) out.push({ key:'pc-dup-' + n, sev:'crit', text:`Voucher number **${n}** is used twice.`, fix:['Open the second one', `goTo('petty-cash'); openPcForm('${r.id}')`], tip:'Give one of them the next free number.' }); seen[n] = 1; }); return out; } },
+  { id:'pc-neg', area:'Petty cash', page:'petty-cash', run(){ return pcBalanceRows().filter(x => x.left < 0).map(x => ({ key:'pc-neg-' + x.f.id, sev:'crit', text:`**${x.f.name}** petty cash is overspent: ${fmtMVR(x.left)} available.`, fix:['Open Statements', "goTo('petty-statement')"], tip:'Close the statement and request replenishment, or check for a voucher entered twice.' })); } },
+  { id:'pc-noinv', area:'Petty cash', page:'petty-cash', run(){ return state.pettyCash.filter(r => !pcInClosed(r) && r.option !== 'Reimbursement' && (r.processedAt || r.processedAmount != null) && !pcHasInvoice(r) && anyaDays(r.processedDate || r.date) >= 7).map(r => ({ key:'pc-noinv-' + r.id, sev:'warn', text:`**${r.number}** (${r.purpose || 'no purpose'}) was given cash ${anyaDays(r.processedDate || r.date)} days ago but has no invoice.`, fix:['Add the invoice', `goTo('petty-cash'); openPcInvoices('${r.id}')`], tip:'Ask the requester for the invoice and the change.' })); } },
+  { id:'pc-over', area:'Petty cash', page:'petty-cash', run(){ return state.pettyCash.filter(r => pcHasInvoice(r) && pcTotal(r) > 0 && pcInvoiceTotal(r) > pcTotal(r) * 1.1 + 1).map(r => ({ key:'pc-over-' + r.id, sev:'warn', text:`**${r.number}**: invoices ${fmtMVR(pcInvoiceTotal(r))} are more than the ${fmtMVR(pcTotal(r))} requested.`, fix:['Check it', `goTo('petty-cash'); openPcDetails('${r.id}')`], tip:'Check the invoice amounts, or record the extra as a reimbursement.' })); } },
+  { id:'pc-nocat', area:'Petty cash', page:'petty-cash', run(){ return state.pettyCash.filter(r => !r.category && !pcInClosed(r)).map(r => { const g = anyaGuessCategory(r.purpose || pcItems(r).map(i => i.name).join(' ')); return { key:'pc-nocat-' + r.id, sev:'warn', text:`**${r.number}** has no expense category, so it can't go in the right statement column.${g ? ` It looks like **${g}**.` : ''}`, fix:g ? [`Set "${g}"`, () => anyaSaveField('pettyCash', r.id, { category:g }, `${r.number} category set to ${g}.`)] : ['Edit', `goTo('petty-cash'); openPcForm('${r.id}')`] }; }); } },
+  { id:'pc-ready', area:'Petty cash', page:'petty-statement', run(){ const r = state.pettyCash.filter(x => pcHasInvoice(x) && !x.statementNo && anyaDays(x.date) >= 14); return r.length ? [{ key:'pc-ready', sev:'info', text:`${r.length} settled voucher${r.length === 1 ? ' is' : 's are'} still not on a statement (oldest ${Math.max(...r.map(x => anyaDays(x.date)))} days).`, fix:['Open Statements', "goTo('petty-statement')"], tip:'Use "Add all ready" on the Statements page.' }] : []; } },
+  { id:'pc-repl', area:'Petty cash', page:'petty-statement', run(){ const out = []; pcFundList().forEach(f => pcStatements(f.id).filter(s => s.closed && pcStmtPending(s) > 0).forEach(s => out.push({ key:'pc-repl-' + s.no, sev:'info', text:`Statement **${s.no}** (${f.name}) is closed but not replenished yet (${fmtMVR(pcStmtPending(s))}).`, fix:['Open it', `goTo('petty-statement'); openPcStatementDetail('${s.no}')`], tip:'When finance pays, press Mark replenished and attach the signed form.' }))); return out; } },
+  { id:'fuel-swap', area:'Fuel', page:'fueling', run(){ return state.fuelRecords.filter(r => vNum(r.rate) > 0 && vNum(r.rate) < 8).map(r => { const L = vNum(r.litres), R = vNum(r.rate); return { key:'fuel-swap-' + r.id, sev:'crit', text:`Fuel entry ${fmtDate(r.date)}: rate MVR ${R}/L is too low — litres (${L}) and rate look swapped.`, fix:['Swap them', () => anyaSaveField('fuelRecords', r.id, { litres:R, rate:L, total:pcRound(L * R) || r.total }, 'Litres and rate swapped.')], tip:'Litres × rate must equal the total; rates are usually above MVR 8/L.' }; }); } },
+  { id:'fuel-math', area:'Fuel', page:'fueling', run(){ return state.fuelRecords.filter(r => { const L = vNum(r.litres), R = vNum(r.rate), T = vNum(r.total); return L && R && T && R >= 8 && Math.abs(L * R - T) > Math.max(1, T * .02); }).map(r => { const L = vNum(r.litres), R = vNum(r.rate); return { key:'fuel-math-' + r.id, sev:'warn', text:`Fuel entry ${fmtDate(r.date)}: ${L} L × ${R} = ${fmtMVR(L * R)}, but the total says ${fmtMVR(r.total)}.`, fix:['Edit', `goTo('fueling'); openVehFuelForm('${r.id}')`], tip:'Check the litres and rate against the invoice.' }; }); } },
+  { id:'fuel-noinv', area:'Fuel', page:'fueling', run(){ return state.fuelRecords.filter(r => (r.fundType || 'PR') === 'PR' && !(r.invoiceFile && r.invoiceFile.fileId) && anyaDays(r.date) >= 21).slice(0, 8).map(r => ({ key:'fuel-noinv-' + r.id, sev:'info', text:`Fuel entry ${fmtDate(r.date)}${r.poNo ? ' (PO ' + r.poNo + ')' : ''}: no invoice after ${anyaDays(r.date)} days.`, fix:['Attach invoice', `goTo('fueling'); openVehFuelForm('${r.id}')`], tip:'Ask the vendor to mail the invoice.' })); } },
+  { id:'vlog-out', area:'Fleet', page:'vehicle-log', run(){ return state.vehicleLogs.filter(l => !l.inDate && anyaDays(l.outDate) >= 1).map(l => { const v = (state.vehicles.find(x => x.id === l.vehicleId) || {}); return { key:'vlog-out-' + l.id, sev:'warn', text:`**${v.plate || 'A vehicle'}** went out ${fmtDate(l.outDate)} and is not marked as returned.`, fix:['Mark returned', `goTo('vehicle-log'); openVlReturn('${l.id}')`] }; }); } },
+  { id:'tr-dates', area:'Travel', page:'travel-foreign', run(){ return state.travelRequests.filter(t => t.fromDate && t.toDate && t.toDate < t.fromDate).map(t => ({ key:'tr-dates-' + t.id, sev:'crit', text:`Travel ${t.formNumber || ''} to ${t.destination || '?'}: the return date is before the departure date.`, fix:['Fix dates', `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelForm('${t.id}')`] })); } },
+  { id:'tr-past', area:'Travel', page:'travel-foreign', run(){ return state.travelRequests.filter(t => t.status === 'Pending' && t.fromDate && t.fromDate < vToday()).map(t => ({ key:'tr-past-' + t.id, sev:'warn', text:`Travel ${t.formNumber || ''} to ${t.destination || '?'} is still Pending but departed ${fmtDate(t.fromDate)}.`, fix:['Update status', `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelForm('${t.id}')`] })); } },
+  { id:'tr-memo', area:'Travel', page:'travel-foreign', run(){ return state.travelRequests.filter(t => trDsaOn(t) && !t.dsa.memoNo && t.fromDate && anyaDays(t.fromDate) > -7 && t.status !== 'Cancelled').map(t => ({ key:'tr-memo-' + t.id, sev:'warn', text:`Travel ${t.formNumber || ''} to ${t.destination || '?'} has DSA but no memo number, and it departs ${fmtDate(t.fromDate)}.`, fix:['Add memo no.', `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelForm('${t.id}')`] })); } },
+  { id:'tr-mail', area:'Travel', page:'travel-foreign', run(){ return state.travelRequests.filter(t => trDsaOn(t) && trMemoSigned(t) && !t.mailDraftAt).map(t => ({ key:'tr-mail-' + t.id, sev:'info', text:`The signed DSA memo for ${t.destination || 'a trip'} hasn't been emailed to Finance yet.`, fix:['Make email draft', `trMailOpen('${t.id}')`] })); } },
+  { id:'ba-neg', area:'Business advance', page:'business-advance', run(){ return (state.businessAdvances || []).filter(r => r.status !== 'Settled' && baTotals(r).balance < 0).map(r => ({ key:'ba-neg-' + r.id, sev:'crit', text:`Business advance **${r.no || r.title}** is overspent (${fmtMVR(baTotals(r).balance)}).`, fix:['Open', "goTo('business-advance')"], tip:'Record the money received, or check for a payment entered twice.' })); } },
+  { id:'ba-inv', area:'Business advance', page:'business-advance', run(){ return (state.businessAdvances || []).filter(r => r.status !== 'Settled' && baTotals(r).pending > 0).map(r => ({ key:'ba-inv-' + r.id, sev:'warn', text:`Business advance **${r.no || r.title}**: ${baTotals(r).pending} payment${baTotals(r).pending === 1 ? '' : 's'} without an invoice.`, fix:['Open', "goTo('business-advance')"] })); } },
+  { id:'docs', area:'Documents', page:null, run(){ return state.documents.map(d => [d, docAlert(d)]).filter(([, a]) => a).slice(0, 8).map(([d, a]) => ({ key:'docs-' + d.id, sev:a.k === 'crit' ? 'crit' : 'warn', text:`${d.title || d.subject || 'A document'}: ${a.t}.`, fix:['Open', `openDocView('${d.id}')`] })); } },
+  { id:'tasks', area:'Tasks', page:'tasks', run(){ const n = state.tasks.filter(tkOverdue).length; return n ? [{ key:'tasks', sev:'warn', text:`${n} task${n === 1 ? ' is' : 's are'} overdue.`, fix:['Open Tasks', "goTo('tasks')"] }] : []; } },
+  { id:'clean', area:'Cleaning', page:'cleaning', run(){ const n = clPendingCount(); return n ? [{ key:'clean', sev:'info', text:`${n} location${n === 1 ? '' : 's'} haven't completed or attached last week's cleaning checklist.`, fix:['Open checklist', "goTo('cleaning')"] }] : []; } },
+];
+// saves a quick correction straight to the record
+async function anyaSaveField(col, id, patch, msg){
+  try{ await vehSave(col, Object.assign({ id }, patch)); anyaSay('Fixed ✓ ' + msg); try{ render(); }catch(e){} }
+  catch(e){ anyaSay('I could not save that: ' + (e && e.message ? e.message : e)); }
+  anyaDraw();
+}
+// runs every check this user can see, minus what they told Anya to ignore
+function anyaFindings(){
+  const d = anyaML.data(), mute = d.mute || {}, dis = d.dis || {}, out = [];
+  ANYA_CHECKS.forEach(c => { if(mute[c.id] || (c.page && !anyaCanSee(c.page))) return; try{ c.run().forEach(f => { if(!dis[f.key]) out.push(Object.assign({ check:c.id, area:c.area }, f)); }); }catch(e){} });
+  const rank = { crit:0, warn:1, info:2 }; return out.sort((a, b) => rank[a.sev] - rank[b.sev]);
+}
+function anyaAnalyze(o){
+  const all = anyaFindings(), errs = anyaTopErrors();
+  if(!all.length && !errs.length){ anyaSay('I checked petty cash, fuel, fleet, travel, business advances, documents, tasks and cleaning — **no mistakes found**. ✓', [], '', o); anyaDraw(); return; }
+  const n = s => all.filter(f => f.sev === s).length;
+  const icon = { crit:'●', warn:'▲', info:'◆' };
+  const shown = all.slice(0, 14);
+  const rows = shown.map(f => {
+    const fixN = f.fix ? anyaAct(typeof f.fix[1] === 'function' ? f.fix[1] : () => { anyaToggleSmall(); (0, eval)(f.fix[1]); }) : -1;
+    const disN = anyaAct(() => { const d = anyaML.data(); d.dis = d.dis || {}; d.dis[f.key] = 1; anyaML.save(); anyaSay('OK — I won\'t mention that one again.'); });
+    const muteN = anyaAct(() => { const d = anyaML.data(); d.mute = d.mute || {}; d.mute[f.check] = 1; anyaML.save(); anyaSay(`OK — I'll stop checking "${f.area}: ${f.check}". Say "check everything again" to undo.`); });
+    return `<li class="anya-find anya-${f.sev}"><span class="anya-sev">${icon[f.sev]}</span><div><div>${anyaFmt(f.text)}</div>${f.tip ? `<div class="anya-tip">💡 ${anyaFmt(f.tip)}</div>` : ''}<div class="anya-acts">${fixN >= 0 ? `<button type="button" onclick="anyaRun(${fixN})">${esc(f.fix[0])}</button>` : ''}<button type="button" class="anya-quiet" onclick="anyaRun(${disN})" title="Hide this one">Ignore</button><button type="button" class="anya-quiet" onclick="anyaRun(${muteN})" title="Stop this kind of check">Never check</button></div></div></li>`;
+  }).join('');
+  const errHtml = errs.length ? `<div class="anya-sub2">Mistakes you make most when saving</div><ul class="anya-list">${errs.map(e => `<li>"${esc(e.msg)}" — ${e.n}× <span>💡 ${esc(anyaErrTip(e.msg))}</span></li>`).join('')}</ul>` : '';
+  anyaSay(all.length ? `I checked the app and found **${all.length}** thing${all.length === 1 ? '' : 's'} to look at: ${[n('crit') && n('crit') + ' mistake' + (n('crit') === 1 ? '' : 's'), n('warn') && n('warn') + ' warning' + (n('warn') === 1 ? '' : 's'), n('info') && n('info') + ' reminder' + (n('info') === 1 ? '' : 's')].filter(Boolean).join(', ')}.${all.length > shown.length ? ` Showing the first ${shown.length}.` : ''}` : 'No problems in the records.', [], `<ul class="anya-finds">${rows}</ul>` + errHtml, o);
+  anyaDraw();
+}
+// form errors: every time a form refuses to save, Anya notes the reason, learns which ones repeat, and suggests a fix
+function anyaTopErrors(){ const e = anyaML.data().err || {}; return Object.entries(e).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([msg, n]) => ({ msg, n })); }
+function anyaErrTip(msg){
+  const m = String(msg).toLowerCase();
+  if(/hod/.test(m)) return 'I now fill in the HOD you used last on new petty cash requests. You can also say "hod <name>".';
+  if(/requester/.test(m)) return 'Say "requested by <name>" and I\'ll pick the requester.';
+  if(/category/.test(m)) return 'I set the category from the purpose as you type it.';
+  if(/quantity|qty/.test(m)) return 'Give an amount like "MVR 150" and I\'ll fill quantity 1 and the price.';
+  if(/price/.test(m)) return 'Tell me the amount ("MVR 85") and I\'ll fill the price.';
+  if(/item/.test(m)) return 'I copy the purpose into the first item when it\'s empty.';
+  if(/date/.test(m)) return 'Tell me the date ("tomorrow", "3 Nov") and I\'ll fill it.';
+  if(/vehicle/.test(m)) return 'Mention the plate number and I\'ll pick the vehicle.';
+  return 'Tell me the missing detail and I\'ll fill it in.';
+}
+function anyaNoteError(msg){
+  try{
+    if(!authUser || !msg) return; const d = anyaML.data(); d.err = d.err || {}; const k = String(msg).slice(0, 90); d.err[k] = (d.err[k] || 0) + 1; anyaML.save();
+    if(d.err[k] === 3 || d.err[k] === 6) anyaPeekMsg(`I've noticed "${k}" stops your saves often. 💡 ${anyaErrTip(k)}`);
+  }catch(e){}
+}
+// a short note beside Anya's button (used for tips and for what she pre-filled)
+function anyaPeekMsg(html, acts){
+  if(anya.open) { anyaSay(html.replace(/<[^>]+>/g, ''), acts || []); anyaDraw(); return; }
+  const old = document.getElementById('anya-peek'); if(old) old.remove();
+  const b = document.createElement('div'); b.id = 'anya-peek';
+  b.innerHTML = `<span class="anya-peek-k">&gt; ANYA:</span> ${anyaFmt(html)}${acts && acts.length ? `<div class="anya-acts">${acts.map(([l, f]) => `<button type="button" onclick="event.stopPropagation(); anyaRun(${anyaAct(f)}); this.closest('#anya-peek').remove()">${esc(l)}</button>`).join('')}</div>` : ''}`;
+  b.onclick = () => { b.remove(); anyaToggle(true); };
+  document.body.appendChild(b); setTimeout(() => { if(b.isConnected) b.remove(); }, 12000);
+}
+// the count of mistakes and warnings, shown as a badge on Anya's button
+let anyaBadgeAt = 0;
+function anyaBadge(){
+  if(Date.now() - anyaBadgeAt < 30000) return; anyaBadgeAt = Date.now();
+  const fab = document.getElementById('anya-fab'); if(!fab) return;
+  let n = 0; try{ n = anyaFindings().filter(f => f.sev !== 'info').length; }catch(e){}
+  let b = fab.querySelector('.anya-badge'); if(!n){ if(b) b.remove(); return; }
+  if(!b){ b = document.createElement('span'); b.className = 'anya-badge'; fab.appendChild(b); }
+  b.textContent = n > 99 ? '99+' : n; b.title = n + ' thing' + (n === 1 ? '' : 's') + ' Anya found to fix — ask "check for mistakes"';
+}
+
+/* ---------- Anya fills forms on her own: when a new form opens she drafts what she can from history ---------- */
+const anyaAutoOn = () => anyaML.data().auto !== false;
+function anyaGuessCategory(text){
+  const t = anyaNorm(text); if(!t) return '';
+  // first: what this office used before for similar purposes (learned from the records)
+  const words = t.split(' ').filter(w => w.length > 3 && !ANYA_STOP.has(w)); const votes = {};
+  if(words.length) state.pettyCash.forEach(r => { if(!r.category) return; const p = anyaNorm((r.purpose || '') + ' ' + pcItems(r).map(i => i.name).join(' ')); const hit = words.filter(w => p.includes(w)).length; if(hit) votes[r.category] = (votes[r.category] || 0) + hit; });
+  const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]; if(best && best[1] >= 2) return best[0];
+  const c = ANYA_CAT_WORDS.find(([rx]) => rx.test(t)); return c ? c[1] : (best ? best[0] : '');
+}
+function anyaMostCommon(list){ const c = {}; list.filter(Boolean).forEach(x => { c[x] = (c[x] || 0) + 1; }); const b = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; return b ? b[0] : ''; }
+function anyaAutoFill(kind){
+  if(!anyaAutoOn() || !authUser) return;
+  const f = document.getElementById('vform'); if(!f || f.dataset.anyaAuto) return; f.dataset.anyaAuto = '1';
+  const done = [], undo = [];
+  const set = (el, v, label) => { if(!el || el.value || v == null || v === '') return; const before = el.value; if(anyaPut(el, v)){ el.classList.remove('ring-amber-400'); el.classList.add('ring-violet-400'); done.push(label); undo.push(() => { el.value = before; el.dispatchEvent(new Event('change', { bubbles:true })); el.classList.remove('ring-2', 'ring-violet-400'); }); } };
+  const me = authUser.uid, mine = state.pettyCash.filter(r => r.createdByUid === me || r.requesterUid === me);
+  if(kind === 'pc'){
+    let hod = ''; try{ hod = localStorage.getItem(anyaML.key() + '_hod') || ''; }catch(e){}
+    set(f.elements.hodUid, hod || anyaMostCommon(mine.map(r => r.hodUid)), 'HOD');
+    // compose as the user types: category from the purpose, and the first item from the purpose
+    const pu = f.elements.purpose;
+    if(pu) pu.addEventListener('change', () => {
+      if(!anyaAutoOn()) return; const g = anyaGuessCategory(pu.value);
+      if(g && f.elements.category && !f.elements.category.value && anyaPut(f.elements.category, g)) anyaPeekMsg(`I set the expense category to **${g}** from the purpose.`, [['Undo', () => { f.elements.category.value = ''; }]]);
+      const nm = f.querySelector('.pc-row [data-f="name"]'); if(nm && !nm.value && pu.value.trim()) anyaPut(nm, pu.value.trim());
+    });
+  } else if(kind === 'travel'){
+    const myT = state.travelRequests.filter(t => t.createdByUid === me || t.requestedBy === authUser.name).sort((a, b) => String(b.formDate || '').localeCompare(String(a.formDate || '')));
+    const last = myT[0] || {};
+    set(f.elements.requestedBy, last.requestedBy || authUser.name, 'Requested by'); set(f.elements.requestedDesig, last.requestedDesig || (sdAll().find(p => p.name === authUser.name) || {}).designation, 'Designation');
+    set(f.elements.authorizedBy, last.authorizedBy, 'Authorized by'); set(f.elements.authorizedDesig, last.authorizedDesig, 'Authorizer\'s designation');
+    set(f.elements.budget, last.budget, 'Budgeted from');
+  } else if(kind === 'fuel'){
+    const veh = f.elements.vehicleId;
+    const fromHistory = () => {
+      const v = veh && veh.value; if(!v) return;
+      const hist = state.fuelRecords.filter(r => r.vehicleId === v).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      const ft = (f.elements.fuelType || {}).value, recent = state.fuelRecords.filter(r => (!ft || r.fuelType === ft) && vNum(r.rate) >= 8 && anyaDays(r.date) <= 60).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      const before = done.length;
+      set(f.elements.station, hist[0] && hist[0].station, 'Fuel station');
+      set(f.elements.rate, recent[0] && recent[0].rate, 'Rate per litre (latest)');
+      if(done.length > before) anyaPeekMsg(`For this vehicle I filled: **${done.slice(before).join(', ')}** (from its last fill-ups).`, [['Undo', () => undo.splice(0).forEach(u => u())]]);
+    };
+    if(veh) veh.addEventListener('change', fromHistory); fromHistory();
+    return;
+  }
+  if(done.length) anyaPeekMsg(`I pre-filled **${done.join(', ')}** from your past requests (purple outline). Change anything that's not right.`, [['Undo', () => undo.forEach(u => u())], ['Stop doing this', () => { anyaML.data().auto = false; anyaML.save(); anyaSay('OK — I won\'t pre-fill forms. Say "turn on auto fill" to bring it back.'); }]]);
+}
+function anyaOnModal(title){
+  const t = String(title || '').toLowerCase();
+  const kind = /^new petty cash request$/.test(t) ? 'pc' : /^new .*(travel|trip) request$/.test(t) ? 'travel' : /^add fuel entry$/.test(t) ? 'fuel' : '';
+  if(kind) setTimeout(() => anyaAutoFill(kind), 350);
+}
 function anyaExec(i, q, chosen){
   const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
   if(!anyaIntentOk(i)){ anyaSay('You don\'t have access to that with your role.'); anyaDraw(); return; }
@@ -8315,6 +8474,7 @@ function anyaExec(i, q, chosen){
   else if(k === 't'){ setColorScheme(v); anyaSay(`Switched to the **${ANYA_THEMES[v] || v}** theme.`, [], '', o); }
   else if(k === 'm'){ try{ localStorage.setItem(THEME_KEY, v); }catch(e){} applyTheme(v); anyaSay(`${v === 'dark' ? 'Dark' : 'Light'} mode is on.`, [], '', o); }
   else if(k === 's'){
+    if(v === 'check'){ anyaAnalyze(o); return; }
     if(v === 'pending'){ const items = anyaPages().filter(n => Number(n.badge) > 0);
       if(!items.length) anyaSay('All clear — nothing is waiting on any page right now. ✓', [], '', o);
       else anyaSay(`${items.length} page${items.length === 1 ? ' has' : 's have'} something waiting:`, items.slice(0, 4).map(n => ['Open ' + n.label, `goTo('${n.id}')`]), `<ul class="anya-list">${items.map(n => `<li><b>${esc(n.badge)}</b> · ${esc(n.label)}${n.hint ? ` <span>— ${esc(n.hint)}</span>` : ''}</li>`).join('')}</ul>`, o); }
@@ -8339,6 +8499,7 @@ function anyaRuleIntent(t){
   const how = /\b(how|steps|process|procedure|guide|explain|what is|whats|what are|walk me|teach|help me with|help with|show me how)\b/.test(t);
   if(/^(help|menu|commands|\?)$/.test(t) || /what can you do/.test(t)) return 's:help';
   if(/what (have )?you (learn|learned|learnt)|your (memory|shortcuts)|what do you know about me/.test(t)) return 's:learned';
+  if(/\b(check|analy[sz]e|audit|scan|review)\b.*\b(app|everything|records?|data|mistakes?|errors?|problems?|issues?|all)\b|\b(any|find|show)( the)? (mistakes?|errors?|problems?|issues?)\b|\bhealth ?check\b|^(mistakes|errors|problems|issues)\??$|what.{0,12}wrong/.test(t)) return 's:check';
   if(!how){
     if(/\b(cyberpunk|cp) ?(2027|2077)\b|\b2027\b/.test(t)) return 't:cp2027';
     if(/\btron ?hud\b|\bhud\b/.test(t)) return 't:tronhud';
@@ -8363,6 +8524,9 @@ async function anyaReply(q){
   for(let k = 0; k < 3; k++) t = t.replace(/^(please|pls|kindly|can you|could you|would you|will you|anya|hey|ok|okay)\s+/, '');
   const formOpen = !!document.getElementById('vform') && !document.getElementById('modal-overlay').classList.contains('hidden');
   if(/^(submit|save|process|send|file|done|go ahead|yes submit|confirm)( it| this| that| the form| the request| now)?( please| now)?$/.test(t)){ await anyaSubmitOpenForm(); return; }
+  if(/\b(turn|switch|stop|disable|don ?t)\b.*\b(auto ?fill|pre ?fill|filling)\b|\bstop (auto|pre) ?filling\b/.test(t) && !/\b(turn|switch) on\b|enable/.test(t)){ anyaML.data().auto = false; anyaML.save(); anyaSay('OK — I won\'t pre-fill forms by myself. Say "turn on auto fill" to bring it back.'); return; }
+  if(/\b(turn|switch) on\b.*\b(auto ?fill|pre ?fill)\b|\benable (auto ?fill|pre ?fill)\b|\bauto ?fill on\b/.test(t)){ anyaML.data().auto = true; anyaML.save(); anyaSay('Auto fill is on — when you open a new petty cash, travel or fuel form I\'ll draft what I can from your history.'); return; }
+  if(/\bcheck everything again\b|\bunmute\b|\bshow ignored\b/.test(t)){ const d = anyaML.data(); d.mute = {}; d.dis = {}; anyaML.save(); anyaBadgeAt = 0; anyaAnalyze(); return; }
   if(anyaDownload(t)) return;
   const pm = /^process (?:voucher |request )?([a-z0-9\/\- ]*\d[a-z0-9\/\- ]*)$/.exec(t); if(pm){ anyaProcessVoucher(pm[1].trim()); return; }
   if(formOpen && (/^(fill|set|put|use|change|make it)\b/.test(t) || !/^(new|create|start|raise|open|go|show|find|search|how|what|where|who|i (want|need))\b/.test(t)) && anyaFillOpen(t.replace(/^(fill( in| it)?( with)?|set|put|use|change|make it)\s+/, ''))) return;
@@ -10891,7 +11055,11 @@ async function wrPdf(id, btn){
 ===================================================================== */
 const BA_TYPES = ['Transferred', 'Received'], BA_INV = ['Pending', 'Received'];
 // expense categories: the columns of the finance "Business Advance - Statement" sample
-const BA_CATS = ['Small Tools and Equipment', 'Garbage Disposal', 'Postage & Delivery', 'Fuel', 'Refreshments', 'Printing and Office Supplies', 'Repair & Maintenance', 'Transportation & Logistics'];
+// the budget categories (the statement columns, in this order)
+const BA_CATS = ['Refreshments', 'Repair Work', 'Email & Software Subscriptions', 'App Purchase', 'Bank Charges', 'Staff Visa / Work Permit', 'Travel Arrangements', 'Printing & Office Supplies', 'Garbage Disposal', 'Fuel', 'Medical', 'Small tool / Furnitures and Fittings'];
+// entries saved with the earlier category names count under the matching budget category
+const BA_CAT_OLD = { 'Small Tools and Equipment':'Small tool / Furnitures and Fittings', 'Printing and Office Supplies':'Printing & Office Supplies', 'Repair & Maintenance':'Repair Work', 'Transportation & Logistics':'Travel Arrangements' };
+const baCat = c => BA_CAT_OLD[c] || c || '';
 const baById = id => (state.businessAdvances || []).find(r => r.id === id) || null;
 const baEntries = r => (r.entries || []).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.at || 0) - (b.at || 0));
 const baNet = e => e.type === 'Transferred' ? -vNum(e.amount) : vNum(e.amount);
@@ -10922,7 +11090,7 @@ function baDetail(r){
   const card = (l, v, cls) => `<div class="bg-white rounded-xl border border-slate-200 px-5 py-4"><div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">${l}</div><div class="text-xl font-extrabold mt-1 num ${cls || 'text-slate-900'}">${v}</div></div>`;
   const rows = es.map(e => { const k = (r.entries || []).indexOf(e);
     return `<tr class="${vTr} align-top ${ed ? 'cursor-pointer' : ''}" ${ed ? `onclick="openBaEntry('${r.id}', '${e.uid}')"` : ''}>${vTd(`<span class="whitespace-nowrap">${esc(baDate(e.date))}</span>`, { first:1 })}${vTd(esc(e.party || ''))}${vTd(vPill(e.type === 'Received' ? 'good' : '', esc(e.type)))}${vTd(vMoney(e.amount), { n:1 })}
-      ${vTd(`<div class="whitespace-pre-line text-[13px] min-w-[12rem]">${esc(e.details || '')}</div>${e.type === 'Transferred' && e.category ? `<div class="text-[11px] text-slate-400 mt-0.5">${esc(e.category)}</div>` : ''}`)}${vTd((e.invoice ? vPill(e.invoice === 'Pending' ? 'warn' : 'good', esc(e.invoice)) : '<span class="text-slate-300">—</span>') + (e.fileId ? `<div><button onclick="event.stopPropagation(); openBaInvoice('${r.id}', '${e.uid}')" class="text-[11.5px] font-semibold text-brand-600 hover:underline mt-1">📎 View</button></div>` : '') + (e.link ? `<div>${vLink(e.link, 'Link')}</div>` : ''))}
+      ${vTd(`<div class="whitespace-pre-line text-[13px] min-w-[12rem]">${esc(e.details || '')}</div>${e.type === 'Transferred' && e.category ? `<div class="text-[11px] text-slate-400 mt-0.5">${esc(baCat(e.category))}</div>` : ''}`)}${vTd((e.invoice ? vPill(e.invoice === 'Pending' ? 'warn' : 'good', esc(e.invoice)) : '<span class="text-slate-300">—</span>') + (e.fileId ? `<div><button onclick="event.stopPropagation(); openBaInvoice('${r.id}', '${e.uid}')" class="text-[11.5px] font-semibold text-brand-600 hover:underline mt-1">📎 View</button></div>` : '') + (e.link ? `<div>${vLink(e.link, 'Link')}</div>` : ''))}
       ${vTd(`<span class="${baNet(e) < 0 ? 'text-rose-600' : 'text-emerald-700'} font-semibold">${vMoney(baNet(e))}</span>`, { n:1 })}${vTd(`<span class="text-[12.5px]">${esc(e.remarks || '')}</span>`, { last:1 })}</tr>`; }).join('');
   return `<div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.baId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All business advances</button>
       <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${esc(r.title || 'Business Advance')} ${vPill(r.status === 'Settled' ? '' : 'acc', esc(r.status || 'Open'), 'align-middle')}</h1>
@@ -10965,7 +11133,7 @@ function openBaEntry(id, euid, type){
     vGrid(2, vS('Type', 'type', [['Transferred', 'Transferred — paid out'], ['Received', 'Received — money in']], d.type, null, { attrs:' onchange="baTypeChanged(this)"' }) + vF('Date', 'date', d.date || vToday(), 'date', { req:1 }) +
       `<div class="sm:col-span-2"><label class="${VEH_LBL}">Staff name / department (or supplier paid)${vReqStar}</label><input name="party" list="ba-parties" value="${esc(d.party || '')}" class="${VEH_FIELD}" placeholder="e.g. Sonee Hardware"></div>` +
       vF('Amount (MVR)', 'amount', d.amount == null ? '' : d.amount, 'number', { req:1, attrs:' step="0.01" min="0"' }) + vS('Invoice status', 'invoice', [['', '— Not needed'], ['Pending', 'Pending'], ['Received', 'Received']], d.invoice || '') +
-      vS('Expense category', 'category', [['', '— Not set (Other)']].concat(BA_CATS.map(c => [c, c])), d.category || '') + vF('Voucher no. (optional)', 'voucher', d.voucher || '', 'text') +
+      vS('Expense category', 'category', [['', '— Not set (Other)']].concat(BA_CATS.map(c => [c, c])), baCat(d.category)) + vF('Voucher no. (optional)', 'voucher', d.voucher || '', 'text') +
       vTa('Details', 'details', d.details || '', { rows:3, span:'sm:col-span-2', ph:'Items bought — one per line' }) + (AI_READ_URL ? `<div class="sm:col-span-2 -mt-2"><button type="button" onclick="aiTidyField(this, 'details')" class="text-xs font-semibold text-brand-600 hover:underline">Tidy the details with AI</button></div>` : '') + vF('Remarks (invoice no.)', 'remarks', d.remarks || '', 'text') + (d.link && vSafeUrl(d.link) ? `<div class="text-[11px] text-slate-400 self-end pb-3">Saved earlier as a link: ${vLink(d.link, 'open')}</div>` : '')) +
     `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm"><div class="flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baFileChosen(this, '${id}', '${euid || ''}')"><span id="ba-att-act">${e && e.fileId ? 'Replace invoice file' : '📎 Attach the invoice (PDF or photo)'}</span></label>
       <span id="ba-att-info" class="text-slate-500 text-xs">${e && e.fileId ? '📎 ' + esc(e.fileName || 'Invoice') + ' · ' + (e.filePages || 1) + ' page' + ((e.filePages || 1) === 1 ? '' : 's') + ' kept' : ''}</span>${e && e.fileId ? `<button type="button" id="ba-att-rm" onclick="baAttRemove()" class="text-xs text-slate-400 hover:text-rose-600">Remove file</button>` : ''}</div>
@@ -11147,7 +11315,7 @@ async function buildBaXlsx(r, mode){
   // the statement by expense category, laid out like the finance sample "Business Advance - Statement":
   // # · Supplier · Date · Voucher · Bill · Details · Department · one column per category · Total; the reconciliation and the cash count on the right; the sign-off below
   function baCatLayout(){
-    const pay = es.filter(e => e.type === 'Transferred'), other = pay.some(e => !BA_CATS.includes(e.category));
+    const pay = es.filter(e => e.type === 'Transferred'), other = pay.some(e => !BA_CATS.includes(baCat(e.category)));
     const cats = BA_CATS.concat(other ? ['Other'] : []), c0 = 8, cTot = c0 + cats.length, LT = colL(cTot), L1 = colL(c0), LL = colL(cTot - 1);
     const n0 = 5, slots = Math.max(23, pay.length), nl = n0 + slots - 1, TR = nl + 1;
     const R0 = cTot + 2, RA = colL(R0), RB = colL(R0 + 1), RC = colL(R0 + 2);       // the reconciliation: label, label, value
@@ -11163,10 +11331,10 @@ async function buildBaXlsx(r, mode){
       const det = String(e.details || ''), lines = Math.max(det.split('\n').length, Math.ceil(det.length / 40), Math.ceil(String(e.party || '').length / 22), 1); rowHt[n] = Math.max(24, lines * 15 + 6);
       S('B' + n, e.party || '', 5); const d = xlDate(e.date); if(d != null) N('C' + n, d, 14); else S('C' + n, baDate(e.date), 7);
       S('D' + n, e.voucher || '', 7); S('E' + n, e.remarks || '', 7); S('F' + n, det, 5); S('G' + n, e.department || r.department || '', 7);
-      N(colL(c0 + cats.indexOf(BA_CATS.includes(e.category) ? e.category : 'Other')) + n, e.amount, 6);
+      N(colL(c0 + cats.indexOf(BA_CATS.includes(baCat(e.category)) ? baCat(e.category) : 'Other')) + n, e.amount, 6);
     }
     S('F' + TR, 'Total', 18);
-    cats.forEach((c, k) => { const L = colL(c0 + k); F(L + TR, `SUM(${L}${n0}:${L}${nl})`, pcRound(pay.filter(e => (BA_CATS.includes(e.category) ? e.category : 'Other') === c).reduce((s, e) => s + vNum(e.amount), 0)), 19); });
+    cats.forEach((c, k) => { const L = colL(c0 + k); F(L + TR, `SUM(${L}${n0}:${L}${nl})`, pcRound(pay.filter(e => (BA_CATS.includes(baCat(e.category)) ? baCat(e.category) : 'Other') === c).reduce((s, e) => s + vNum(e.amount), 0)), 19); });
     F(LT + TR, `SUM(${LT}${n0}:${LT}${nl})`, spent, 19);
     const pendAmt = pcRound(pay.filter(e => e.invoice === 'Pending').reduce((s, e) => s + vNum(e.amount), 0));
     S(RA + '3', 'BUSINESS ADVANCE RECONCILIATION STATEMENT', 9); mg(RA + '3', RC + '3', 9);

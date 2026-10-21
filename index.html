@@ -420,6 +420,11 @@ function refreshAppearanceModal(){
   #anya-fab.anya-talking .anya-ring{ animation:anyaTalk .35s ease-in-out infinite alternate; }
   @keyframes anyaPulse{ 0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb,var(--an-a) 55%,transparent); } 50%{ box-shadow:0 0 0 9px color-mix(in srgb,var(--an-a) 0%,transparent); } }
   @keyframes anyaTalk{ to{ transform:scale(1.07); } }
+  .anya-vset{ margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+  .anya-vrow{ display:flex; align-items:center; gap:8px; font-size:.92em; } .anya-vcol{ flex-direction:column; align-items:stretch; gap:4px; }
+  .anya-vset select{ width:100%; padding:5px 6px; background:var(--an-bg2); color:var(--an-tx); border:1px solid color-mix(in srgb,var(--an-b) 45%,transparent); font:inherit; }
+  html[data-anya="modern"] .anya-vset select{ border-radius:8px; }
+  .anya-vset input[type=range]{ width:100%; accent-color:var(--an-a); }
   #toast-wrap{ bottom:92px !important; }
   @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ right:46px; bottom:-4px; font-size:9.5px; padding:1px 7px; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
   @media print{ #anya-fab,#anya-panel,#anya-peek{ display:none !important; } }
@@ -1905,7 +1910,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.265';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.266';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7921,7 +7926,7 @@ function anyaMount(){
   const p = document.createElement('div');
   p.id = 'anya-panel'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Anya assistant'); p.hidden = true;
   p.innerHTML = `<div class="anya-head">${ANYA_RING(40)}<div class="anya-id"><div class="anya-name">ANYA</div><div class="anya-sub"><i></i>online · learning</div></div>
-      <button type="button" class="anya-hbtn" id="anya-spk" onclick="anyaToggleSpeak()">🔈</button><button type="button" class="anya-hbtn" title="What I've learned" onclick="anyaExec('s:learned','')">◈</button><button type="button" class="anya-hbtn" title="New conversation (the old one is kept)" onclick="anyaClear()">↺</button><button type="button" class="anya-hbtn" title="Close" onclick="anyaToggle(false)">✕</button></div>
+      <button type="button" class="anya-hbtn" id="anya-spk" onclick="if(anya._spkLong){ anya._spkLong = false; return; } anyaToggleSpeak()" oncontextmenu="event.preventDefault(); anyaVoiceSettings()" onpointerdown="anya._spkT = setTimeout(() => { anya._spkLong = true; anyaVoiceSettings(); }, 650)" onpointerup="clearTimeout(anya._spkT)" onpointerleave="clearTimeout(anya._spkT)">🔈</button><button type="button" class="anya-hbtn" title="What I've learned" onclick="anyaExec('s:learned','')">◈</button><button type="button" class="anya-hbtn" title="New conversation (the old one is kept)" onclick="anyaClear()">↺</button><button type="button" class="anya-hbtn" title="Close" onclick="anyaToggle(false)">✕</button></div>
     <div id="anya-log" class="anya-log" aria-live="polite"></div>
     <div id="anya-chips" class="anya-chips"></div>
     <form class="anya-cmd" onsubmit="event.preventDefault(); anyaSend()"><input id="anya-in" autocomplete="off" aria-label="Message Anya" placeholder="Ask or tell me what to do…" maxlength="400"><button type="button" id="anya-mic" class="anya-mic" onpointerdown="anyaMicDown()" onpointerup="anyaMicUp(event)" onpointerleave="if(anya._micT){ clearTimeout(anya._micT); anya._micT = null; }">🎤</button><button type="submit" title="Send">➤</button></form>`;
@@ -7988,6 +7993,7 @@ function anyaAct(fn){ anya.acts.push(fn); return anya.acts.length - 1; }
 // acts: [label, fn | 'js string']; opts.intent / opts.q let the user rate the answer
 function anyaSay(text, acts, extra, opts){
   const o = opts || {};
+  try{ if(!o.silent && anyaVoiceCfg().speak) anyaSpeak(anyaSpeechText(text, extra)); }catch(e){}
   anya.log.push({ who:'anya', at:Date.now() + Math.random(), text, extra:extra || '', intent:o.intent || '', q:o.q || '', fb:'',
     acts:(acts || []).map(([l, f]) => ({ label:l, n:anyaAct(() => { if(o.intent && o.q) anyaML.learn(o.q, o.intent, .5); return typeof f === 'function' ? f() : (anyaToggleSmall(), (0, eval)(f)); }) })) });
 }
@@ -8028,12 +8034,12 @@ async function anyaSend(text){
   const inp = document.getElementById('anya-in');
   const q = String(text != null ? text : (inp ? inp.value : '')).trim(); if(!q || anya.busy) return;
   if(inp) inp.value = '';
+  try{ if(anyaCanSpeak()) speechSynthesis.cancel(); }catch(e){}
   anya.log.push({ who:'me', at:Date.now() + Math.random(), text:q }); anya.busy = true; anyaDraw();
   await new Promise(r => setTimeout(r, 380));
   const from = anya.log.length;
   try{ await anyaReply(q); }catch(e){ anyaSay('Sorry, something went wrong: ' + (e && e.message ? e.message : e)); }
   anya.busy = false; anyaDraw();
-  try{ const said = anya.log.slice(from).filter(m => m.who === 'anya').map(m => m.text).slice(0, 2).join('. '); if(said) anyaSpeak(said); }catch(e){}
 }
 function anyaGuide(g, o){
   const extra = `<ol class="anya-steps">${g.steps.map(s => `<li>${anyaFmt(s)}</li>`).join('')}</ol>`;
@@ -8527,6 +8533,7 @@ function anyaNoteError(msg){
 function anyaPeekMsg(html, acts){
   if(anya.open) { anyaSay(html.replace(/<[^>]+>/g, ''), acts || []); anyaDraw(); return; }
   const old = document.getElementById('anya-peek'); if(old) old.remove();
+  try{ if(anyaVoiceCfg().speak) anyaSpeak(anyaSpeechText(html)); }catch(e){}
   const b = document.createElement('div'); b.id = 'anya-peek';
   b.innerHTML = `<span class="anya-peek-k">&gt; ANYA:</span> ${anyaFmt(html)}${acts && acts.length ? `<div class="anya-acts">${acts.map(([l, f]) => `<button type="button" onclick="event.stopPropagation(); anyaRun(${anyaAct(f)}); this.closest('#anya-peek').remove()">${esc(l)}</button>`).join('')}</div>` : ''}`;
   b.onclick = () => { b.remove(); anyaToggle(true); };
@@ -8791,29 +8798,54 @@ function anyaPageNudge(tab){
 const anyaVoiceCfg = () => { const d = anyaML.data(); d.voice = d.voice || { speak:false, hands:false }; return d.voice; };
 const anyaCanSpeak = () => 'speechSynthesis' in window;
 const anyaRecCls = () => window.SpeechRecognition || window.webkitSpeechRecognition || null;
+function anyaVoices(){ try{ return speechSynthesis.getVoices() || []; }catch(e){ return []; } }
 function anyaPickVoice(){
-  const vs = speechSynthesis.getVoices(); if(!vs.length) return null;
+  const vs = anyaVoices(); if(!vs.length) return null; const c = anyaVoiceCfg();
+  if(c.voiceName){ const v = vs.find(x => x.name === c.voiceName); if(v) return v; }
   const en = vs.filter(v => /^en/i.test(v.lang));
   return en.find(v => /(female|samantha|zira|aria|jenny|libby|sonia|natasha|google uk english female|serena|karen|moira|tessa)/i.test(v.name)) || en.find(v => /en-GB/i.test(v.lang)) || en[0] || vs[0];
 }
-function anyaSpeak(text){
+const anyaSpeechText = (text, extra) => (String(text || '') + '. ' + String(extra || '').replace(/<button[^>]*>[\s\S]*?<\/button>/g, ' ').replace(/<(li|div|p|br)[^>]*>/g, '. ').replace(/<[^>]+>/g, ' '))
+  .replace(/&amp;/g, '&').replace(/&#39;|&quot;/g, "'").replace(/&[a-z]+;/g, ' ').replace(/\*\*/g, '').replace(/[\u{1F300}-\u{1FAFF}☀-➿✦★▲▼●◆⚠✓✕➤↺◈▸💡]/gu, '').replace(/MVR\s?([\d,]+)(?:\.00)?\b/g, '$1 rufiyaa').replace(/MVR\s?/g, '').replace(/:\s*\./g, ':').replace(/\s+·\s+/g, ', ').replace(/(\.\s*){2,}/g, '. ').replace(/\s+/g, ' ').replace(/^\.\s*|\s*\.\s*$/g, '').trim();
+// every reply is read out (one after another) while the voice is on
+function anyaSpeak(text, now){
   if(!anyaCanSpeak() || !anyaVoiceCfg().speak) return;
-  const t = String(text || '').replace(/<[^>]+>/g, ' ').replace(/\*\*/g, '').replace(/[\u{1F300}-\u{1FAFF}☀-➿✦★▲▼●◆⚠✓✕➤↺◈]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 420);
-  if(!t) return;
-  try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t), v = anyaPickVoice(); if(v) u.voice = v; u.rate = 1.03; u.pitch = 1.08;
-    const fab = document.getElementById('anya-fab'); u.onstart = () => fab && fab.classList.add('anya-talking'); u.onend = u.onerror = () => fab && fab.classList.remove('anya-talking');
+  const c = anyaVoiceCfg(), t = String(text || '').slice(0, 700); if(!t) return;
+  try{ if(now) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(t), v = anyaPickVoice(); if(v){ u.voice = v; u.lang = v.lang; }
+    u.rate = c.rate || 1.03; u.pitch = c.pitch == null ? 1.08 : c.pitch; u.volume = c.volume == null ? 1 : c.volume;
+    const fab = document.getElementById('anya-fab'); u.onstart = () => fab && fab.classList.add('anya-talking'); u.onend = u.onerror = () => { if(fab && !speechSynthesis.speaking) fab.classList.remove('anya-talking'); };
     speechSynthesis.speak(u); }catch(e){}
 }
 function anyaToggleSpeak(){
   if(!anyaCanSpeak()){ anyaSay('This browser can\'t speak. Try Chrome, Edge or Safari.'); anyaDraw(); return; }
   const c = anyaVoiceCfg(); c.speak = !c.speak; anyaML.save(); anyaVoiceUi();
-  anyaSay(c.speak ? 'Voice on — I\'ll read my answers out loud. 🔊' : 'Voice off — I\'ll stay quiet.'); anyaDraw();
-  if(c.speak) anyaSpeak('Voice on. I will read my answers out loud.');
+  if(!c.speak) try{ speechSynthesis.cancel(); }catch(e){}
+  anyaSay(c.speak ? 'Voice on — I\'ll read every reply out loud.' : 'Voice off — I\'ll stay quiet.', [['Change my voice', () => anyaVoiceSettings()]]); anyaDraw();
 }
+// choose the voice, speed and pitch (the voices are the ones installed on this device)
+const ANYA_VOICE_PRESETS = { 'Natural':{ rate:1.0, pitch:1.0 }, 'Friendly':{ rate:1.03, pitch:1.12 }, 'Calm':{ rate:0.9, pitch:0.95 }, 'Bright':{ rate:1.12, pitch:1.3 }, 'Robotic':{ rate:0.95, pitch:0.4 } };
+function anyaVoiceSettings(){
+  if(!anyaCanSpeak()){ anyaSay('This browser can\'t speak, so there are no voices to choose from. Try Chrome, Edge or Safari.'); anyaDraw(); return; }
+  const c = anyaVoiceCfg(), vs = anyaVoices(), cur = anyaPickVoice();
+  const en = vs.filter(v => /^en/i.test(v.lang)), other = vs.filter(v => !/^en/i.test(v.lang));
+  const opt = v => `<option value="${esc(v.name)}" ${cur && cur.name === v.name ? 'selected' : ''}>${esc(v.name.replace(/^(Microsoft|Google)\s+/, ''))} (${esc(v.lang)})</option>`;
+  const extra = `<div class="anya-vset">
+    <label class="anya-vrow"><input type="checkbox" ${c.speak ? 'checked' : ''} onchange="if(this.checked !== !!anyaVoiceCfg().speak) anyaToggleSpeak()"> Read every reply out loud</label>
+    <label class="anya-vrow anya-vcol">Voice${vs.length ? '' : ' (loading the device voices…)'}<select id="anya-vsel" onchange="anyaSetVoice('voiceName', this.value)">${en.map(opt).join('')}${other.length ? `<optgroup label="Other languages">${other.map(opt).join('')}</optgroup>` : ''}</select></label>
+    <label class="anya-vrow anya-vcol">Speed <span id="anya-vr">${(c.rate || 1.03).toFixed(2)}×</span><input type="range" min="0.6" max="1.6" step="0.05" value="${c.rate || 1.03}" oninput="document.getElementById('anya-vr').textContent = (+this.value).toFixed(2) + '×'" onchange="anyaSetVoice('rate', +this.value)"></label>
+    <label class="anya-vrow anya-vcol">Pitch <span id="anya-vp">${(c.pitch == null ? 1.08 : c.pitch).toFixed(2)}</span><input type="range" min="0.3" max="1.8" step="0.05" value="${c.pitch == null ? 1.08 : c.pitch}" oninput="document.getElementById('anya-vp').textContent = (+this.value).toFixed(2)" onchange="anyaSetVoice('pitch', +this.value)"></label>
+    <div class="anya-acts">${Object.keys(ANYA_VOICE_PRESETS).map(k => `<button type="button" onclick="anyaVoicePreset('${k}')">${k}</button>`).join('')}<button type="button" onclick="anyaVoiceTest()">▶ Test</button></div></div>`;
+  anyaSay(`**My voice** — pick one of the ${vs.length || ''} voices on this device, then set the speed and pitch. Changes save straight away (for this device's voices).`, [], extra, { silent:true }); anyaDraw();
+}
+function anyaSetVoice(k, v){ const c = anyaVoiceCfg(); c[k] = v; anyaML.save(); anyaVoiceTest(); }
+function anyaVoicePreset(name){ const p = ANYA_VOICE_PRESETS[name], c = anyaVoiceCfg(); Object.assign(c, p); anyaML.save(); try{ const vr = document.getElementById('anya-vr'), vp = document.getElementById('anya-vp'); if(vr) vr.textContent = p.rate.toFixed(2) + '×'; if(vp) vp.textContent = p.pitch.toFixed(2); document.querySelectorAll('.anya-vset input[type=range]').forEach((el, i) => { el.value = i === 0 ? p.rate : p.pitch; }); }catch(e){} anyaVoiceTest(); }
+function anyaVoiceTest(){ const c = anyaVoiceCfg(), was = c.speak; c.speak = true; anyaSpeak(`Hi${anyaFirst() ? ' ' + anyaFirst() : ''}, this is how I sound now.`, true); c.speak = was; }
+try{ if('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { const sel = document.getElementById('anya-vsel'); if(sel && sel.options.length < 2){ const m = anya.log.slice().reverse().find(x => /My voice/.test(x.text || '')); if(m){ anya.log.splice(anya.log.indexOf(m), 1); anyaVoiceSettings(); } } }; }catch(e){}
 let anyaRec = null, anyaRecMode = '', anyaRecWant = false;
 function anyaVoiceUi(){
   const c = anyaVoiceCfg(), sb = document.getElementById('anya-spk'), mb = document.getElementById('anya-mic'), fab = document.getElementById('anya-fab');
-  if(sb){ sb.textContent = c.speak ? '🔊' : '🔈'; sb.title = c.speak ? 'Voice on — tap to mute' : 'Voice off — tap to let Anya speak'; sb.classList.toggle('anya-hon', !!c.speak); }
+  if(sb){ sb.textContent = c.speak ? '🔊' : '🔈'; sb.title = (c.speak ? 'Voice on — tap to mute' : 'Voice off — tap to let Anya speak') + ' · hold (or right-click) to change the voice'; sb.classList.toggle('anya-hon', !!c.speak); }
   if(mb){ mb.classList.toggle('anya-rec', anyaRecMode === 'one'); mb.title = anyaRecCls() ? (anyaRecMode === 'one' ? 'Listening… tap to stop' : 'Talk to Anya (hold for hands-free "Hey Anya")') : 'Voice input needs Chrome, Edge or Safari'; }
   if(fab){ fab.classList.toggle('anya-listening', !!anyaRecMode); fab.classList.toggle('anya-hands', anyaRecMode === 'hands'); }
 }
@@ -8881,7 +8913,7 @@ function anyaExec(i, q, chosen){
     else if(v === 'trno'){ let no = ''; try{ no = trNextFormNo(); }catch(e){} anyaSay(no ? `The next travel request number is **${no}**.` : 'I could not work out the next number.', anyaCanSee('travel-foreign') ? [['+ New travel request', "goTo('travel-foreign'); openTravelForm('', 'foreign')"]] : [], '', o); }
     else if(v === 'me'){ anyaSay(`You're signed in as **${(authUser && (authUser.name || authUser.email)) || 'unknown'}** (${(authUser && authUser.role) || 'user'}).`); }
     else if(v === 'help'){
-      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
+      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — say \"change your voice\" (or hold 🔈) to pick my voice; tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
     }
     else if(v === 'learned'){
       const d = anyaML.data(), taught = d.ex.filter(e => e.w >= 2 && anyaIntentOk(e.i)).sort((a, b) => b.w - a.w), mine = anyaML.top(ui.tab, 6);
@@ -8932,6 +8964,7 @@ async function anyaReply(q){
   if(/\b(turn|switch) on\b.*\b(auto ?fill|pre ?fill)\b|\benable (auto ?fill|pre ?fill)\b|\bauto ?fill on\b/.test(t)){ anyaML.data().auto = true; anyaML.save(); anyaSay('Auto fill is on — when you open a new petty cash, travel or fuel form I\'ll draft what I can from your history.'); return; }
   if(/\bcheck everything again\b|\bunmute\b|\bshow ignored\b/.test(t)){ const d = anyaML.data(); d.mute = {}; d.dis = {}; anyaML.save(); anyaBadgeAt = 0; anyaAnalyze(); return; }
   if(/\b(compose|write|draft|prepare|generate|create|make|type|do)\b.{0,40}\bletter\b|^(an? )?(resignation|leave|appreciation|reminder|termination|complaint|invitation|apology|quotation request|request) letter\b|\bletter of (resignation|appreciation|apology|invitation)\b/.test(t)){ await anyaComposeLetter(q); return; }
+  if(/\b(change|choose|pick|set|different|new|switch)\b.{0,15}\bvoice\b|\bvoice (settings|options|setup)\b|\bsound (different|like)\b/.test(t)){ anyaVoiceSettings(); return; }
   if(/\b(voice|speak|talk|read (it|answers|out))\b.*\b(on|out loud|aloud|to me)\b|^(speak|talk to me|voice on|unmute)$/.test(t) && !/\boff\b/.test(t)){ if(!anyaVoiceCfg().speak) anyaToggleSpeak(); else { anyaSay('My voice is already on. 🔊'); } return; }
   if(/\b(voice|speaking|talking) off\b|^(mute|be quiet|quiet|stop (speaking|talking)|shush)$/.test(t)){ if(anyaVoiceCfg().speak) anyaToggleSpeak(); else anyaSay('I\'m already quiet.'); return; }
   if(/\b(hands? ?free|always listen|listen for (hey )?anya|wake word)\b/.test(t) && !/\b(off|stop)\b/.test(t)){ anyaSetHands(true); return; }

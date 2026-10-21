@@ -126,7 +126,12 @@ function applyColorScheme(id){
   root.setAttribute('data-color-scheme', scheme.id);
   const meta = document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', 'rgb(' + vars['--chrome'].split(' ').join(',') + ')');
-  fitAppTitle();
+  fitAppTitle(); anyaStyleSync();
+}
+// which look Anya and her chat use: the ✦ themes have their own (in dark mode); every other scheme gets the soft 'modern' look in its accent colour
+function anyaStyleSync(){
+  const h = document.documentElement, dark = h.getAttribute('data-theme') === 'dark', sc = h.getAttribute('data-color-scheme');
+  h.setAttribute('data-anya', dark && ({ tron:'hud', cyberpunk:'cyber', tronhud:'grid', cp2027:'red' })[sc] || 'modern');
 }
 // Shrink the sidebar title until it fits beside the header buttons (wide fonts like Orbitron would overlap them)
 function fitAppTitle(){
@@ -335,6 +340,67 @@ function refreshAppearanceModal(){
   html[data-color-scheme="cp2027"][data-theme="dark"] .anya-name{ font-family:'Rajdhani',sans-serif; font-size:22px; letter-spacing:.12em; color:var(--an-a); }
   html[data-color-scheme="cp2027"][data-theme="dark"] .anya-msg{ border:1px solid color-mix(in srgb,var(--an-a) 45%,transparent); border-left:3px solid var(--an-a); background:rgba(60,8,12,.45); }
   html[data-color-scheme="cp2027"][data-theme="dark"] .anya-cmd button,html[data-color-scheme="cp2027"][data-theme="dark"] .anya-acts button:first-child{ background:var(--an-a); color:#1a0508; }
+  /* ---------- Anya per theme: face (which drawing shows), and chat style ---------- */
+  html[data-theme="dark"]:not([data-anya="hud"]):not([data-anya="cyber"]):not([data-anya="grid"]):not([data-anya="red"]){ --an-a:rgb(var(--brand-400)); --an-b:rgb(var(--brand-300)); --an-c:rgb(var(--brand-200)); --an-bg:rgb(var(--chrome)); --an-bg2:rgb(var(--chrome-hover)); --an-tx:#e2e8f0; --an-me:#ffffff; --an-mut:#94a3b8; --an-ink:#0f172a; --an-font:'Inter',system-ui,sans-serif; --an-fs:13.5px; --an-glow:.5; --an-scan:transparent; --an-core:rgba(255,255,255,.04); }
+  html:not([data-theme="dark"]){ --an-c:rgb(var(--brand-300)); --an-bg2:#f1f5f9; --an-glow:.35; }
+  .anya-ring .av{ display:none; }
+  html[data-anya="modern"] .anya-ring .av-orb, html:not([data-anya]) .anya-ring .av-orb, html[data-anya="hud"] .anya-ring .av-ring, html[data-anya="cyber"] .anya-ring .av-hex, html[data-anya="red"] .anya-ring .av-tri, html[data-anya="grid"] .anya-ring .av-sq{ display:inline; }
+  .anya-ring .ar-c{ stroke:var(--an-c); } .anya-ring .ar-fill2{ fill:var(--an-c); } .anya-ring .ar-s1{ stop-color:var(--an-c); } .anya-ring .ar-s2{ stop-color:var(--an-a); }
+  /* the normal colour schemes keep Anya simple: a plain accent-coloured circle with a white A, no motion or glow */
+  .anya-ring .ar-solid{ fill:var(--an-a); } .anya-ring .ar-txt-on{ fill:#fff; animation:none; font-family:'Inter',system-ui,sans-serif; font-weight:700; }
+  html[data-anya="modern"] #anya-fab{ background:transparent; box-shadow:0 6px 16px rgba(0,0,0,.22); width:56px; height:56px; }
+  html[data-anya="modern"] #anya-fab svg{ width:56px; height:56px; }
+  html[data-anya="modern"] #anya-fab:hover{ transform:translateY(-2px); }
+  html[data-anya="modern"] #anya-fab.anya-on{ box-shadow:0 0 0 3px color-mix(in srgb,var(--an-a) 30%,transparent),0 6px 16px rgba(0,0,0,.22); }
+  html[data-anya="modern"] #anya-fab .anya-tag{ display:none; }
+  html[data-anya="modern"] .anya-name{ font-family:'Inter',system-ui,sans-serif; letter-spacing:.04em; font-size:15px; font-weight:700; color:var(--an-tx); text-shadow:none; }
+  html[data-anya="modern"] .anya-sub i{ animation:none; box-shadow:none; }
+  html[data-anya="modern"] #anya-panel{ animation:none; background:var(--an-bg); }
+  html[data-anya="modern"] #anya-peek{ box-shadow:0 8px 24px rgba(0,0,0,.18); border-color:color-mix(in srgb,var(--an-a) 30%,transparent); font-family:'Inter',system-ui,sans-serif; }
+  .anya-ring .al3s{ animation:anyaSpin 6s steps(12) infinite; } .anya-ring .al5s{ animation:anyaSpin 3s steps(6) infinite reverse; }
+  .anya-ring .ar-scan{ animation:anyaScan 2.4s ease-in-out infinite alternate; transform-box:view-box; } .anya-ring .ar-blink{ animation:anyaBlink 1.6s steps(2) infinite; }
+  .anya-ring .ar-glitch1{ fill:var(--an-b); opacity:.7; animation:anyaGl1 2.8s steps(1) infinite; } .anya-ring .ar-glitch2{ fill:var(--an-c); opacity:.6; animation:anyaGl2 2.8s steps(1) infinite; }
+  @keyframes anyaScan{ to{ transform:translateY(73px); } }
+  @keyframes anyaGl1{ 0%,100%{ transform:none; } 30%{ transform:translate(-2px,1px); } 34%{ transform:none; } 70%{ transform:translate(1px,-1px); } 72%{ transform:none; } }
+  @keyframes anyaGl2{ 0%,100%{ transform:none; } 31%{ transform:translate(2px,-1px); } 35%{ transform:none; } 71%{ transform:translate(-1px,1px); } 73%{ transform:none; } }
+  html[data-anya="grid"] #anya-fab{ border-radius:5px; } html[data-anya="red"] #anya-fab{ border-radius:0; clip-path:polygon(0 0,100% 0,100% 78%,78% 100%,0 100%); }
+  html[data-anya="cyber"] #anya-fab{ border-radius:0; background:transparent; box-shadow:none; filter:drop-shadow(0 0 10px color-mix(in srgb,var(--an-a) 60%,transparent)); }
+  /* modern (the normal colour schemes): soft rounded chat bubbles in the accent colour */
+  html[data-anya="modern"] #anya-panel{ clip-path:none; border-radius:18px; background:var(--an-bg); border:1px solid color-mix(in srgb,var(--an-a) 22%,transparent); box-shadow:0 22px 50px rgba(0,0,0,.28); }
+  html[data-anya="modern"] .anya-head{ border-radius:18px 18px 0 0; border-bottom-color:color-mix(in srgb,var(--an-a) 18%,transparent); }
+  html[data-anya="modern"] .anya-hbtn{ border-radius:10px; color:var(--an-a); border-color:color-mix(in srgb,var(--an-a) 25%,transparent); }
+  html[data-anya="modern"] .anya-msg{ border-left:0; border-radius:4px 16px 16px 16px; background:var(--an-bg2); padding:9px 12px; }
+  html[data-anya="modern"] .anya-me{ border-right:0; border-radius:16px 4px 16px 16px; background:var(--an-a); color:#fff; text-align:left; }
+  html[data-anya="modern"] .anya-me::before{ content:none; }
+  html[data-anya="modern"] .anya-acts button, html[data-anya="modern"] .anya-topics button, html[data-anya="modern"] .anya-chips button{ clip-path:none; border-radius:999px; padding:4px 12px; }
+  html[data-anya="modern"] .anya-cmd{ clip-path:none; border-radius:999px; border-color:color-mix(in srgb,var(--an-a) 35%,transparent); background:var(--an-bg2); padding:5px 5px 5px 14px; }
+  html[data-anya="modern"] .anya-cmd button{ clip-path:none; border-radius:50%; width:32px; height:32px; color:#fff; }
+  html[data-anya="modern"] .anya-fb button{ border-radius:999px; }
+  html[data-anya="modern"] #anya-fab .anya-tag{ clip-path:none; border-radius:999px; padding:1px 9px; }
+  html[data-anya="modern"] #anya-peek{ clip-path:none; border-radius:14px 14px 4px 14px; }
+  /* cyberpunk: slanted buttons, magenta bars with a cyan echo, glitching name */
+  html[data-anya="cyber"] .anya-name{ color:var(--an-c); animation:anyaNameGl 3s steps(1) infinite; }
+  @keyframes anyaNameGl{ 0%,100%{ text-shadow:2px 0 var(--an-a),-2px 0 var(--an-b); } 40%{ text-shadow:-3px 0 var(--an-a),3px 0 var(--an-b); } 42%{ text-shadow:2px 0 var(--an-a),-2px 0 var(--an-b); } }
+  html[data-anya="cyber"] .anya-msg{ border-left:3px solid var(--an-a); box-shadow:-5px 0 0 -2px var(--an-b); background:linear-gradient(90deg,color-mix(in srgb,var(--an-a) 14%,transparent),transparent); }
+  html[data-anya="cyber"] .anya-me{ border-right:3px solid var(--an-c); background:linear-gradient(270deg,color-mix(in srgb,var(--an-b) 16%,transparent),transparent); }
+  html[data-anya="cyber"] .anya-me::before{ content:'// '; color:var(--an-c); }
+  html[data-anya="cyber"] .anya-acts button, html[data-anya="cyber"] .anya-topics button, html[data-anya="cyber"] .anya-chips button{ transform:skewX(-12deg); clip-path:none; }
+  html[data-anya="cyber"] .anya-cmd{ border-color:var(--an-c); background:color-mix(in srgb,var(--an-c) 6%,transparent); } html[data-anya="cyber"] .anya-cmd button{ background:var(--an-c); }
+  html[data-anya="cyber"] #anya-panel{ border-color:var(--an-a); box-shadow:0 0 0 1px color-mix(in srgb,var(--an-b) 40%,transparent) inset,0 0 30px color-mix(in srgb,var(--an-a) 35%,transparent),0 18px 40px rgba(0,0,0,.5); }
+  /* Tron HUD: square steel tiles with label tabs */
+  html[data-anya="grid"] #anya-panel, html[data-anya="grid"] .anya-cmd, html[data-anya="grid"] .anya-acts button, html[data-anya="grid"] .anya-topics button, html[data-anya="grid"] .anya-chips button, html[data-anya="grid"] .anya-cmd button{ clip-path:none; border-radius:2px; }
+  html[data-anya="grid"] .anya-msg, html[data-anya="grid"] .anya-me{ padding-top:20px; position:relative; border-radius:2px; }
+  html[data-anya="grid"] .anya-msg::before, html[data-anya="grid"] .anya-me::before{ content:'ANYA'; position:absolute; top:0; left:0; padding:0 8px; font:700 10px/16px 'Share Tech Mono',monospace; letter-spacing:.14em; background:var(--an-a); color:var(--an-ink); }
+  html[data-anya="grid"] .anya-me::before{ content:'YOU'; left:auto; right:0; background:var(--an-b); }
+  html[data-anya="grid"] .anya-me{ background:var(--an-bg2); border-right:3px solid var(--an-b); }
+  html[data-anya="grid"] .anya-busy::before{ content:none; } html[data-anya="grid"] .anya-busy{ padding-top:8px; }
+  /* Cyberpunk 2027: red message tiles — yours solid red, Anya's outlined — with clipped corners and name labels */
+  html[data-anya="red"] .anya-msg, html[data-anya="red"] .anya-me{ position:relative; padding-top:20px; clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%); }
+  html[data-anya="red"] .anya-msg::before{ content:'ANYA'; position:absolute; top:3px; right:10px; font:600 12px 'Rajdhani',sans-serif; color:var(--an-a); }
+  html[data-anya="red"] .anya-me{ background:var(--an-a); color:#1a0508; border-right:0; text-align:left; }
+  html[data-anya="red"] .anya-me::before{ content:'YOU'; position:absolute; top:3px; right:10px; font:700 12px 'Rajdhani',sans-serif; color:#1a0508; }
+  html[data-anya="red"] .anya-busy::before{ content:none; } html[data-anya="red"] .anya-busy{ padding-top:8px; }
+  html[data-anya="red"] .anya-acts button, html[data-anya="red"] .anya-topics button, html[data-anya="red"] .anya-chips button{ clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%); }
   #toast-wrap{ bottom:92px !important; }
   @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ display:none; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
   @media print{ #anya-fab,#anya-panel,#anya-peek{ display:none !important; } }
@@ -737,6 +803,7 @@ const THEME_KEY = STORAGE_PREFIX + 'theme';
 function applyTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
   if(typeof fitAppTitle === 'function') fitAppTitle();
+  if(typeof anyaStyleSync === 'function') anyaStyleSync();
   const sun = document.getElementById('theme-icon-sun');
   const moon = document.getElementById('theme-icon-moon');
   if(sun && moon){
@@ -1819,7 +1886,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.252';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.254';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7568,15 +7635,47 @@ function gsClose(){ const w = document.getElementById('gs-wrap'); if(w) w.remove
    look something up, show what is waiting). Works without a server; if the
    AI reader (AI_READ_URL) is set up, questions it cannot answer go to it as 'chat'.
 ===================================================================== */
+// Anya's face: one drawing per theme (orb, rings, hexagons, triangles, HUD frame); CSS shows the one for the current theme
 const ANYA_RING = (size, cls) => `<svg class="anya-ring ${cls || ''}" width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true">
-  <g class="al al1"><circle cx="50" cy="50" r="47" fill="none" class="ar-a" stroke-width=".8" stroke-dasharray="58 8 30 8" opacity=".75"/><path d="M50 1.5 l2.6 4.4h-5.2z" class="ar-fill"/></g>
-  <g class="al al2"><circle cx="50" cy="50" r="43.5" fill="none" class="ar-b" stroke-width="1.2" stroke-dasharray="14 60 6 120" opacity=".9"/></g>
-  <g class="al al3"><circle cx="50" cy="50" r="40" fill="none" class="ar-b" stroke-width="5" stroke-dasharray="34 10 12 16 40 14 18 8"/></g>
-  <g class="al al4"><circle cx="50" cy="50" r="35" fill="none" class="ar-b" stroke-width=".8" stroke-dasharray="40 6 2 6 60 6" opacity=".8"/></g>
-  <g class="al al5"><circle cx="50" cy="50" r="31" fill="none" class="ar-a" stroke-width="3" stroke-dasharray=".8 2.4" opacity=".7"/></g>
-  <g class="al al6"><circle cx="50" cy="50" r="27.5" fill="none" class="ar-a" stroke-width=".7" stroke-dasharray="20 8 4 8" opacity=".6"/></g>
-  <circle cx="50" cy="50" r="25" class="ar-a ar-core" stroke-width="1"/>
-  <text x="50" y="59" text-anchor="middle" class="ar-txt" font-size="24">A</text>
+  <g class="av av-orb">
+    <circle cx="50" cy="50" r="46" class="ar-solid"/>
+    <text x="50" y="61" text-anchor="middle" class="ar-txt ar-txt-on" font-size="34">A</text>
+  </g>
+  <g class="av av-ring">
+    <g class="al al1"><circle cx="50" cy="50" r="47" fill="none" class="ar-a" stroke-width=".8" stroke-dasharray="58 8 30 8" opacity=".75"/><path d="M50 1.5 l2.6 4.4h-5.2z" class="ar-fill"/></g>
+    <g class="al al2"><circle cx="50" cy="50" r="43.5" fill="none" class="ar-b ar-flow" stroke-width="1.2" stroke-dasharray="14 60 6 120" opacity=".9"/></g>
+    <g class="al al3"><circle cx="50" cy="50" r="40" fill="none" class="ar-b" stroke-width="5" stroke-dasharray="34 10 12 16 40 14 18 8"/></g>
+    <g class="al al4"><circle cx="50" cy="50" r="35" fill="none" class="ar-b" stroke-width=".8" stroke-dasharray="40 6 2 6 60 6" opacity=".8"/></g>
+    <g class="al al5"><circle cx="50" cy="50" r="31" fill="none" class="ar-a" stroke-width="3" stroke-dasharray=".8 2.4" opacity=".7"/></g>
+    <g class="al al6"><circle cx="50" cy="50" r="27.5" fill="none" class="ar-a" stroke-width=".7" stroke-dasharray="20 8 4 8" opacity=".6"/></g>
+    <circle cx="50" cy="50" r="25" class="ar-a ar-core" stroke-width="1"/>
+    <text x="50" y="59" text-anchor="middle" class="ar-txt" font-size="24">A</text>
+  </g>
+  <g class="av av-hex">
+    <g class="al al1"><polygon points="50,3 91,26.5 91,73.5 50,97 9,73.5 9,26.5" fill="none" class="ar-a" stroke-width="1.4" stroke-dasharray="30 6 8 6"/></g>
+    <g class="al al3"><polygon points="50,12 83,31 83,69 50,88 17,69 17,31" fill="none" class="ar-b" stroke-width="4" stroke-dasharray="22 9 6 9"/></g>
+    <g class="al al5"><polygon points="50,20 76,35 76,65 50,80 24,65 24,35" fill="none" class="ar-c" stroke-width="1.2" stroke-dasharray="3 3"/></g>
+    <polygon points="50,26 71,38 71,62 50,74 29,62 29,38" class="ar-core ar-a" stroke-width="1"/>
+    <text x="48" y="59" text-anchor="middle" class="ar-txt ar-glitch1" font-size="24">A</text><text x="52" y="59" text-anchor="middle" class="ar-txt ar-glitch2" font-size="24">A</text>
+    <text x="50" y="59" text-anchor="middle" class="ar-txt" font-size="24">A</text>
+  </g>
+  <g class="av av-tri">
+    <g class="al al1"><circle cx="50" cy="50" r="46" fill="none" class="ar-a" stroke-width="1" stroke-dasharray="2 5" opacity=".7"/></g>
+    <g class="al al3s"><path d="M50 8 L86 70 L14 70 Z" fill="none" class="ar-a" stroke-width="3" stroke-dasharray="26 8"/></g>
+    <g class="al al5s"><path d="M50 92 L14 30 L86 30 Z" fill="none" class="ar-b" stroke-width="1.3" stroke-dasharray="10 6" opacity=".85"/></g>
+    <path d="M28 22 h-8 v8 M72 22 h8 v8 M28 78 h-8 v-8 M72 78 h8 v-8" fill="none" class="ar-a ar-blink" stroke-width="2"/>
+    <circle cx="50" cy="50" r="19" class="ar-core ar-a" stroke-width="1"/>
+    <text x="50" y="58.5" text-anchor="middle" class="ar-txt" font-size="22">A</text>
+  </g>
+  <g class="av av-sq">
+    <rect x="6" y="6" width="88" height="88" fill="none" class="ar-b" stroke-width=".8" opacity=".6"/>
+    <path d="M6 22 V6 H22 M78 6 H94 V22 M94 78 V94 H78 M22 94 H6 V78" fill="none" class="ar-a" stroke-width="3.5"/>
+    <g class="al al3"><rect x="27" y="27" width="46" height="46" fill="none" class="ar-a" stroke-width="2" stroke-dasharray="14 6" transform="rotate(45 50 50)"/></g>
+    <g class="al al5"><rect x="20" y="20" width="60" height="60" fill="none" class="ar-b" stroke-width="1" stroke-dasharray="4 4"/></g>
+    <rect x="12" y="12" width="76" height="2.5" class="ar-fill ar-scan"/>
+    <rect x="33" y="33" width="34" height="34" class="ar-core ar-a" stroke-width="1"/>
+    <text x="50" y="58.5" text-anchor="middle" class="ar-txt" font-size="22">A</text>
+  </g>
 </svg>`;
 
 // step-by-step guides; 'page' is where the work happens, 'act' starts it
@@ -7900,11 +7999,202 @@ function anyaBestPage(t){
 function anyaFind(term){ const t = anyaNorm(term); if(!t) return []; const words = t.split(' '); return gsIndex().filter(r => words.every(w => r.hay.includes(w))).slice(0, 6); }
 
 // carries out an intent; q is what the user typed (for rating), chosen = picked by the user
+/* ---------- understanding a request in the user's own words, and filling the form for them ---------- */
+// small spelling slips ("rerquest", "pety cash") are corrected against the words Anya knows
+const anyaLev = (a, b) => { if(Math.abs(a.length - b.length) > 2) return 9; const d = Array.from({ length:a.length + 1 }, (_, i) => [i]); for(let j = 1; j <= b.length; j++) d[0][j] = j; for(let i = 1; i <= a.length; i++) for(let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; };
+let anyaVocabCache = null;
+function anyaVocab(){
+  if(anyaVocabCache) return anyaVocabCache;
+  const v = new Set('request requests petty cash voucher travel fuel fueling litres submit process approve statement replenish replenishment balance pending vehicle report reimbursement reimburse purchase requisition business advance complaint handover weekly cleaning checklist leave stock create please tomorrow yesterday today foreign local refreshments repair printing supplies office garbage postage delivery subscription duplicate theme cyberpunk tron dark light'.split(' '));
+  ANYA_GUIDES.forEach(g => (g.title + ' ' + g.keys.join(' ')).toLowerCase().split(/[^a-z]+/).forEach(w => { if(w.length >= 4) v.add(w); }));
+  anyaPages().forEach(n => n.label.toLowerCase().split(/[^a-z]+/).forEach(w => { if(w.length >= 4) v.add(w); }));
+  return anyaVocabCache = v;
+}
+const ANYA_CMD_WORDS = new Set('request requests petty cash voucher travel fuel fueling submit process create please reimbursement reimburse foreign local entry litres'.split(' '));
+function anyaFix(t, cmdOnly){
+  const V = cmdOnly ? ANYA_CMD_WORDS : anyaVocab();
+  return t.split(' ').map(w => { if(w.length < 5 || V.has(w) || /\d/.test(w)) return w; let best = w, bd = w.length >= 9 ? 2 : 1; V.forEach(x => { const d = anyaLev(w, x); if(d <= bd && d < 9 && (best === w || d < anyaLev(w, best))){ best = x; } }); return best; }).join(' ');
+}
+const ANYA_MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+// one date in words or numbers → yyyy-mm-dd
+function anyaDate(s){
+  s = String(s || '').toLowerCase().trim(); const now = new Date(vToday() + 'T00:00:00'), iso = d => localDateStr(d);
+  if(/^today$/.test(s)) return iso(now);
+  if(/^tomorrow$/.test(s)){ now.setDate(now.getDate() + 1); return iso(now); }
+  if(/^yesterday$/.test(s)){ now.setDate(now.getDate() - 1); return iso(now); }
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s); if(m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = /^(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2,4}))?$/.exec(s); if(m){ const y = m[3] ? (m[3].length === 2 ? '20' + m[3] : m[3]) : String(now.getFullYear()); return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; }
+  m = /^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3})[a-z]*(?:\s+(\d{4}))?$/.exec(s) || ((x) => x && [x[0], x[2], x[1], x[3]])(/^([a-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?$/.exec(s));
+  if(m){ const mo = ANYA_MONTHS.indexOf(m[2]); if(mo >= 0){ let y = m[3] ? +m[3] : now.getFullYear(); const d = new Date(y, mo, +m[1]); if(!m[3] && d < now && (now - d) > 60 * 864e5) d.setFullYear(y + 1); return iso(d); } }
+  return '';
+}
+const ANYA_DATE_RX = '(today|tomorrow|yesterday|\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}[\\/.\\-]\\d{1,2}(?:[\\/.\\-]\\d{2,4})?|\\d{1,2}(?:st|nd|rd|th)?\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*(?:\\s+\\d{4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?)';
+const ANYA_CAT_WORDS = [
+  [/\b(key|keys|lock|repair|fix|fixing|broken|plumb|electric|maintenance|duplicat)/, 'Repair Work'],
+  [/\b(tea|coffee|water|snack|food|lunch|refreshment|cake|juice|meeting refresh)/, 'Refreshments'],
+  [/\b(print|printing|toner|cartridge|photocop)/, 'Printing & Office Supplies'],
+  [/\b(paper|pen|pens|stationery|stapler|file|folder|office suppl|envelope)/, 'Office Supplies'],
+  [/\b(postage|courier|delivery|parcel|stamp|shipping)/, 'Postage & Delivery'],
+  [/\b(garbage|waste|trash|rubbish|disposal)/, 'Garbage Disposal'],
+  [/\b(tool|hammer|screwdriver|drill|spanner|tape)/, 'Small tool'],
+  [/\b(subscription|software|licen|email|domain|hosting)/, 'Email & Software Subscriptions'],
+  [/\b(app store|app purchase|google play)/, 'App Purchase'],
+  [/\b(bank charge|bank fee|transfer fee)/, 'Bank Charges'],
+  [/\b(visa|work permit|permit)/, 'Staff Visa / Work Permit'],
+  [/\b(taxi|ferry|speedboat|ticket|flight|transport|travel)/, 'Travel Arrangements'],
+  [/\b(fuel|petrol|diesel)/, 'Fuel'],
+];
+const anyaCap = s => { s = String(s || '').trim(); return s ? s[0].toUpperCase() + s.slice(1) : s; };
+// pulls the details out of a sentence: amount, dates, place, vehicle, purpose …
+function anyaSlots(raw, kind){
+  let t = ' ' + anyaFix(anyaNorm(raw), true).replace(/(\d),(\d{3})/g, '$1$2') + ' ';
+  const s = {}, take = (rx, f) => { const m = rx.exec(t); if(m){ f(m); t = t.replace(m[0], ' '); } return !!m; };
+  s.submit = /\b(and )?(submit|save|process|send|create|file) (it|this|that|them|the request|now)\b|\b(and|then) (submit|save)\b|\bsubmit it\b/.test(t);
+  t = t.replace(/\b(and |then )?(submit|save|process|send|file) (it|this|that|them|the request|now)\b/g, ' ').replace(/\b(and|then) (submit|save)\b/g, ' ');
+  take(new RegExp('\\bfrom ' + ANYA_DATE_RX + '\\s+(?:to|till|until|-)\\s+' + ANYA_DATE_RX), m => { s.fromDate = anyaDate(m[1]); s.toDate = anyaDate(m[2]); });
+  take(/\b(\d+(?:\.\d+)?)\s*(?:l|ltr|ltrs|litre|litres|liter|liters)\b/, m => { s.litres = +m[1]; });
+  take(/\b(?:rate|@|at rate)\s*(?:of\s*)?(?:mvr|rf)?\s*(\d+(?:\.\d+)?)\s*(?:\/\s*l|per litre|per liter)?/, m => { s.rate = +m[1]; });
+  take(/\b(?:mvr|rf|rufiyaa|usd|\$)\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:mvr|rf|rufiyaa|usd)\b/, m => { s.amount = +(m[1] || m[2]); });
+  take(/\b(\d+)\s*(?:x|pcs|pieces|nos|units|copies|sets)\b|\bqty\s*(\d+)\b/, m => { s.qty = +(m[1] || m[2]); });
+  if(!s.amount) take(/\b(?:costing|cost|amount|total|worth|price|of)\s+(\d+(?:\.\d+)?)\b/, m => { s.amount = +m[1]; });
+  take(new RegExp('\\b(?:on|dated|date|for)?\\s*' + ANYA_DATE_RX + '\\b'), m => { s.date = anyaDate(m[1]); });
+  take(/\b(?:hod|approved by|approver|approval from|head of department)\s+(?:is\s+)?([a-z][a-z .]{1,40}?)(?= and | for | at | to | with |\s{2}|\s*$)/, m => { s.hod = m[1].trim(); });
+  take(/\b(?:requested by|requester|requester is|on behalf of)\s+([a-z][a-z .]{1,40}?)(?= and | for | at | to | with |\s{2}|\s*$)/, m => { s.requester = m[1].trim(); });
+  // a location, vehicle or person the app knows
+  try{ (LOCATIONS || []).slice().sort((a, b) => String(b.name).length - String(a.name).length).some(l => { const n = anyaNorm(l.name); if(n && t.includes(' ' + n + ' ')){ s.locationId = l.id; s.locationName = l.name; t = t.replace(new RegExp('\\b(at|for|from|in)?\\s*' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b'), ' '); return true; } }); }catch(e){}
+  try{ state.vehicles.some(v => { const p = anyaNorm(v.plate).replace(/[\s\-]/g, ''); if(!p) return false; const words = t.split(' '); const hit = words.find(w => w.replace(/[\s\-]/g, '') === p); if(hit){ s.vehicleId = v.id; s.plate = v.plate; t = t.replace(new RegExp('\\b(for|of|vehicle|car|truck)?\\s*' + hit + '\\b'), ' '); return true; } }); }catch(e){}
+  try{ const people = sdAll().map(p => p.name).filter(Boolean); people.sort((a, b) => b.length - a.length).some(n => { const nn = anyaNorm(n); const first = nn.split(' ')[0]; if(nn && (t.includes(' ' + nn + ' ') || (first.length > 3 && t.includes(' ' + first + ' ')))){ s.person = n; t = t.replace(new RegExp('\\b(for|by|with)?\\s*' + (t.includes(' ' + nn + ' ') ? nn : first) + '\\b'), ' '); return true; } }); }catch(e){}
+  if(/\breimburse/.test(t)){ s.option = 'Reimbursement'; t = t.replace(/\b(a |as )?reimburse(ment|d)?\b/, ' '); }
+  if(/\bforeign|abroad|overseas\b/.test(t)) s.scope = 'foreign'; else if(/\blocal\b|\batoll\b|\bisland\b/.test(t)) s.scope = 'local';
+  // travel: "to Singapore"
+  if(kind === 'travel') take(/\b(?:trip|travel|travelling|traveling|go|going|fly|flying|visit)?\s*to ([a-z][a-z .']{1,30}?)(?= for | from | on | by | with | and |$|\s{2})/, m => { const d = m[1].trim().replace(/\b(the)\b/g, '').trim(); if(d && !/^(buy|get|pay|do|make|fix|duplicate|purchase|repair|print|send|request|submit)\b/.test(d)) s.destination = d.split(' ').map(anyaCap).join(' '); else t = ' ' + m[0] + ' ' + t; });
+  // what is left is the purpose: drop the command words around it
+  let p = t.replace(/\b(i|we) (want|need|would like|wanna|have) to\b/g, ' ')
+    .replace(/\b(please|pls|kindly|can you|could you|would you|anya|hey|for me)\b/g, ' ')
+    .replace(/\b(new|create|add|make|raise|start|submit|request|requesting|log|record|open|fill|prepare|get|issue)\b/g, ' ')
+    .replace(/\b(a|an|the|some)\b/g, ' ')
+    .replace(/\b(petty cash|pc|cash|voucher|request|form|travel|trip|fuel entry|fueling|fuel|entry)\b/g, ' ')
+    .replace(/\b(prior|expense|amount|with|of)\b/g, ' ')
+    .replace(/^\s*(to|for|regarding|about|re|on)\s+/, ' ').replace(/\s+(to|for|on|at|in|and|by)\s*$/, ' ').replace(/\s+/g, ' ').trim();
+  p = p.replace(/^(to|for|regarding|about|on)\s+/, '').trim();
+  if(p && p.length > 2) s.purpose = anyaCap(p);
+  const catSrc = anyaNorm(raw); const cat = ANYA_CAT_WORDS.find(([rx]) => rx.test(catSrc)); if(cat) s.category = cat[1];
+  return s;
+}
+// waits for a form to appear after it was asked to open
+async function anyaWaitForm(ms){ const end = Date.now() + (ms || 4000); while(Date.now() < end){ const f = document.getElementById('vform'); const ov = document.getElementById('modal-overlay'); if(f && ov && !ov.classList.contains('hidden')) return f; await new Promise(r => setTimeout(r, 80)); } return null; }
+// puts a value in a field (selects match by option text), fires its events and highlights it
+function anyaPut(el, v, list){
+  if(!el || v == null || v === '') return false;
+  if(el.tagName === 'SELECT'){
+    const want = String(v).toLowerCase(), o = [...el.options].find(o => o.value === v || o.text.toLowerCase() === want) || [...el.options].find(o => o.text.toLowerCase().includes(want) && o.value);
+    if(!o) return false; el.value = o.value;
+  } else el.value = v;
+  el.dispatchEvent(new Event('input', { bubbles:true })); el.dispatchEvent(new Event('change', { bubbles:true }));
+  el.classList.add('ring-2', 'ring-amber-400'); if(list) list.push(el);
+  return true;
+}
+// fills an opened form from the details; returns lines describing what was filled
+function anyaFillForm(kind, s){
+  const f = document.getElementById('vform'), done = []; if(!f) return done;
+  const put = (name, v, label, shown) => { const el = f.elements[name] || document.getElementById(name); if(anyaPut(el, v)) done.push([label, shown != null ? shown : v]); };
+  if(kind === 'pc'){
+    if(s.locationId){ const el = document.getElementById('pc-location'); if(el && !el.disabled && anyaPut(el, s.locationId)) done.push(['Location', s.locationName]); }
+    if(s.date) put('date', s.date, 'Date', fmtDate(s.date));
+    if(s.purpose){ const el = f.elements.purpose; if(el && anyaPut(el, s.purpose)){ done.push(['Purpose', s.purpose]); try{ pcPurposeTouched = true; }catch(e){} } }
+    if(s.option){ const r = [...f.querySelectorAll('input[name="option"]')].find(x => x.value === s.option); if(r){ r.checked = true; r.dispatchEvent(new Event('change', { bubbles:true })); done.push(['Type', s.option]); } }
+    if(s.category) put('category', s.category, 'Expense category');
+    // HOD: the one named, else the one this user chose last time (learned)
+    let hodRemembered = ''; try{ hodRemembered = localStorage.getItem(anyaML.key() + '_hod') || ''; }catch(e){}
+    const hodEl = f.elements.hodUid;
+    if(hodEl && s.hod){ if(anyaPut(hodEl, s.hod)) done.push(['HOD', hodEl.selectedOptions[0].text]); }
+    else if(hodEl && !hodEl.value && hodRemembered && anyaPut(hodEl, hodRemembered)) done.push(['HOD (as last time)', hodEl.selectedOptions[0].text]);
+    const rqEl = f.elements.requesterUid, rq = s.requester || s.person;
+    if(rqEl && rq && anyaPut(rqEl, rq)) done.push(['Requester', rqEl.selectedOptions[0].text]);
+    const row = f.querySelector('.pc-row');
+    if(row && (s.purpose || s.amount)){
+      const q = n => row.querySelector(`[data-f="${n}"]`);
+      if(s.purpose && anyaPut(q('name'), s.purpose)) done.push(['Item / service', s.purpose]);
+      const qty = s.qty || (s.amount ? 1 : null), unit = s.amount ? pcRound(s.amount / (s.qty || 1)) : null;
+      if(qty && anyaPut(q('qty'), qty)) done.push(['Qty', qty]);
+      if(unit && anyaPut(q('unitPrice'), unit)) done.push(['Price / unit', fmtMVR(unit)]);
+      try{ pcRecalc(); }catch(e){}
+    }
+  } else if(kind === 'travel'){
+    if(s.destination) put('destination', s.destination, 'Destination');
+    if(s.fromDate) put('fromDate', s.fromDate, 'From', fmtDate(s.fromDate)); else if(s.date) put('fromDate', s.date, 'From', fmtDate(s.date));
+    if(s.toDate) put('toDate', s.toDate, 'To', fmtDate(s.toDate));
+    if(s.purpose) put('purpose', s.purpose, 'Purpose of trip');
+    if(s.person){ const el = f.querySelector('.tr-pname'); if(el && !el.value && anyaPut(el, s.person)){ try{ trFillDesig(el); }catch(e){} done.push(['Traveller', s.person]); } }
+    try{ trDsaPreview(); }catch(e){}
+  } else if(kind === 'fuel'){
+    if(s.vehicleId) put('vehicleId', s.vehicleId, 'Vehicle', s.plate);
+    if(s.date) put('date', s.date, 'Date', fmtDate(s.date));
+    if(s.litres) put('litres', s.litres, 'Litres');
+    if(s.rate) put('rate', s.rate, 'Rate per litre');
+    if(s.amount && !(s.litres && s.rate)) put('total', s.amount, 'Total cost', fmtMVR(s.amount));
+    try{ vehFuelCalc(); }catch(e){}
+  }
+  return done;
+}
+// presses the form's own save button and reports whether it went through
+async function anyaSubmitOpenForm(){
+  const ov = document.getElementById('modal-overlay'), f = document.getElementById('vform');
+  if(!f || !ov || ov.classList.contains('hidden')){ anyaSay('There is no form open to submit.'); anyaDraw(); return; }
+  const btn = [...ov.querySelectorAll('button')].find(b => /^(save|create|add)/i.test(String(b.getAttribute('onclick') || '').replace(/^\s*/, '')) || /^(save|create request|add fuel entry|save changes|submit)/i.test(b.textContent.trim()) && b.className.includes('bg-brand'));
+  if(!btn){ anyaSay('I could not find the save button on this form — please press it yourself.'); anyaDraw(); return; }
+  const hodPick = f.elements.hodUid && f.elements.hodUid.value;
+  btn.click();
+  await new Promise(r => setTimeout(r, 1500));
+  if((ov.classList.contains('hidden') || !document.getElementById('vform')) && hodPick){ try{ localStorage.setItem(anyaML.key() + '_hod', hodPick); }catch(e){} }
+  if(ov.classList.contains('hidden') || !document.getElementById('vform')){ anyaSay('Submitted ✓ — it is saved. Anything else?'); anyaDraw(); return; }
+  // what the form complained about: its error line or the latest message on screen
+  const errEl = [...ov.querySelectorAll('[id$="error"], .text-rose-600, .text-red-600')].find(e => e.offsetParent && e.textContent.trim()), tw = document.getElementById('toast-wrap'), last = tw && tw.lastElementChild;
+  const why = (errEl && errEl.textContent.trim()) || (last && last.textContent.trim()) || '';
+  anyaSay('It wasn\'t saved yet' + (why ? ' — the form says: **' + why.slice(0, 160) + '**' : ' — the form needs more details') + '. Tell me the missing details (or fill them in), then say "submit it" again.');
+  anyaDraw();
+}
+const ANYA_FILL = { 'pc-new':'pc', 'tr-foreign':'travel', 'tr-local':'travel', 'tr-any':'travel', 'fuel':'fuel' };
+// opens the form, fills what the sentence says, and submits only when the user asked for that
+async function anyaStartFill(id, q, o){
+  const a = anyaActInfo(id), kind = ANYA_FILL[id], s = anyaSlots(q, kind);
+  let js = a.js;
+  if(kind === 'travel' && s.scope && id === 'tr-any') js = s.scope === 'local' ? "goTo('travel-local'); openTravelForm('', 'local')" : "goTo('travel-foreign'); openTravelForm('', 'foreign')";
+  try{ anyaToggleSmall(); (0, eval)(js); }catch(e){ anyaSay('I could not open it: ' + (e && e.message ? e.message : e)); anyaDraw(); return; }
+  const f = await anyaWaitForm(); if(!f){ anyaSay(`I opened ${a.label}, but the form did not appear — it may need something set up first (see the message on screen).`, [], '', o); anyaDraw(); return; }
+  const done = anyaFillForm(kind, s);
+  const extra = done.length ? `<ul class="anya-list">${done.map(([k, v]) => `<li>${esc(k)}: <b>${esc(String(v))}</b></li>`).join('')}</ul>` : '';
+  if(s.submit && done.length){
+    anyaSay(`I've opened ${a.label} and filled ${done.length} field${done.length === 1 ? '' : 's'} (highlighted). Submitting it as you asked…`, [], extra, o); anyaDraw();
+    await anyaSubmitOpenForm(); return;
+  }
+  anyaSay(done.length ? `I've opened ${a.label} and filled ${done.length} field${done.length === 1 ? '' : 's'} (highlighted). Check them, add anything missing, then press save — or tell me **"submit it"**.` : `Done — I've opened ${a.label}. Tell me the details (e.g. "for duplicate keys, MVR 150 at Apollo Tower") and I'll fill them in, or fill it yourself.`,
+    done.length ? [['Submit now', () => anyaSubmitOpenForm()]] : [['Show the steps', () => { const g = ANYA_GUIDES.find(x => x.page === a.page); if(g) anyaGuide(g); }]], extra, o);
+  anyaDraw();
+}
+// "fill in …" while a form is already open
+function anyaFillOpen(q){
+  const f = document.getElementById('vform'), ov = document.getElementById('modal-overlay'); if(!f || !ov || ov.classList.contains('hidden')) return false;
+  const kind = f.querySelector('.pc-row') ? 'pc' : f.elements.destination ? 'travel' : f.elements.litres ? 'fuel' : ''; if(!kind) return false;
+  const s = anyaSlots(q, kind), done = anyaFillForm(kind, s);
+  if(!done.length) return false;
+  anyaSay(`Filled ${done.length} field${done.length === 1 ? '' : 's'} on the open form:`, [['Submit now', () => anyaSubmitOpenForm()]], `<ul class="anya-list">${done.map(([k, v]) => `<li>${esc(k)}: <b>${esc(String(v))}</b></li>`).join('')}</ul>`);
+  if(s.submit) setTimeout(() => anyaSubmitOpenForm(), 50);
+  return true;
+}
+// "process PC/HO/2026/12" — opens the hand-over-the-cash step for that voucher
+function anyaProcessVoucher(term){
+  const n = anyaNorm(term).replace(/\s+/g, ''), r = state.pettyCash.find(x => anyaNorm(x.number).replace(/\s+/g, '') === n) || state.pettyCash.find(x => anyaNorm(x.number).replace(/\s+/g, '').endsWith(n));
+  if(!r){ anyaSay(`I couldn't find a petty cash voucher "${term}".`); return; }
+  try{ anyaToggleSmall(); goTo('petty-cash'); openPcProcess(r.id); anyaSay(`Opened **Process** for ${r.number} (${r.purpose || 'no purpose'}, ${fmtMVR(pcTotal(r))}). Check the amount and save to hand over the cash.`, [['Submit now', () => anyaSubmitOpenForm()]]); }
+  catch(e){ anyaSay('I could not open it: ' + (e && e.message ? e.message : e)); }
+}
 function anyaExec(i, q, chosen){
   const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
   if(!anyaIntentOk(i)){ anyaSay('You don\'t have access to that with your role.'); anyaDraw(); return; }
   if(k !== 's' || !/^(help|learned|me)$/.test(v)) anyaML.used(i, ui.tab);
   if(k === 'g'){ anyaGuide(ANYA_GUIDES.find(x => x.id === v), o); }
+  else if(k === 'a' && ANYA_FILL[v] && q){ return anyaStartFill(v, q, o); }
   else if(k === 'a'){ const a = anyaActInfo(v); try{ anyaToggleSmall(); (0, eval)(a.js); anyaSay(`Done — I've opened ${a.label}. Fill it in and save; ask me if you get stuck.`, [['Show the steps', () => { const g = ANYA_GUIDES.find(x => x.page === a.page); if(g) anyaGuide(g); }]], '', o); }catch(e){ anyaSay('I could not open it: ' + (e && e.message ? e.message : e)); } }
   else if(k === 'p'){ anyaToggleSmall(); goTo(v); const gid = ANYA_PAGE_GUIDE[v]; anyaSay(`Opened **${anyaPageLabel(v)}**.`, gid ? [['Show the steps', () => anyaGuide(ANYA_GUIDES.find(x => x.id === gid))]] : [], '', o); }
   else if(k === 't'){ setColorScheme(v); anyaSay(`Switched to the **${ANYA_THEMES[v] || v}** theme.`, [], '', o); }
@@ -7954,7 +8244,12 @@ function anyaRuleIntent(t){
   return null;
 }
 async function anyaReply(q){
-  const t = anyaNorm(q);
+  let t = anyaFix(anyaNorm(q));
+  for(let k = 0; k < 3; k++) t = t.replace(/^(please|pls|kindly|can you|could you|would you|will you|anya|hey|ok|okay)\s+/, '');
+  const formOpen = !!document.getElementById('vform') && !document.getElementById('modal-overlay').classList.contains('hidden');
+  if(/^(submit|save|process|send|file|done|go ahead|yes submit|confirm)( it| this| that| the form| the request| now)?( please| now)?$/.test(t)){ await anyaSubmitOpenForm(); return; }
+  const pm = /^process (?:voucher |request )?([a-z0-9\/\- ]*\d[a-z0-9\/\- ]*)$/.exec(t); if(pm){ anyaProcessVoucher(pm[1].trim()); return; }
+  if(formOpen && (/^(fill|set|put|use|change|make it)\b/.test(t) || !/^(new|create|start|raise|open|go|show|find|search|how|what|where|who|i (want|need))\b/.test(t)) && anyaFillOpen(t.replace(/^(fill( in| it)?( with)?|set|put|use|change|make it)\s+/, ''))) return;
   if(/^(hi|hello|hey|salaam|assalaamu? ?alaikum|good (morning|afternoon|evening))\b/.test(t) && t.split(' ').length <= 4){ anyaSay(`Hello${anyaFirst() ? ' ' + anyaFirst() : ''}! What can I do for you?`); return; }
   if(/^(thanks|thank you|thx|ok|okay|great|cool|nice)\b/.test(t) && t.split(' ').length <= 4){ anyaSay('Any time. 👍'); return; }
   if(/^(forget|reset) (everything|what you learned|learning|memory)/.test(t)){ anyaML.forget(); anyaSay('Done — I\'ve forgotten what I learned from you.'); return; }
@@ -7970,7 +8265,7 @@ async function anyaReply(q){
   let i = anyaML.recall(t);
   if(!i){ const r = anyaRuleIntent(t); if(r && !anyaML.rejected(t, r)) i = r; }
   if(!i){ const p = anyaML.predict(t, 3).filter(x => !anyaML.rejected(t, x.i)); if(p[0] && p[0].p >= .55) i = p[0].i; }
-  if(i){ anyaExec(i, q); return; }
+  if(i){ await anyaExec(i, q); return; }
   if(AI_READ_URL){
     try{
       const d = await aiPost([], 'chat', { messages:anya.log.filter(m => m.text).slice(-10).map(m => ({ role:m.who === 'me' ? 'user' : 'assistant', text:m.text })), page:anyaPageLabel(ui.tab), user:anyaFirst(), guides:ANYA_GUIDES.map(x => ({ title:x.title, steps:x.steps })) });

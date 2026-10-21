@@ -1910,7 +1910,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.268';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.269';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -5990,6 +5990,41 @@ function pcReplStatusPill(s){
   return vPill('warn', 'Pending ' + fmtMVR(pend)) + (rr ? '' : '<div class="text-[11px] text-slate-400 mt-0.5">No request yet</div>');
 }
 // a closed statement in full: its figures, vouchers, replenishment, downloads and actions
+// one ZIP for a statement: the statement (PDF and Excel), then a folder per voucher with its petty cash request and every invoice
+async function pcStatementZip(no, btn){
+  const locId = pcStLocation(), s = pcStatements(locId).find(x => x.no === no); if(!s){ toast('Statement not found.', true); return; }
+  const label = btn ? btn.innerHTML : '', say = t => { if(btn) btn.textContent = t; };
+  if(btn) btn.disabled = true;
+  try{
+    try{ await loadScriptOnce(JSZIP_URL); }catch(e){ throw new Error('The ZIP builder could not be loaded. Check your internet connection and try again.'); }
+    const safe = x => String(x || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const zip = new JSZip(), root = zip.folder(safe('Petty Cash Statement ' + no)), missing = [];
+    say('Preparing the statement…');
+    try{ root.file(safe('Statement ' + no) + '.pdf', await buildPcStatementPdf(locId, s)); }catch(e){ missing.push('Statement PDF: ' + (e && e.message ? e.message : e)); }
+    try{ root.file(safe('Statement workbook ' + no) + '.xlsx', await buildPettyCashStatementXlsx(no)); }catch(e){ missing.push('Statement workbook: ' + (e && e.message ? e.message : e)); }
+    const list = s.list.slice();
+    for(let k = 0; k < list.length; k++){
+      const r = list[k]; say(`Adding ${k + 1} of ${list.length}…`);
+      const dir = root.folder(String(k + 1).padStart(2, '0') + ' ' + safe(r.number + (r.purpose ? ' - ' + r.purpose : '')));
+      // the petty cash request: the signed copy if one is attached, otherwise the form made by the app
+      if(r.formFile && r.formFile.fileId){ try{ const b = await attPdfBlob(r.formFile.fileId); dir.file(safe(r.number + ' - Petty Cash Request (signed)') + '.pdf', b.blob); }catch(e){ missing.push(r.number + ': the signed request file could not be loaded'); } }
+      else { try{ dir.file(safe(r.number + ' - Petty Cash Request') + '.pdf', await buildPettyCashPdf(r)); }catch(e){ missing.push(r.number + ': the request PDF could not be made'); } }
+      const invs = pcInvoices(r); if(!invs.length) missing.push(r.number + ': no invoice recorded');
+      for(let j = 0; j < invs.length; j++){
+        const iv = invs[j], nm = safe(r.number + ' - Invoice' + (iv.number ? ' ' + iv.number : invs.length > 1 ? ' ' + (j + 1) : '') + (iv.supplier ? ' - ' + iv.supplier : ''));
+        if(iv.fileId){ try{ const b = await attPdfBlob(iv.fileId); dir.file(nm + '.pdf', b.blob); }catch(e){ missing.push(nm + ': the file could not be loaded'); } }
+        else if(iv.link || iv.url) missing.push(nm + ': saved as a link only (' + (iv.link || iv.url) + ')');
+        else missing.push(nm + ': no file attached');
+      }
+    }
+    if(missing.length) root.file('Missing or not included.txt', 'These could not be added to the ZIP:\r\n\r\n' + missing.map(x => '- ' + x).join('\r\n'));
+    say('Compressing…');
+    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{ level:6 } });
+    downloadBlob(blob, safe('Petty Cash Statement ' + no + ' - all files') + '.zip');
+    toast(`ZIP downloaded: ${list.length} voucher${list.length === 1 ? '' : 's'}${missing.length ? ' — ' + missing.length + ' item' + (missing.length === 1 ? '' : 's') + ' missing (see the list inside)' : ''}.`);
+  }catch(e){ console.error(e); toast('Could not make the ZIP: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
 function openPcStatementDetail(no){
   const locId = pcStLocation(), s = pcStatements(locId).find(x => x.no === no); if(!s) return;
   const can = pcCanStatement(locId), rec = s.rec || {}, rr = rec.replRequest, pend = pcStmtPending(s), got = vNum(rec.replenishedAmount), fig = pcStmtFigures(locId, s);
@@ -6002,7 +6037,7 @@ function openPcStatementDetail(no){
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Total', fmtMVR(s.total))}${item('Vouchers', s.list.length)}${item('Invoice dates', s.from ? vDate(s.from) + (s.to !== s.from ? ' – ' + vDate(s.to) : '') : '—')}${item('Closed', s.closedDate ? vDate(s.closedDate) : '—')}</div>
     <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Download</div>
     <div class="grid sm:grid-cols-2 gap-2 mb-5">
-      ${dl('Statement', 'PDF', `pcStatementPdf('${esc(no)}', this)`)}${dl('Statement workbook (all statements)', 'Excel', `pcDownloadStatements('${esc(no)}', this)`)}${dl('Preview the statement sheet', 'View', `pcStWorkbookPreview('${esc(no)}', true)`)}
+      ${dl('Statement', 'PDF', `pcStatementPdf('${esc(no)}', this)`)}${dl('Statement workbook (all statements)', 'Excel', `pcDownloadStatements('${esc(no)}', this)`)}${dl('Preview the statement sheet', 'View', `pcStWorkbookPreview('${esc(no)}', true)`)}${dl('All petty cash requests and invoices', 'ZIP', `pcStatementZip('${esc(no)}', this)`)}
       ${rr ? dl('Replenishment form', 'PDF', `pcReplFormPdf('${esc(no)}', this)`) + dl('Replenishment form', 'Word', `pcReplForm('${esc(no)}', this)`) : ''}
     </div>
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
@@ -6192,7 +6227,7 @@ function viewPcStatementsExcel(){
     ${vPanel('Open statement', open ? pcStProgressHtml(open) : '', open ? `
       <div class="px-5 sm:px-6 py-4 flex items-start justify-between gap-3 flex-wrap">
         <div><div class="flex items-center gap-2.5"><div class="text-base font-bold text-slate-900 num">${esc(open.no)}</div>${can ? `<button onclick="openPcRenameStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-brand-600 hover:underline" title="Edit the statement number">Edit number</button>` : ''}</div><div class="text-xs text-slate-500 mt-0.5">${open.list.length} of ${PC_STATEMENT_ROWS} vouchers · ${fmtMVR(open.total)}${open.from ? ' · invoices ' + vDate(open.from) + (open.to !== open.from ? ' – ' + vDate(open.to) : '') : ''}</div>${unprocOpen ? `<div class="text-xs text-amber-700 mt-1">${unprocOpen} voucher${unprocOpen === 1 ? ' is' : 's are'} not processed yet</div>` : ''}</div>
-        <div class="flex items-center gap-2 flex-wrap"><button onclick="pcStWorkbookPreview('${esc(open.no)}')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Preview</button><button onclick="pcDownloadStatements('${esc(open.no)}', this)" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Download workbook</button>${can ? `<button onclick="pcCloseStatement('${esc(open.no)}')" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700">Close statement</button><button onclick="pcReleaseStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Release</button>` : ''}</div></div>
+        <div class="flex items-center gap-2 flex-wrap"><button onclick="pcStWorkbookPreview('${esc(open.no)}')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Preview</button><button onclick="pcDownloadStatements('${esc(open.no)}', this)" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Download workbook</button><button onclick="pcStatementZip('${esc(open.no)}', this)" title="Every petty cash request and its invoices in this statement, in one ZIP" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">Download all files (ZIP)</button>${can ? `<button onclick="pcCloseStatement('${esc(open.no)}')" class="${VEH_BTN} bg-brand-600 text-white hover:bg-brand-700">Close statement</button><button onclick="pcReleaseStatement('${esc(open.no)}')" class="text-xs text-slate-400 hover:text-rose-600 hover:underline">Release</button>` : ''}</div></div>
       ${open.list.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Voucher' }, { t:'Supplier' }, { t:'Bill no.' }, { t:'Details' }, { t:'Category' }, { t:'Processed' }, { t:'Amount', n:1 }, { t:'' }])}<tbody>${openRows}</tbody></table></div>` : vEmpty('No vouchers in this statement yet. Add them from the list below.')}`
       : vEmpty(can ? 'No statement is open. Pick vouchers below, give the statement a number and start it. New requests then go into it.' : 'No statement is open.'))}
     ${pcCashBoxHtml(loc)}
@@ -8408,7 +8443,7 @@ function anyaDownload(t){
     return true;
   }
   // petty cash statement (Excel workbook, PDF of one statement, or CSV)
-  if(/\bpetty cash statement|\bstatement|\bpc statement/.test(t) && !/\bbusiness\b/.test(t)){
+  if((/\bpetty cash statement|\bstatement|\bpc statement/.test(t) || (/\bzip\b/.test(t) && /\b(petty cash|invoices)\b/.test(t))) && !/\bbusiness\b/.test(t)){
     if(no('petty cash statements', 'petty-statement')) return true;
     let locId = ''; try{ (LOCATIONS || []).some(l => { if(t.includes(anyaNorm(l.name))){ locId = l.id; return true; } }); }catch(e){}
     if(locId) vehUi.stXLoc = locId; locId = pcStLocation();
@@ -8417,6 +8452,7 @@ function anyaDownload(t){
     if(!sts.length){ anyaSay(`There are no statements for ${nm || 'this location'} yet.`); anyaDraw(); return true; }
     const { one } = anyaPick(sts, t, s => s.no, s => s.no);
     const s = one || sts.find(x => !x.closed) || sts[sts.length - 1];
+    if(/\b(zip|all (the )?files|invoices|requests|everything|bundle)\b/.test(t)){ anyaDlRun(`Statement ${s.no} — every request and invoice (ZIP)`, () => pcStatementZip(s.no)); return true; }
     if(fmt === 'pdf') anyaDlRun(`Statement ${s.no} — ${nm} (PDF)`, () => pcStatementPdf(s.no));
     else anyaDlRun(`Petty cash statements workbook — ${nm} (Excel, sheet ${s.no})`, () => pcDownloadStatements(s.no));
     return true;

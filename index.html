@@ -1910,7 +1910,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.270';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.271';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7833,6 +7833,15 @@ const ANYA_GUIDES = [
   { id:'complaint', title:'Admin complaints', page:'complaints', keys:['complaint','complain','feedback'],
     steps:['Open **Team → Admin Complaints** and press **+ Complaint**.', 'Describe it and attach photos; set the status as it is handled.'],
     acts:[['+ Complaint', "goTo('complaints'); openCpEdit('')"]] },
+  { id:'agreement', title:'Agreements & amendments', page:'docs-agreement', keys:['agreement','agreements','contract','contracts','lease','amendment','amendments','renewal','extension of agreement','third-party agreement'],
+    steps:['Open **Docs → Agreement** and press **+ Agreement** (or **+ Third-party agreement** for one made by the other party).', 'Fill in the parties, dates, value and terms, and attach the signed agreement file.', 'Open the agreement and use **Amendments and extensions → + Add** for each amendment — the new end date and value update automatically.', 'Payments and obligations can be tracked on the same page; I remind you before it expires.', 'Ask me "is there an agreement with …" or "download the last amendment for …" any time.'],
+    acts:[['Open Agreements', "goTo('docs-agreement')"]] },
+  { id:'letter', title:'Letters', page:'docs-letter', keys:['letter','letters','compose letter','write letter','register letter'],
+    steps:['Fastest: ask me "compose a letter to … regarding …" — I write it, register it and attach it as a PDF on the letterhead.', 'Or open **Docs → Letter**, press **+ Letter**, fill the subject, direction and organisation, and attach the signed copy.', 'Set the status as it moves (Draft → Sent).'],
+    acts:[['Open Letters', "goTo('docs-letter')"]] },
+  { id:'memo', title:'Memos', page:'docs-memo', keys:['memo','memos','write memo'],
+    steps:['Open **Docs → MEMO** and press **+ Memo**.', 'Fill From / To / CC, the subject and the memo text (**double asterisks** for bold); add a table if needed.', 'Download it as Word or PDF on the letterhead — the sign-off sits at the bottom of the page — then attach the signed copy.'],
+    acts:[['Open Memos', "goTo('docs-memo')"]] },
   { id:'attach', title:'Attachments & PDFs', page:null, keys:['attach','attachment','upload','pdf','download pdf','scan','photo','link'],
     steps:['Every form uses **📎 Attach** instead of links — choose a PDF or a photo.', 'Most attachments are read automatically and fill the empty fields (never what you typed). Check highlighted fields before saving.', 'Each attachment has **View** and **PDF** — open or download it as a PDF.'],
     acts:[] },
@@ -7843,7 +7852,7 @@ const ANYA_GUIDES = [
     steps:['Press the 🎨 palette icon at the top of the menu.', 'Choose light or dark and a colour scheme — **Cyberpunk ✦** and **Tron ✦** are full neon themes.', 'Or ask me: "tron theme", "cyberpunk theme", "dark mode".'],
     acts:[['Open appearance', 'openAppearanceModal()']] },
 ];
-const ANYA_PAGE_GUIDE = { 'petty-cash':'pc-new', 'petty-statement':'pc-stmt', 'petty-count':'pc-count', 'business-advance':'ba', 'purchase-requisitions':'pr', 'travel-local':'travel', 'travel-foreign':'travel', 'fueling':'fuel', 'vehicle-log':'vlog', 'servicing':'service', 'cleaning':'cleaning', 'leave-plan':'leave', 'movements':'stock', 'handovers':'handover', 'weekly-report':'weekly', 'tasks':'tasks', 'complaints':'complaint' };
+const ANYA_PAGE_GUIDE = { 'docs-agreement':'agreement', 'docs-letter':'letter', 'docs-memo':'memo', 'petty-cash':'pc-new', 'petty-statement':'pc-stmt', 'petty-count':'pc-count', 'business-advance':'ba', 'purchase-requisitions':'pr', 'travel-local':'travel', 'travel-foreign':'travel', 'fueling':'fuel', 'vehicle-log':'vlog', 'servicing':'service', 'cleaning':'cleaning', 'leave-plan':'leave', 'movements':'stock', 'handovers':'handover', 'weekly-report':'weekly', 'tasks':'tasks', 'complaints':'complaint' };
 
 let anya = { open:false, log:[], acts:[], busy:false, greeted:false };
 const anyaNorm = t => String(t || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9/+\-\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -7961,14 +7970,16 @@ const anyaML = {
   },
   // probabilities for the likeliest intents (only tokens the model knows count, so unknown words do not dilute the answer)
   predict(q, n){
-    const m = this.model(), tk = anyaTokens(q).filter(t => Object.values(m.cls).some(c => c.f[t])); if(!tk.length) return [];
+    const m = this.model(), all = anyaTokens(q).filter(t => !t.startsWith('#') && !t.includes('_')), tk = anyaTokens(q).filter(t => Object.values(m.cls).some(c => c.f[t])); if(!tk.length) return [];
+    const known = all.filter(t => tk.includes(t)).length; if(all.length && known / all.length < 0.5) return [];   // mostly unknown words: no guessing
     const a = .5, out = Object.entries(m.cls).map(([i, c]) => {
       let lp = Math.log(c.n / m.N); tk.forEach(t => { lp += Math.log(((c.f[t] || 0) + a) / (c.tot + a * m.V)); });
-      const hab = this.score(this.data().use[i]); lp += Math.log(1 + hab * .15);   // a nudge toward what this user uses
+      const hab = this.score(this.data().use[i]); lp += Math.log(1 + Math.min(hab, 20) * .02);   // a small nudge toward what this user uses
       return { i, lp };
     }).filter(x => anyaIntentOk(x.i));
     const mx = Math.max(...out.map(x => x.lp)), z = out.reduce((s, x) => s + Math.exp(x.lp - mx), 0);
-    return out.map(x => ({ i:x.i, p:Math.exp(x.lp - mx) / z })).sort((x, y) => y.p - x.p).slice(0, n || 3);
+    // each guess also says which of the sentence's words it is based on
+    return out.map(x => ({ i:x.i, p:Math.exp(x.lp - mx) / z, hits:tk.filter(t => (m.cls[x.i].f[t] || 0) > 0).length })).sort((x, y) => y.p - x.p).slice(0, n || 3);
   },
   // the user's shortcuts: most used overall, with extra weight for what they do on this page
   top(page, n){
@@ -8084,14 +8095,15 @@ function anyaRate(k, v){
   const m = anya.log[k]; if(!m || !m.intent || m.fb) return;
   if(v > 0){ anyaML.learn(m.q, m.intent, 2); m.fb = 'up'; anyaDraw(); return; }
   anyaML.learn(m.q, m.intent, -3); m.fb = 'down';
+  if(anyaRecordAnswer(anyaNorm(m.q))){ anyaDraw(); return; }
   const alts = anyaAlternatives(m.q, [m.intent]);
   anyaSay(alts.length ? 'Sorry about that. Did you mean one of these? Pick one and I\'ll remember it.' : 'Sorry about that. Could you say it another way? I\'ll learn from your next pick.', alts.map(i => [anyaIntentLabel(i), () => anyaChoose(m.q, i)]));
   anyaDraw();
 }
 function anyaAlternatives(q, not){
   const seen = new Set(not || []), out = [];
-  anyaML.predict(q, 6).forEach(x => { if(!seen.has(x.i) && out.length < 3 && x.p > .02){ seen.add(x.i); out.push(x.i); } });
-  const { g } = anyaBestGuide(anyaNorm(q)); if(g && !seen.has('g:' + g.id) && out.length < 4) out.push('g:' + g.id);
+  anyaML.predict(q, 6).forEach(x => { if(!seen.has(x.i) && out.length < 3 && x.p > .08 && x.hits > 0){ seen.add(x.i); out.push(x.i); } });
+  const { g, s:gs } = anyaBestGuide(anyaNorm(q)); if(g && gs >= 1 && !seen.has('g:' + g.id) && out.length < 4) out.push('g:' + g.id);
   return out;
 }
 // the user picked what they meant: learn it strongly, then do it
@@ -8150,9 +8162,10 @@ function anyaVocab(){
   return anyaVocabCache = v;
 }
 const ANYA_CMD_WORDS = new Set('request requests petty cash voucher travel fuel fueling submit process create please reimbursement reimburse foreign local entry litres'.split(' '));
-function anyaFix(t, cmdOnly){
+const ANYA_COMMON = new Set('there their these those where which while about above after again other others named called under until since would could should might maybe never always every thing things right wrong today tomorrow yesterday month months years office offices building company limited private store house money people staff named items')
+;function anyaFix(t, cmdOnly){
   const V = cmdOnly ? ANYA_CMD_WORDS : anyaVocab();
-  return t.split(' ').map(w => { if(w.length < 5 || V.has(w) || /\d/.test(w)) return w; let best = w, bd = w.length >= 9 ? 2 : 1; V.forEach(x => { const d = anyaLev(w, x); if(d <= bd && d < 9 && (best === w || d < anyaLev(w, best))){ best = x; } }); return best; }).join(' ');
+  return t.split(' ').map(w => { if(w.length < 5 || V.has(w) || /\d/.test(w) || ANYA_Q_STOP.has(w) || ANYA_COMMON.has(w)) return w; let best = w, bd = w.length >= 9 ? 2 : 1; V.forEach(x => { const d = anyaLev(w, x); if(d <= bd && d < 9 && (best === w || d < anyaLev(w, best))){ best = x; } }); return best; }).join(' ');
 }
 const ANYA_MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
 // one date in words or numbers → yyyy-mm-dd
@@ -8963,6 +8976,71 @@ function anyaSetHands(on){
 function anyaMicDown(){ anya._micT = setTimeout(() => { anya._micT = null; anyaSetHands(!anyaVoiceCfg().hands); }, 650); }
 function anyaMicUp(e){ if(anya._micT){ clearTimeout(anya._micT); anya._micT = null; anyaListenOnce(); } if(e) e.preventDefault(); }
 document.addEventListener('visibilitychange', () => { try{ if(document.hidden){ if(anyaRecMode === 'hands') anyaStopRec(); } else if(anyaVoiceCfg().hands) anyaHandsFree(); }catch(e){} });
+/* ---------- questions about records: "is there any agreement from post office?", "how many vehicles", "show letters to Maldives Post" ---------- */
+const ANYA_REC_TYPES = [
+  { rx:/\b(agreements?|contracts?|leases?|tenancy|rental agreements?)\b/, doc:'agreement', label:'agreement' },
+  { rx:/\bletters?\b/, doc:'letter', label:'letter' }, { rx:/\bmemos?\b/, doc:'memo', label:'memo' },
+  { rx:/\b(exco|exco papers?)\b/, doc:'exco', label:'EXCO paper' }, { rx:/\b(tors?|terms of reference)\b/, doc:'tor', label:'TOR' },
+  { rx:/\bsops?\b/, doc:'sop', label:'SOP' }, { rx:/\b(minutes|meeting minutes)\b/, doc:'minutes', label:'meeting minutes' },
+  { rx:/\b(staff request forms?|srf)\b/, doc:'srf', label:'staff request form' },
+  { rx:/\bdocuments?\b/, doc:'*', label:'document' },
+  { rx:/\b(vouchers?|petty cash requests?|petty cash)\b/, gs:'Petty cash', label:'petty cash voucher', page:'petty-cash' },
+  { rx:/\b(travel|trips?|travel requests?)\b/, gs:'Travel', label:'travel request', page:'travel-foreign' },
+  { rx:/\b(vehicles?|cars?|trucks?|bikes?|pickups?)\b/, gs:'Vehicle', label:'vehicle', page:'vehicles' },
+  { rx:/\b(staff|employees?|people|colleagues?)\b/, gs:'Staff', label:'staff member', page:'staff-list' },
+  { rx:/\bassets?\b/, gs:'Asset', label:'asset', page:'assets' }, { rx:/\b(items?|stock|products?)\b/, gs:'Item', label:'item', page:'products' },
+  { rx:/\btasks?\b/, gs:'Task', label:'task', page:'tasks' }, { rx:/\bcomplaints?\b/, gs:'Complaint', label:'complaint', page:'complaints' },
+  { rx:/\bhandovers?\b/, gs:'Handover', label:'handover', page:'handovers' }, { rx:/\b(prs?|purchase requisitions?|requisitions?)\b/, gs:'PR', label:'purchase requisition', page:'purchase-requisitions' },
+  { rx:/\bkeys?\b/, gs:'Key', label:'key', page:'keys' },
+];
+const ANYA_Q_STOP = new Set('named called is are was were there any anything some do does did we you i us our have has had a an the of from for to with by in on at about regarding related me my show list find get give tell need want asked ask please can could would which what who whom whose when where how many much all every latest last recent newest current active open existing still yet one ones that this these those it its and or not no yes kind sort type look search check see know if exist exists available registered saved recorded file files copy'.split(' '));
+const anyaPlural = (n, w) => n + ' ' + (n === 1 ? w : (/(s|sh|ch|x)$/.test(w) ? w + 'es' : /[^aeiou]y$/.test(w) ? w.slice(0, -1) + 'ies' : w + 's'));
+// words that must match, with the record-type words taken out
+function anyaQWords(t, type){ return t.split(' ').filter(w => w.length > 1 && !ANYA_Q_STOP.has(w) && !type.rx.test(w) && !/^(agreements?|contracts?|documents?|records?|limited|ltd|pvt|private|company|co)$/.test(w)); }
+function anyaWordHit(word, hay){ const st = anyaStemW(word); return hay.some(h => h === word || (st.length >= 4 && (anyaStemW(h) === st || h.startsWith(st))) || (word.length >= 4 && h.startsWith(word))); }
+function anyaRecordAnswer(t){
+  if(/^(how (do|can|to|should)|new|create|add|make|raise|start|compose|write|draft|download|export|print)\b/.test(t)) return false;
+  const type = ANYA_REC_TYPES.find(x => x.rx.test(t)); if(!type) return false;
+  const asking = /^(is|are|do|does|did|have|has|any|show|list|find|which|what|whats|when|where|who|how many|tell me|give me|get me|search|look|i need|i want|i asked|check|see|open the|the)\b/.test(t) || /\?$/.test(t) || /\bhow many\b/.test(t);
+  const words = anyaQWords(t, type);
+  if(!asking && !words.length) return false;
+  const count = /\bhow many\b|\bnumber of\b|\bcount\b/.test(t);
+  // the records of that kind, each with the words to match against and how to show it
+  let recs = [];
+  if(type.doc){
+    if(!anyaCanSee('docs-' + (type.doc === '*' ? 'agreement' : type.doc)) && !anyaPages().some(n => /^docs-/.test(n.id))){ anyaSay(`You don't have access to documents with your role.`); return true; }
+    recs = state.documents.filter(d => type.doc === '*' || d.type === type.doc).map(d => {
+      const x = d.extra || {}, end = d.type === 'agreement' ? (() => { try{ return agEffEnd(d); }catch(e){ return { end:x.endDate || '' }; } })() : null;
+      const party = x.party || x.counterparty || x.to || x.from || '';
+      const facts = [d.refNo, party, d.date ? fmtDate(d.date) : '', end && end.end ? (end.end < vToday() ? 'ended ' : 'until ') + fmtDate(end.end) + (end.by ? ' (' + (end.by.title || 'amendment') + ')' : '') : '', d.status].filter(Boolean).join(' · ');
+      const am = d.type === 'agreement' ? ((d.track || {}).amendments || []).length : 0;
+      return { title:d.title || d.refNo || 'Untitled', facts, date:d.date || '', hay:anyaNorm([d.title, d.refNo, party, d.department, (docType(d.type) || {}).label, x.kind, x.direction, String(d.summary || '').slice(0, 300)].join(' ')).split(' '),
+        acts:[['Open ' + (d.refNo || 'it'), () => { anyaToggleSmall(); goTo('docs-' + d.type); openDocView(d.id); }]].concat(d.docFile && d.docFile.fileId ? [['Download file', () => anyaFileGo({ fid:d.docFile.fileId, title:d.docFile.fileName || d.title, rec:d.refNo, date:d.date }, false)]] : []).concat(am ? [[`Amendments (${am})`, () => anyaGetFile(anyaNorm('amendment ' + (d.title || '') + ' ' + (d.refNo || '')))]] : []) };
+    });
+  } else {
+    if(type.page && !anyaCanSee(type.page)){ anyaSay(`You don't have access to ${type.label}s with your role.`); return true; }
+    recs = gsIndex().filter(r => r.type === type.gs).map(r => ({ title:r.title, facts:r.sub, date:'', hay:r.hay.split(' '), acts:[['Open', () => { anyaToggleSmall(); (0, eval)(r.go); }]] }));
+  }
+  const kind = type.label;
+  if(!recs.length){ anyaSay(`There are no ${kind}s recorded in the app yet.`); return true; }
+  if(!words.length){
+    const latest = recs.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
+    anyaSay(count ? `There ${recs.length === 1 ? 'is' : 'are'} **${anyaPlural(recs.length, kind)}** in the app.` : `Yes — there ${recs.length === 1 ? 'is' : 'are'} **${anyaPlural(recs.length, kind)}**. The latest:`, latest.length === 1 ? latest[0].acts : [], count ? '' : `<ul class="anya-list">${latest.map(r => `<li><b>${esc(r.title)}</b>${r.facts ? ` <span>— ${esc(r.facts)}</span>` : ''}</li>`).join('')}</ul>`);
+    return true;
+  }
+  // score: how many of the asked words appear (partial words count: "post" finds "Post Building" and "Maldives Post")
+  const scored = recs.map(r => ({ r, n:words.filter(w => anyaWordHit(w, r.hay)).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n || String(b.r.date).localeCompare(String(a.r.date)));
+  const what = words.join(' ');
+  if(!scored.length){ anyaSay(`No — I couldn't find any ${kind} matching "${what}" among the ${anyaPlural(recs.length, kind)} in the app.`, type.page ? [['Open ' + (anyaPageLabel(type.page) || kind + 's'), `goTo('${type.page}')`]] : []); return true; }
+  const best = scored[0].n, hits = scored.filter(x => x.n === best).map(x => x.r), full = best === words.length;
+  if(count){ anyaSay(`**${anyaPlural(hits.length, kind)}** match${hits.length === 1 ? 'es' : ''} "${what}".`); return true; }
+  const show = hits.slice(0, 5);
+  const matched = words.filter(w => hits.some(r => anyaWordHit(w, r.hay))).join(' ');
+  anyaSay(`Yes — ${hits.length === 1 ? `I found **1 ${kind}**` : `I found **${hits.length} ${kind}s**`} ${full ? 'for' : 'matching'} "${full ? what : matched}"${full ? '' : ' (nothing mentions "' + words.filter(w => !matched.split(' ').includes(w)).join(' ') + '")'}:`,
+    show.length === 1 ? show[0].acts : show.map(r => [r.title.slice(0, 44), () => { const a = r.acts[0]; a[1](); }]),
+    `<ul class="anya-list">${show.map(r => `<li><b>${esc(r.title)}</b>${r.facts ? `<br><span>${esc(r.facts)}</span>` : ''}</li>`).join('')}</ul>${hits.length > show.length ? `<div class="anya-tip">…and ${hits.length - show.length} more.</div>` : ''}`);
+  return true;
+}
 function anyaExec(i, q, chosen){
   const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
   if(!anyaIntentOk(i)){ anyaSay('You don\'t have access to that with your role.'); anyaDraw(); return; }
@@ -9044,6 +9122,7 @@ async function anyaReply(q){
   if(/\b(hands? ?free|always listen|listen for (hey )?anya|wake word)\b/.test(t) && !/\b(off|stop)\b/.test(t)){ anyaSetHands(true); return; }
   if(/\b(stop listening|hands? ?free off|don'?t listen|turn off (the )?(mic|microphone|listening))\b/.test(t)){ anyaSetHands(false); return; }
   if(anyaDownload(t)) return;
+  if(/^(show|list|view|see)\b/.test(t) && /\b(letters|agreements|contracts|memos|documents|leases|vouchers|vehicles|tasks|complaints|handovers)\b/.test(t) && anyaRecordAnswer(t)) return;
   if(/^(show|open|view|see|preview)\b/.test(t) && ANYA_FILEISH.test(t) && anyaGetFile(t)) return;
   const pm = /^process (?:voucher |request )?([a-z0-9\/\- ]*\d[a-z0-9\/\- ]*)$/.exec(t); if(pm){ anyaProcessVoucher(pm[1].trim()); return; }
   if(formOpen && (/^(fill|set|put|use|change|make it)\b/.test(t) || !/^(new|create|start|raise|open|go|show|find|search|how|what|where|who|i (want|need))\b/.test(t)) && anyaFillOpen(t.replace(/^(fill( in| it)?( with)?|set|put|use|change|make it)\s+/, ''))) return;
@@ -9059,9 +9138,11 @@ async function anyaReply(q){
     return;
   }
   // 1. a phrasing this user taught me  2. the rules (unless the user rejected that answer for this phrasing)  3. the learned classifier
+  if(/^(is|are|was|were|do|does|did|have|has|any|which|when|where|who|how many|tell me about|i asked|i need|i want|i am looking|im looking|looking for|where is|wheres)\b|\?\s*$/.test(t) && anyaRecordAnswer(t)) return;
   let i = anyaML.recall(t);
   if(!i){ const r = anyaRuleIntent(t); if(r && !anyaML.rejected(t, r)) i = r; }
-  if(!i){ const p = anyaML.predict(t, 3).filter(x => !anyaML.rejected(t, x.i)); if(p[0] && p[0].p >= .55) i = p[0].i; }
+  if(!i && anyaRecordAnswer(t)) return;
+  if(!i){ const p = anyaML.predict(t, 3).filter(x => !anyaML.rejected(t, x.i)); if(p[0] && p[0].p >= .6 && p[0].hits >= 1 && (!p[1] || p[0].p - p[1].p >= .25)) i = p[0].i; }
   if(i){ await anyaExec(i, q); return; }
   if(AI_READ_URL){
     try{
@@ -9071,7 +9152,7 @@ async function anyaReply(q){
   }
   const alts = anyaAlternatives(t, []);
   const r = anyaFind(t);
-  if(alts.length){ anyaSay('I\'m not sure yet. Did you mean one of these? Pick one and I\'ll remember it for next time.', alts.map(x => [anyaIntentLabel(x), () => anyaChoose(q, x)]).concat(r.slice(0, 2).map(x => [x.type + ': ' + x.title.slice(0, 30), x.go]))); return; }
+  if(alts.length){ anyaSay('I\'m not sure I understood. Is it one of these? If not, try asking in a different way — e.g. "is there an agreement with …", "open …", "new …" or "how do I …".', alts.map(x => [anyaIntentLabel(x), () => anyaChoose(q, x)]).concat(r.slice(0, 2).map(x => [x.type + ': ' + x.title.slice(0, 30), x.go]))); return; }
   if(r.length){ anyaSay('These records match:', r.map(x => [x.type + ': ' + x.title.slice(0, 40), x.go])); return; }
   anyaSay('Sorry, I didn\'t catch that. Try "how do I …", "new …", "open …" or "find …" — or pick a topic:', [], `<div class="anya-topics">${ANYA_GUIDES.slice(0, 10).map(x => `<button type="button" onclick="anya.log.push({who:'me',text:${esc(JSON.stringify(x.title))}}); anyaML.learn(${esc(JSON.stringify(q))},'g:${x.id}',3); anyaExec('g:${x.id}','',true)">${esc(x.title)}</button>`).join('')}</div>`);
 }

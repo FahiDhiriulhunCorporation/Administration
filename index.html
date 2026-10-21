@@ -1896,7 +1896,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.262';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.263';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7934,7 +7934,7 @@ function anyaWelcome(){
   if(g && here) acts.push(['Show the steps', () => anyaGuide(g)]);
   anyaSay(`Hi${anyaFirst() ? ' ' + anyaFirst() : ''}, I'm **Anya**. Ask me how a process works, or tell me what to do — e.g. "new petty cash request", "open fueling", "find Ahmed", "what's pending?".` +
     (habit ? `\nOn **${here || 'this page'}** you usually go for **${anyaIntentLabel(habit)}**.` : g && here ? `\nYou're on **${here}** — want the steps for ${g.title.toLowerCase()}?` : '') +
-    `\nI learn from you: rate my answers with 👍 / 👎 and I'll get better at your way of asking.` + (nf ? `\n⚠ I spotted **${nf}** thing${nf === 1 ? '' : 's'} in the records that may be wrong.` : ''), nf ? [['Show what\'s wrong', () => anyaAnalyze()], ...acts] : acts);
+    `\nI learn from you: tap 👍 or 👎 under my answers (or just type 👍 / "wrong") and I'll get better at your way of asking.` + (nf ? `\n⚠ I spotted **${nf}** thing${nf === 1 ? '' : 's'} in the records that may be wrong.` : ''), nf ? [['Show what\'s wrong', () => anyaAnalyze()], ...acts] : acts);
 }
 function anyaAct(fn){ anya.acts.push(fn); return anya.acts.length - 1; }
 // acts: [label, fn | 'js string']; opts.intent / opts.q let the user rate the answer
@@ -8709,6 +8709,11 @@ function anyaRuleIntent(t){
   return null;
 }
 async function anyaReply(q){
+  // a reaction typed as a message rates my last answer
+  const qq = String(q).trim(), up = /^(👍|👌|✅|good|great answer|correct|right|yes that'?s it|perfect)!*$/i.test(qq), down = /^(👎|❌|wrong|not what i meant|no that'?s wrong|incorrect|bad answer)!*$/i.test(qq);
+  if(up || down){ let k = -1; for(let j = anya.log.length - 1; j >= 0; j--){ const m = anya.log[j]; if(m.who === 'anya' && m.intent && m.q && !m.fb){ k = j; break; } }
+    if(k < 0){ anyaSay(up ? 'Thanks! 😊 (There is no answer of mine to rate right now — the 👍 / 👎 buttons appear under answers I can learn from.)' : 'Sorry — tell me again what you need, and pick the right option if I offer a few. I\'ll remember it.'); return; }
+    anyaRate(k, up ? 1 : -1); if(up) anyaSay('Thanks — I\'ll answer that the same way next time. 👍'); return; }
   let t = anyaFix(anyaNorm(q));
   for(let k = 0; k < 3; k++) t = t.replace(/^(please|pls|kindly|can you|could you|would you|will you|anya|hey|ok|okay)\s+/, '');
   const formOpen = !!document.getElementById('vform') && !document.getElementById('modal-overlay').classList.contains('hidden');

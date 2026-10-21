@@ -1886,7 +1886,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.255';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.256';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -8189,6 +8189,121 @@ function anyaProcessVoucher(term){
   try{ anyaToggleSmall(); goTo('petty-cash'); openPcProcess(r.id); anyaSay(`Opened **Process** for ${r.number} (${r.purpose || 'no purpose'}, ${fmtMVR(pcTotal(r))}). Check the amount and save to hand over the cash.`, [['Submit now', () => anyaSubmitOpenForm()]]); }
   catch(e){ anyaSay('I could not open it: ' + (e && e.message ? e.message : e)); }
 }
+/* ---------- downloads on request: "download the business advance statement as pdf" ---------- */
+// picks the record a sentence points at: by its number/name words, else the newest
+function anyaPick(list, t, keyFn, dateFn){
+  if(!list.length) return { one:null, list };
+  const words = t.split(' ').filter(w => w.length > 1 && !/^(download|export|print|get|give|me|the|a|an|my|for|of|as|in|pdf|excel|xlsx|csv|word|docx|file|statement|statements|report|please|latest|last|newest|current|open)$/.test(w));
+  const scored = list.map(r => { const k = anyaNorm(keyFn(r)); let s = 0; words.forEach(w => { if(k.includes(w)) s += w.length > 3 ? 2 : 1; }); return { r, s }; });
+  const best = Math.max(...scored.map(x => x.s));
+  const sorted = list.slice().sort((a, b) => String(dateFn(b) || '').localeCompare(String(dateFn(a) || '')));
+  if(best > 0){ const top = scored.filter(x => x.s === best).map(x => x.r); return { one:top.length === 1 ? top[0] : null, list:top }; }
+  if(list.length === 1 || /\b(latest|last|newest|current|recent|this)\b/.test(t)) return { one:sorted[0], list:sorted };
+  return { one:null, list:sorted };
+}
+// runs a download and reports it in the chat
+async function anyaDlRun(label, fn){
+  anyaSay(`Preparing **${label}**…`); anyaDraw();
+  const tw = document.getElementById('toast-wrap'), before = tw ? tw.children.length : 0;
+  try{
+    await fn();
+    // the download functions report problems as a message on screen rather than throwing
+    const fresh = tw ? [...tw.children].slice(before).map(x => x.textContent.trim()).find(x => /could not|failed|error|not be loaded/i.test(x)) : '';
+    if(fresh) anyaSay('The download did not work — ' + fresh); else anyaSay(`Downloaded ✓ **${label}** — check your downloads.`);
+  }
+  catch(e){ anyaSay('The download did not work: ' + (e && e.message ? e.message : e)); }
+  anyaDraw();
+}
+// when several records match, the user picks one
+function anyaDlChoose(what, items, labelFn, runFn){
+  anyaSay(`Which ${what}?`, items.slice(0, 6).map(r => [labelFn(r), () => anyaDlRun(labelFn(r), () => runFn(r))]));
+}
+function anyaDownload(t){
+  if(!/\b(download|export|print|save|get|give|send)\b/.test(t) || !/\b(download|export|print|pdf|excel|xlsx|csv|word|docx|file|statement|statements|report|memo|form|backup|list|copy|sheet)\b/.test(t)) return false;
+  if(/^(how|what|where|why)\b/.test(t)) return false;
+  const fmt = /\b(excel|xlsx|sheet|spreadsheet|workbook)\b/.test(t) ? 'xlsx' : /\bcsv\b/.test(t) ? 'csv' : /\b(word|docx)\b/.test(t) ? 'docx' : /\b(pdf|print)\b/.test(t) ? 'pdf' : '';
+  const no = (s, page) => { if(!anyaCanSee(page)){ anyaSay(`You don't have access to ${s} with your role.`); anyaDraw(); return true; } return false; };
+  // business advance
+  if(/\bbusiness advance|\bba\b/.test(t)){
+    if(no('business advances', 'business-advance')) return true;
+    const all = (state.businessAdvances || []); if(!all.length){ anyaSay('There are no business advances yet.'); anyaDraw(); return true; }
+    const ledger = /\bledger|entries\b/.test(t), withInv = /\binvoice/.test(t);
+    const name = r => `${r.no ? r.no + ' · ' : ''}${r.title || 'Business advance'}`;
+    const lab = (r, f) => `${name(r)} (${f === 'xlsx' ? (ledger ? 'Excel ledger' : 'Excel statement') : 'PDF' + (withInv ? ' with invoices' : '')})`;
+    const run = (r, f) => f === 'xlsx' ? baXlsxDownload(r.id, null, ledger ? '' : 'cat') : baPdfDownload(r.id, withInv);
+    // no format said: offer both for the chosen advance
+    const go = r => { if(fmt) return anyaDlRun(lab(r, fmt), () => run(r, fmt)); anyaSay(`**${name(r)}** — which format?`, [['PDF statement', () => anyaDlRun(lab(r, 'pdf'), () => run(r, 'pdf'))], ['Excel statement', () => anyaDlRun(lab(r, 'xlsx'), () => run(r, 'xlsx'))], ['PDF with invoices', () => anyaDlRun(name(r) + ' (PDF with invoices)', () => baPdfDownload(r.id, true))]]); anyaDraw(); };
+    const { one, list } = anyaPick(all, t, r => (r.no || '') + ' ' + (r.title || '') + ' ' + (r.holder || r.staffName || ''), r => r.date || r.createdAt || r.no);
+    if(one) go(one); else { anyaSay('Which business advance?', list.slice(0, 6).map(r => [name(r), () => go(r)])); anyaDraw(); }
+    return true;
+  }
+  // DSA memo for a travel request
+  if(/\b(dsa|memo)\b/.test(t) && /\b(travel|dsa|trf|memo)\b/.test(t)){
+    if(!anyaCanSee('travel-foreign') && !anyaCanSee('travel-local')){ anyaSay('You don\'t have access to travel requests with your role.'); anyaDraw(); return true; }
+    const all = state.travelRequests.filter(x => trDsaOn(x) && x.dsa.memoNo); if(!all.length){ anyaSay('No travel request has a DSA memo number yet — add the memo number with Edit request first.'); anyaDraw(); return true; }
+    const f = fmt === 'docx' ? 'docx' : 'pdf', lab = r => `DSA memo ${r.dsa.memoNo} — ${r.destination || ''} (${f.toUpperCase()})`, run = r => f === 'docx' ? trMemoDocx(r.id) : trMemoPdf(r.id);
+    const { one, list } = anyaPick(all, t, r => (r.formNumber || '') + ' ' + r.dsa.memoNo + ' ' + (r.destination || '') + ' ' + (r.country || ''), r => r.formDate || r.fromDate);
+    if(one) anyaDlRun(lab(one), () => run(one)); else anyaDlChoose('travel request', list, lab, run);
+    return true;
+  }
+  // petty cash statement (Excel workbook, PDF of one statement, or CSV)
+  if(/\bpetty cash statement|\bstatement|\bpc statement/.test(t) && !/\bbusiness\b/.test(t)){
+    if(no('petty cash statements', 'petty-statement')) return true;
+    let locId = ''; try{ (LOCATIONS || []).some(l => { if(t.includes(anyaNorm(l.name))){ locId = l.id; return true; } }); }catch(e){}
+    if(locId) vehUi.stXLoc = locId; locId = pcStLocation();
+    const sts = pcStatements(locId); const nm = (pcFund(locId) || {}).name || '';
+    if(fmt === 'csv'){ anyaDlRun('Petty cash statement (CSV)', () => pcStatementCsv()); return true; }
+    if(!sts.length){ anyaSay(`There are no statements for ${nm || 'this location'} yet.`); anyaDraw(); return true; }
+    const { one } = anyaPick(sts, t, s => s.no, s => s.no);
+    const s = one || sts.find(x => !x.closed) || sts[sts.length - 1];
+    if(fmt === 'pdf') anyaDlRun(`Statement ${s.no} — ${nm} (PDF)`, () => pcStatementPdf(s.no));
+    else anyaDlRun(`Petty cash statements workbook — ${nm} (Excel, sheet ${s.no})`, () => pcDownloadStatements(s.no));
+    return true;
+  }
+  // replenishment form
+  if(/\breplenish/.test(t)){
+    if(no('petty cash statements', 'petty-statement')) return true;
+    const locId = pcStLocation(), sts = pcStatements(locId).filter(s => s.closed); if(!sts.length){ anyaSay('There is no closed statement to make a replenishment form for.'); anyaDraw(); return true; }
+    const { one } = anyaPick(sts, t, s => s.no, s => s.no); const s = one || sts[sts.length - 1];
+    anyaDlRun(`Replenishment form for ${s.no} (PDF)`, () => pcReplFormPdf(s.no)); return true;
+  }
+  // one petty cash voucher
+  if(/\b(voucher|petty cash request|pc request|petty cash form)\b/.test(t)){
+    if(no('petty cash', 'petty-cash')) return true;
+    const all = state.pettyCash.slice(); if(!all.length){ anyaSay('There are no petty cash vouchers yet.'); anyaDraw(); return true; }
+    const lab = r => `${r.number} — ${r.purpose || ''} (PDF)`;
+    const { one, list } = anyaPick(all, t, r => r.number + ' ' + (r.purpose || ''), r => r.date);
+    if(one) anyaDlRun(lab(one), () => generatePettyCashPdf(one.id)); else anyaDlChoose('voucher', list, lab, r => generatePettyCashPdf(r.id));
+    return true;
+  }
+  // weekly report
+  if(/\bweekly report|\bweek report\b/.test(t)){
+    if(no('weekly reports', 'weekly-report')) return true;
+    const all = state.weeklyReports || []; if(!all.length){ anyaSay('There are no weekly reports yet.'); anyaDraw(); return true; }
+    const lab = r => `Week ${r.weekNo} — ${r.department || ''} (PDF)`;
+    const { one, list } = anyaPick(all, t.replace(/\bweek (\d+)/, 'week$1'), r => 'week' + r.weekNo + ' ' + (r.department || ''), r => r.weekStart);
+    if(one) anyaDlRun(lab(one), () => wrPdf(one.id)); else anyaDlChoose('weekly report', list, lab, r => wrPdf(r.id));
+    return true;
+  }
+  // handover
+  if(/\bhandover|hand over\b/.test(t)){
+    if(no('handovers', 'handovers')) return true;
+    const all = state.handovers || []; if(!all.length){ anyaSay('There are no handovers yet.'); anyaDraw(); return true; }
+    const lab = r => `Handover ${r.number || r.no || ''} ${r.title || r.from || ''} (PDF)`.replace(/\s+/g, ' ');
+    const { one, list } = anyaPick(all, t, r => (r.number || r.no || '') + ' ' + (r.title || '') + ' ' + (r.from || '') + ' ' + (r.to || ''), r => r.date);
+    if(one) anyaDlRun(lab(one), () => generateHandoverPdf(one.id)); else anyaDlChoose('handover', list, lab, r => generateHandoverPdf(r.id));
+    return true;
+  }
+  // vehicle log: the generator asks for the vehicle and month
+  if(/\bvehicle log|\btrip log|\blog book\b/.test(t)){ if(no('the vehicle log', 'vehicle-log')) return true; anyaToggleSmall(); goTo('vehicle-log'); openVlGenerate(); anyaSay('Opened **Generate log (PDF)** — pick the vehicle and month and it downloads.'); anyaDraw(); return true; }
+  // lists as CSV
+  const csv = [[/\bstaff|employee/, 'staff-list', 'Staff list', () => sdExportCsv()], [/\bleave/, 'leave-plan', 'Leave plan', () => lvExportCsv()], [/\bkeys?\b|key regist/, 'keys', 'Key registry', () => keyExportCsv()], [/\btask/, 'tasks', 'Tasks report', () => tkReportCsv()], [/\bfleet|vehicle report|fuel report/, 'vehicle-reports', 'Fleet report', () => vehRepCsv()], [/\butilit|electric|water bill/, 'utility-report', 'Utilities report', () => utReportCsv()], [/\bcash count/, 'petty-count', 'Cash count', () => pcCcCsv()]];
+  const c = csv.find(([rx]) => rx.test(t));
+  if(c){ if(no(c[2].toLowerCase(), c[1])) return true; anyaDlRun(c[2] + ' (CSV)', c[3]); return true; }
+  if(/\bbackup\b/.test(t)){ if(no('backups', 'backups')) return true; anyaDlRun('Full backup', () => bkDownload()); return true; }
+  anyaSay('What should I download? For example: "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "voucher PTC-V-HO-26-01", "weekly report week 42", "staff list CSV" or "backup".');
+  anyaDraw(); return true;
+}
 function anyaExec(i, q, chosen){
   const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
   if(!anyaIntentOk(i)){ anyaSay('You don\'t have access to that with your role.'); anyaDraw(); return; }
@@ -8209,7 +8324,7 @@ function anyaExec(i, q, chosen){
     else if(v === 'trno'){ let no = ''; try{ no = trNextFormNo(); }catch(e){} anyaSay(no ? `The next travel request number is **${no}**.` : 'I could not work out the next number.', anyaCanSee('travel-foreign') ? [['+ New travel request', "goTo('travel-foreign'); openTravelForm('', 'foreign')"]] : [], '', o); }
     else if(v === 'me'){ anyaSay(`You're signed in as **${(authUser && (authUser.name || authUser.email)) || 'unknown'}** (${(authUser && authUser.role) || 'user'}).`); }
     else if(v === 'help'){
-      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
+      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
     }
     else if(v === 'learned'){
       const d = anyaML.data(), taught = d.ex.filter(e => e.w >= 2 && anyaIntentOk(e.i)).sort((a, b) => b.w - a.w), mine = anyaML.top(ui.tab, 6);
@@ -8248,6 +8363,7 @@ async function anyaReply(q){
   for(let k = 0; k < 3; k++) t = t.replace(/^(please|pls|kindly|can you|could you|would you|will you|anya|hey|ok|okay)\s+/, '');
   const formOpen = !!document.getElementById('vform') && !document.getElementById('modal-overlay').classList.contains('hidden');
   if(/^(submit|save|process|send|file|done|go ahead|yes submit|confirm)( it| this| that| the form| the request| now)?( please| now)?$/.test(t)){ await anyaSubmitOpenForm(); return; }
+  if(anyaDownload(t)) return;
   const pm = /^process (?:voucher |request )?([a-z0-9\/\- ]*\d[a-z0-9\/\- ]*)$/.exec(t); if(pm){ anyaProcessVoucher(pm[1].trim()); return; }
   if(formOpen && (/^(fill|set|put|use|change|make it)\b/.test(t) || !/^(new|create|start|raise|open|go|show|find|search|how|what|where|who|i (want|need))\b/.test(t)) && anyaFillOpen(t.replace(/^(fill( in| it)?( with)?|set|put|use|change|make it)\s+/, ''))) return;
   if(/^(hi|hello|hey|salaam|assalaamu? ?alaikum|good (morning|afternoon|evening))\b/.test(t) && t.split(' ').length <= 4){ anyaSay(`Hello${anyaFirst() ? ' ' + anyaFirst() : ''}! What can I do for you?`); return; }

@@ -352,7 +352,7 @@ function refreshAppearanceModal(){
   html[data-anya="modern"] #anya-fab svg{ width:56px; height:56px; }
   html[data-anya="modern"] #anya-fab:hover{ transform:translateY(-2px); }
   html[data-anya="modern"] #anya-fab.anya-on{ box-shadow:0 0 0 3px color-mix(in srgb,var(--an-a) 30%,transparent),0 6px 16px rgba(0,0,0,.22); }
-  html[data-anya="modern"] #anya-fab .anya-tag{ display:none; }
+  html[data-anya="modern"] #anya-fab .anya-tag{ right:50px; bottom:2px; font:600 11px/1.4 'Inter',system-ui,sans-serif; letter-spacing:.08em; color:var(--an-a); background:var(--an-bg); border-color:color-mix(in srgb,var(--an-a) 35%,transparent); text-shadow:none; box-shadow:0 2px 6px rgba(0,0,0,.12); }
   html[data-anya="modern"] .anya-name{ font-family:'Inter',system-ui,sans-serif; letter-spacing:.04em; font-size:15px; font-weight:700; color:var(--an-tx); text-shadow:none; }
   html[data-anya="modern"] .anya-sub i{ animation:none; box-shadow:none; }
   html[data-anya="modern"] #anya-panel{ animation:none; background:var(--an-bg); }
@@ -363,7 +363,7 @@ function refreshAppearanceModal(){
   @keyframes anyaScan{ to{ transform:translateY(73px); } }
   @keyframes anyaGl1{ 0%,100%{ transform:none; } 30%{ transform:translate(-2px,1px); } 34%{ transform:none; } 70%{ transform:translate(1px,-1px); } 72%{ transform:none; } }
   @keyframes anyaGl2{ 0%,100%{ transform:none; } 31%{ transform:translate(2px,-1px); } 35%{ transform:none; } 71%{ transform:translate(-1px,1px); } 73%{ transform:none; } }
-  html[data-anya="grid"] #anya-fab{ border-radius:5px; } html[data-anya="red"] #anya-fab{ border-radius:0; clip-path:polygon(0 0,100% 0,100% 78%,78% 100%,0 100%); }
+  html[data-anya="grid"] #anya-fab{ border-radius:5px; } html[data-anya="grid"] #anya-fab .anya-tag{ color:var(--an-a); border-color:var(--an-a); } html[data-anya="red"] #anya-fab{ border-radius:0; background:transparent; box-shadow:none; filter:drop-shadow(0 0 8px color-mix(in srgb,var(--an-a) 55%,transparent)); }
   html[data-anya="cyber"] #anya-fab{ border-radius:0; background:transparent; box-shadow:none; filter:drop-shadow(0 0 10px color-mix(in srgb,var(--an-a) 60%,transparent)); }
   /* modern (the normal colour schemes): soft rounded chat bubbles in the accent colour */
   html[data-anya="modern"] #anya-panel{ clip-path:none; border-radius:18px; background:var(--an-bg); border:1px solid color-mix(in srgb,var(--an-a) 22%,transparent); box-shadow:0 22px 50px rgba(0,0,0,.28); }
@@ -402,7 +402,7 @@ function refreshAppearanceModal(){
   html[data-anya="red"] .anya-busy::before{ content:none; } html[data-anya="red"] .anya-busy{ padding-top:8px; }
   html[data-anya="red"] .anya-acts button, html[data-anya="red"] .anya-topics button, html[data-anya="red"] .anya-chips button{ clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%); }
   #toast-wrap{ bottom:92px !important; }
-  @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ display:none; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
+  @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ right:46px; bottom:-4px; font-size:9.5px; padding:1px 7px; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
   @media print{ #anya-fab,#anya-panel,#anya-peek{ display:none !important; } }
 
   :root{ --brand-50:238 242 255; --brand-100:224 231 255; --brand-200:199 210 254; --brand-300:165 180 252; --brand-400:129 140 248; --brand-500:99 102 241; --brand-600:79 70 229; --brand-700:67 56 202; --brand-800:55 48 163; --brand-900:49 46 129; --chrome:15 23 42; --chrome-hover:30 41 59;
@@ -1886,7 +1886,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.254';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.255';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;

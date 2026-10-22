@@ -1959,7 +1959,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.291';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.293';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -12353,8 +12353,8 @@ function baDetail(r){
       ${vTd(`<span class="${baNet(e) < 0 ? 'text-rose-600' : 'text-emerald-700'} font-semibold">${vMoney(baNet(e))}</span>`, { n:1 })}${vTd(`<span class="text-[12.5px]">${esc(e.remarks || '')}</span>`, { last:1 })}</tr>`; }).join('');
   return `<div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.baId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All business advances</button>
       <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${esc(r.title || 'Business Advance')} ${vPill(r.status === 'Settled' ? '' : 'acc', esc(r.status || 'Open'), 'align-middle')}</h1>
-      <p class="text-sm text-slate-500 mt-0.5">${esc([r.no, r.holder && 'held by ' + r.holder + (r.department ? ' (' + r.department + ')' : ''), r.date && 'issued ' + vDate(r.date), r.ref && 'ref. ' + r.ref].filter(Boolean).join(' · '))}</p>${r.slip && r.slip.fileId ? `<p class="text-sm mt-1"><button onclick="openBaSlip('${r.id}')" class="font-semibold text-brand-600 hover:underline">📎 Balance slip</button> <span class="text-slate-500">${esc([r.slip.amount != null ? fmtMVR(r.slip.amount) + ' returned' : '', r.slip.date && baDate(r.slip.date), r.slip.ref].filter(Boolean).join(' · '))}</span></p>` : ''}${r.notes ? `<p class="text-sm text-slate-600 mt-1 whitespace-pre-line">${esc(r.notes)}</p>` : ''}</div>
-    <div class="flex gap-2.5 flex-wrap">${r.status === 'Settled' ? vBtnPrimary('Expenditure report', `baExpDownload('${r.id}', this)`) : ''}${vBtnPlain('Excel', `baXlsxAsk('${r.id}')`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
+      <p class="text-sm text-slate-500 mt-0.5">${esc([r.no, r.holder && 'held by ' + r.holder + (r.department ? ' (' + r.department + ')' : ''), r.date && 'issued ' + vDate(r.date), r.ref && 'ref. ' + r.ref].filter(Boolean).join(' · '))}</p>${r.slip && r.slip.fileId ? `<p class="text-sm mt-1"><button onclick="openBaSlip('${r.id}')" class="font-semibold text-brand-600 hover:underline">📎 Balance slip</button> <span class="text-slate-500">${esc([r.slip.amount != null ? fmtMVR(r.slip.amount) + ' returned' : '', r.slip.date && baDate(r.slip.date), r.slip.ref].filter(Boolean).join(' · '))}</span></p>` : ''}${r.signedReport && r.signedReport.fileId ? `<p class="text-sm mt-1"><button onclick="openBaSigned('${r.id}')" class="font-semibold text-brand-600 hover:underline">📎 Signed expenditure report</button> <span class="text-slate-500">${esc([r.signedReport.by, r.signedReport.at ? fmtDT(r.signedReport.at) : ''].filter(Boolean).join(' · '))}</span></p>` : ''}${r.notes ? `<p class="text-sm text-slate-600 mt-1 whitespace-pre-line">${esc(r.notes)}</p>` : ''}</div>
+    <div class="flex gap-2.5 flex-wrap">${r.status === 'Settled' ? vBtnPrimary('Expenditure report', `baExpDownload('${r.id}', this)`) + (ed ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">${r.signedReport && r.signedReport.fileId ? 'Replace signed report' : '📎 Attach signed report'}<input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baSignedChosen(this, '${r.id}')"></label>` : '') : ''}${vBtnPlain('Excel', `baXlsxAsk('${r.id}')`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">${card('Current Balance', vMoney(t.balance), t.balance < 0 ? 'text-rose-600' : 'text-emerald-700')}${card('Total Spent', vMoney(t.spent))}${card('Total Received', vMoney(t.received))}${card('Pending Invoice', fmtNum(t.pending), t.pending ? 'text-amber-600' : 'text-slate-900')}</div>
     ${vPanel('Entries', ed ? `<button onclick="openBaEntry('${r.id}', '', 'Received')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">+ Money received</button><button onclick="openBaEntry('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Payment (transferred)</button>` : '',
       es.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Staff Name / Department' }, { t:'Type' }, { t:'Amount', n:1 }, { t:'Details' }, { t:'Invoice' }, { t:'Net', n:1 }, { t:'Remarks' }])}<tbody>${rows}</tbody></table></div>` : vEmpty('No entries yet. Add the money received, then each payment with its invoice.'))}
@@ -12380,7 +12380,7 @@ async function saveBaForm(id){
   const nid = await vehSave('businessAdvances', rec); closeModal(); vehUi.baId = nid; rerenderMain(); toast(id ? 'Saved.' : rec.no + ' created — add each payment with its invoice.');
 }
 async function baSetStatus(id, st){ const r = baById(id); if(!r || !baCanEdit(r)) return; await vehSave('businessAdvances', { id, status:st }); toast(st === 'Settled' ? 'Marked as settled.' : 'Reopened.'); }
-function deleteBa(id){ const r = baById(id); if(!r || !canManageInventory()) return; confirmAction('Delete business advance ' + (r.no || '') + ' (' + (r.title || '') + ') and its entries?', async () => { const f = (r.entries || []).map(e => e.fileId).filter(Boolean); await vehDelete('businessAdvances', id); f.forEach(x => pcFileDelete(x)); vehUi.baId = ''; rerenderMain(); toast('Deleted.'); }); }
+function deleteBa(id){ const r = baById(id); if(!r || !canManageInventory()) return; confirmAction('Delete business advance ' + (r.no || '') + ' (' + (r.title || '') + ') and its entries?', async () => { const f = (r.entries || []).map(e => e.fileId).concat([r.slip && r.slip.fileId, r.signedReport && r.signedReport.fileId]).filter(Boolean); await vehDelete('businessAdvances', id); f.forEach(x => pcFileDelete(x)); vehUi.baId = ''; rerenderMain(); toast('Deleted.'); }); }
 
 /* ---------- closing: the unspent balance is paid back; the bank slip is attached and the advance is settled ---------- */
 let baSlipAtt = null;
@@ -12461,6 +12461,24 @@ async function buildBaExpPdf(r){
   sig(L, 'Prepared by', r.holder); sig(L + half, 'Verified by (Finance)', ''); y += 80;
   return lhPdfFinish(pages, 'Expenditure Report ' + (r.no || ''), R, {});
 }
+// the expenditure report, once printed and signed, is scanned and kept with the advance
+async function baSignedChosen(input, id){
+  const r = baById(id), files = [...(input.files || [])]; input.value = ''; if(!r || !files.length || !baCanEdit(r)) return;
+  toast('Reading the signed report…');
+  try{
+    const att = await pcPrepareAttachment(files), fid = uid(), old = r.signedReport && r.signedReport.fileId;
+    await pcFileSave(fid, { id:fid, voucher:(r.no || '') + ' signed expenditure report', name:att.name, pages:att.pages, at:Date.now() });
+    await vehSave('businessAdvances', { id, signedReport:{ fileId:fid, fileName:att.name, filePages:att.pages.length, at:Date.now(), by:authUser ? authUser.name : '' } });
+    if(old) pcFileDelete(old); rerenderMain(); toast('Signed expenditure report attached.');
+  }catch(e){ toast('That file could not be attached — try a PDF or a photo.', true); }
+}
+async function openBaSigned(id){
+  const r = baById(id); if(!r || !r.signedReport || !r.signedReport.fileId) return; const t = 'Signed expenditure report — ' + (r.no || '');
+  openModal(t, '<div class="text-sm text-slate-500">Loading…</div>', true);
+  let data = null; try{ data = await pcFileLoad(r.signedReport.fileId); }catch(err){}
+  openModal(t, data && data.pages ? `${attPdfBar(r.signedReport.fileId, 'Signed expenditure report ' + (r.no || ''))}<div class="space-y-3">${data.pages.map((p, i) => `<img src="${p.jpeg}" alt="Page ${i + 1}" class="w-full rounded-lg border border-slate-200">`).join('')}</div>${baCanEdit(r) ? `<div class="flex justify-end mt-4"><button onclick="baSignedRemove('${id}')" class="text-xs font-semibold text-rose-600 hover:underline">Remove the signed report</button></div>` : ''}` : vEmpty('The file could not be loaded.'), true);
+}
+function baSignedRemove(id){ const r = baById(id); if(!r || !baCanEdit(r) || !r.signedReport) return; confirmAction('Remove the signed expenditure report?', async () => { const f = r.signedReport.fileId; await vehSave('businessAdvances', { id, signedReport:null }); if(f) pcFileDelete(f); closeModal(); toast('Removed.'); }); }
 async function openBaSlip(id){
   const r = baById(id); if(!r || !r.slip || !r.slip.fileId) return; const t = 'Balance slip — ' + (r.no || '');
   openModal(t, '<div class="text-sm text-slate-500">Loading the slip…</div>', true);
@@ -12730,6 +12748,7 @@ ${valid}
 /* ---------- PDF: letterhead, the four totals, the entries, sign-off, then the invoices ---------- */
 function baPdfAsk(id){
   const r = baById(id); if(!r) return; const nf = (r.entries || []).filter(e => e.fileId).length;
+  if(r.status === 'Settled') return openModal('Download PDF', `<p class="text-sm text-slate-600 mb-4">Which PDF do you need?</p><div class="flex justify-end gap-2.5 flex-wrap">${vBtnPlain('Statement', `closeModal(); baPdfDownload('${id}', false)`)}${nf ? vBtnPlain('Statement with invoices', `baPdfDownload('${id}', true, this)`) : ''}${vBtnPrimary('Expenditure report', `baExpDownload('${id}', this)`)}</div>`);
   if(!nf) return baPdfDownload(id, false);
   openModal('Download PDF', `<p class="text-sm text-slate-600 mb-4">${nf} invoice file${nf === 1 ? ' is' : 's are'} attached to this advance. Add ${nf === 1 ? 'it' : 'them'} after the statement?</p>
     <div class="flex justify-end gap-2.5"><button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="closeModal(); baPdfDownload('${id}', false)">Statement only</button><button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="baPdfDownload('${id}', true, this)">With invoices</button></div>`);

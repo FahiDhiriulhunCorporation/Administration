@@ -1959,7 +1959,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.288';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.289';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -15526,7 +15526,7 @@ function dashboardModuleSummary(){
       const fr = state.fuelRecords.filter(r => inMonth(r.date)), ra = vehReqAlerts();
       const dep = ra.filter(a => a.st.k === 'crit').length;
       return card('fueling', 'fuel', 'Fueling',
-        [metric(fmtNum(Math.round(fr.reduce((a, r) => a + vNum(r.litres), 0))), 'Litres this month'), metric(vMoney0(fr.reduce((a, r) => a + vNum(r.total), 0)), 'Cost this month'), metric(fmtNum(fr.length), 'Fill-ups this month')],
+        [metric(fmtNum(fr.length), 'Fill-ups this month'), metric(fmtNum(Math.round(fr.reduce((a, r) => a + vNum(r.litres), 0))), 'Litres this month'), metric(fmtNum(new Set(fr.map(r => r.vehicleId).filter(Boolean)).size), 'Vehicles fuelled')],
         [dep ? note(plural(dep, 'requisition') + ' depleted', 'crit') : '', ra.length - dep ? note(plural(ra.length - dep, 'requisition') + ' low', 'warn') : '']);
     }),
     safe(() => {
@@ -15534,7 +15534,7 @@ function dashboardModuleSummary(){
       const open = sr.filter(r => r.kind === 'incident' && r.status !== 'Resolved').length;
       const due = vehAlerts().filter(a => a.s && a.s.label === 'Periodic service').length;
       return card('servicing', 'service', 'Servicing',
-        [metric(fmtNum(mo.length), 'Records this month'), metric(vMoney0(mo.reduce((a, r) => a + vNum(r.cost), 0)), 'Cost this month'), metric(fmtNum(open), 'Open issues')],
+        [metric(fmtNum(mo.length), 'Records this month'), metric(fmtNum(due), 'Services due'), metric(fmtNum(open), 'Open issues')],
         [due ? note(plural(due, 'service') + ' due', 'warn') : '', open ? note(plural(open, 'issue') + ' unresolved', 'warn') : '']);
     }),
     safe(() => {
@@ -15543,7 +15543,7 @@ function dashboardModuleSummary(){
       const sign = st.filter(k => k === 'sign').length, inv = st.filter(k => k === 'invoice').length, proc = st.filter(k => k === 'process').length;
       const mine = authUser ? pc.filter(r => pcCanSign(r) && !pcSigned(r)).length : 0;
       return card('petty-cash', 'cash', 'Petty Cash',
-        [metric(fmtNum(mo.length), 'Requests this month'), metric(fmtMVR(mo.reduce((a, r) => a + pcTotal(r), 0)).replace('.00', ''), 'Requested this month'), metric(fmtNum(proc), 'To process')],
+        [metric(fmtNum(mo.length), 'Requests this month'), metric(fmtNum(sign + inv), 'Awaiting signature / invoice'), metric(fmtNum(proc), 'To process')],
         [mine ? note(fmtNum(mine) + ' awaiting your signature', 'crit') : '', sign ? note(fmtNum(sign) + ' awaiting signature', 'warn') : '', inv ? note(fmtNum(inv) + ' awaiting invoice', 'warn') : '']);
     }),
     safe(() => {
@@ -15559,14 +15559,13 @@ function dashboardModuleSummary(){
         [metric(fmtNum(keys.reduce((a, r) => a + keyTotal(r), 0)), 'Keys'), metric(fmtNum(keys.reduce((a, r) => a + keyQty(r.qtyBox), 0)), 'In the key box'), metric(fmtNum(ac.reduce((a, r) => a + keyTotal(r), 0)), 'AC remotes')],
         [note('Across ' + plural(sites, 'site'))]);
     }),
-    safe(() => {
-      const month = localDateStr(new Date()).slice(0,7), bills = state.utilityBills.filter(b => b.period === month);
-      const cost = t => bills.filter(b => !t || (utAcc(b.accountId) || {}).type === t).reduce((a, b) => a + vNum(b.amount), 0);
-      const unpaid = state.utilityBills.filter(b => !b.paidDate), al = utAlerts(), od = al.filter(a => a.st.k === 'crit').length;
-      return card('utility-report', 'bolt', 'Utilities',
-        [metric(vMoney0(cost('')), 'All utilities this month'), metric(vMoney0(cost('Electricity')), 'Electricity this month'), metric(fmtNum(unpaid.length), 'Unpaid invoices')],
-        [od ? note(plural(od, 'invoice') + ' overdue', 'crit') : '', al.length - od ? note(plural(al.length - od, 'invoice') + ' due within a week', 'warn') : '', !state.utilityAccounts.length ? note('No accounts set up yet') : '']);
-    }),
+    ...UT_TYPE_LIST.map(t => safe(() => {
+      const month = localDateStr(new Date()).slice(0, 7), accs = (state.utilityAccounts || []).filter(x => x.type === t), ids = new Set(accs.map(x => x.id));
+      const bills = state.utilityBills.filter(b => ids.has(b.accountId)), unpaid = bills.filter(b => !b.paidDate).length, al = utAlerts().filter(x => x.type === t), od = al.filter(x => x.st.k === 'crit').length;
+      return card('utility-' + UT_TYPES[t].slug, UT_TYPES[t].icon, t,
+        [metric(fmtNum(accs.length), 'Accounts'), metric(fmtNum(bills.filter(b => b.period === month).length), 'Bills this month'), metric(fmtNum(unpaid), 'Unpaid invoices')],
+        [od ? note(plural(od, 'invoice') + ' overdue', 'crit') : '', al.length - od ? note(plural(al.length - od, 'invoice') + ' due within a week', 'warn') : '', !accs.length ? note('No accounts set up yet') : '']);
+    })),
     safe(() => {
       const month = localDateStr(new Date()).slice(0, 7), logs = state.vehicleLogs, mo = logs.filter(l => String(l.outDate || '').slice(0, 7) === month), out = logs.filter(l => !l.inDate);
       const mins = mo.reduce((t, l) => t + vlMinutes(l), 0), long = out.filter(l => Date.now() - Date.parse(l.outDate + 'T' + (l.outTime || '00:00')) > 12 * 3600000).length;
@@ -15577,8 +15576,20 @@ function dashboardModuleSummary(){
     safe(() => {
       const t0 = vToday(), staff = sdAll(), lv = lvBetween(t0, t0), marks = staff.flatMap(p => lvMarks(p.key, p.name, t0)), open = cpOpen(), newC = state.complaints.filter(c => (c.status || 'Open') === 'Open').length;
       return card('staff-list', 'users', 'Department',
-        [metric(fmtNum(staff.length), 'Staff'), metric(fmtNum(lv.length), 'On leave today'), metric(fmtNum(open.length), 'Open complaints')],
-        [newC ? note(plural(newC, 'complaint') + ' not looked at yet', 'warn') : '', ...marks.map(m => note(m.icon + ' ' + m.text)), lv.length ? note('On leave: ' + lv.map(x => x.name).join(', ')) : '']);
+        [metric(fmtNum(staff.length), 'Staff'), metric(fmtNum(new Set(staff.map(p => p.department).filter(Boolean)).size), 'Departments'), metric(fmtNum(staff.length - lv.length), 'At work today')],
+        [...marks.map(m => note(m.icon + ' ' + m.text))]);
+    }),
+    safe(() => {
+      const t0 = vToday(), wk = clIsoAdd(t0, 7), now = lvBetween(t0, t0), soon = lvBetween(clIsoAdd(t0, 1), wk);
+      return card('leave-plan', 'calendar', 'Staff Leave Plan',
+        [metric(fmtNum(now.length), 'On leave today'), metric(fmtNum(soon.length), 'Leave in the next 7 days'), metric(fmtNum(lvBetween(t0.slice(0, 7) + '-01', clIsoAdd(t0.slice(0, 7) + '-28', 4)).length), 'Taking leave this month')],
+        [now.length ? note('On leave: ' + now.map(x => x.name).join(', ')) : note('Everyone is in today')]);
+    }),
+    safe(() => {
+      const all = state.complaints, open = cpOpen(), newC = all.filter(c => (c.status || 'Open') === 'Open').length;
+      return card('complaints', 'chat', 'Admin Complaints',
+        [metric(fmtNum(open.length), 'Open'), metric(fmtNum(all.filter(c => inMonth(c.date || (c.createdAt ? localDateStr(new Date(c.createdAt)) : ''))).length), 'Raised this month'), metric(fmtNum(all.filter(c => cpDone(c.status)).length), 'Resolved')],
+        [newC ? note(plural(newC, 'complaint') + ' not looked at yet', 'warn') : '']);
     }),
     safe(() => {
       const locs = clLocs(), w = clWeekStart(vToday()), last = clIsoAdd(w, -7), st = locs.map(l => clStats(l.id, w)), ls = locs.map(l => clStats(l.id, last));
@@ -15587,17 +15598,17 @@ function dashboardModuleSummary(){
         [metric(fmtNum(locs.length), 'Locations'), metric(avg + '%', 'Done this week'), metric(fmtNum(st.filter(x => x.signed).length), 'Signed copies this week')],
         [!locs.length ? note('No checklists set up yet') : '', miss ? note(plural(miss, 'location') + ": last week not completed", 'warn') : locs.some(l => clSetBefore(l.id, last)) ? note('Last week complete everywhere') : '']);
     }),
-    safe(() => {
-      const month = localDateStr(new Date()).slice(0, 7), today = vToday(), wk = localDateStr(new Date(Date.now() + 7 * 86400000)), all = state.travelRequests;
+    ...['local', 'foreign'].map(sc => safe(() => {
+      const month = localDateStr(new Date()).slice(0, 7), today = vToday(), wk = localDateStr(new Date(Date.now() + 7 * 86400000)), all = state.travelRequests.filter(t => (t.scope || 'local') === sc);
       const mo = all.filter(t => String(t.fromDate || '').slice(0, 7) === month), pend = all.filter(t => t.status === 'Pending').length, open = all.filter(t => (t.status || 'Open') === 'Open').length;
       const away = all.filter(t => t.fromDate && t.fromDate <= today && (t.toDate || t.fromDate) >= today && t.status !== 'Closed').reduce((a, t) => a + trParts(t).length, 0);
       const soon = all.filter(t => t.fromDate > today && t.fromDate <= wk && t.status !== 'Closed').length;
       const unsigned = all.filter(t => trDsaOn(t) && !trMemoSigned(t) && t.status !== 'Closed').length, noTicket = all.filter(t => !trTicketInfo(t) && t.status !== 'Closed').length;
       const dsaM = mo.filter(t => trCur(t) === 'MVR').reduce((a, t) => a + trDsaTotal(t), 0);
-      return card('travel-local', 'plane', 'Travel',
-        [metric(fmtNum(mo.length), 'Trips this month'), metric('MVR ' + Math.round(dsaM).toLocaleString('en-US'), 'DSA this month'), metric(fmtNum(open + pend), 'Open / pending')],
+      return card('travel-' + sc, sc === 'local' ? 'plane' : 'globe', sc === 'local' ? 'Local Travel' : 'Foreign Travel',
+        [metric(fmtNum(mo.length), 'Trips this month'), metric(fmtNum(away), 'Travelling now'), metric(fmtNum(open + pend), 'Open / pending')],
         [away ? note(plural(away, 'person', 'people') + ' travelling now') : '', soon ? note(plural(soon, 'trip') + ' in the next 7 days') : '', pend ? note(fmtNum(pend) + ' pending', 'warn') : '', unsigned ? note(plural(unsigned, 'memo') + ' not signed', 'warn') : '', noTicket ? note(plural(noTicket, 'ticket') + ' not linked', 'warn') : '', !all.length ? note('No trips yet') : '']);
-    }),
+    })),
     safe(() => {
       const prs = state.purchaseRequisitions, by = id => prs.filter(p => (p.status || 'open') === id).length;
       const live = prs.filter(p => (p.status || 'open') !== 'closed');
@@ -15605,8 +15616,26 @@ function dashboardModuleSummary(){
       const pend = by('pending_approval');
       return card('purchase-requisitions', 'pr', 'Purchase Requisitions',
         [metric(fmtNum(by('open')), 'Open'), metric(fmtNum(pend), 'Pending approval'), metric(fmtNum(by('released')), 'Released')],
-        [note(fmtMVR(value).replace('.00', '') + ' not yet closed'), pend ? note(fmtNum(pend) + ' awaiting approval', 'warn') : '']);
+        [note(plural(live.length, 'requisition') + ' not yet closed'), pend ? note(fmtNum(pend) + ' awaiting approval', 'warn') : '']);
     }),
+    safe(() => {
+      const mv = state.movements.filter(m => inMonth(m.date)), pendT = state.itemTransfers.filter(t => t.status === 'pending').length, pendR = state.stockRequests.filter(r => r.status === 'pending').length;
+      return card('movements', 'movements', 'Stock Movements',
+        [metric(fmtNum(mv.filter(m => m.type === 'in').length), 'Stock in this month'), metric(fmtNum(mv.filter(m => m.type === 'out').length), 'Stock out this month'), metric(fmtNum(pendT + pendR), 'Requests / transfers pending')],
+        [pendR ? note(plural(pendR, 'stock request') + ' pending', 'warn') : '', pendT ? note(plural(pendT, 'transfer') + ' to accept', 'warn') : '']);
+    }),
+    safe(() => {
+      const at = state.assetTransfers || [], mo = at.filter(t => inMonth(t.date));
+      return card('asset-transactions', 'assettx', 'Asset Movements',
+        [metric(fmtNum(mo.length), 'Movements this month'), metric(fmtNum(at.length), 'All movements'), metric(fmtNum(new Set(mo.map(t => t.assetId).filter(Boolean)).size), 'Assets moved this month')],
+        []);
+    }),
+    canManageInventory() ? safe(() => {
+      const ls = LOCATIONS, sv = ls.filter(l => l.stockValuation !== false).length, noCust = ls.filter(l => !l.custodianUid).length;
+      return card('locations', 'locations', 'Locations',
+        [metric(fmtNum(ls.length), 'Locations'), metric(fmtNum(sv), 'Need stock valuation'), metric(fmtNum(ls.filter(l => l.pettyCashCustodianUid).length), 'With a petty cash custodian')],
+        [noCust ? note(plural(noCust, 'location') + ' without a stock custodian') : '']);
+    }) : '',
     // the rest of the app, one short card each
     safe(() => {
       const ts = state.tasks || [], open = ts.filter(t => !tkDone(t)), over = ts.filter(tkOverdue).length, wk = clIsoAdd(vToday(), 7);
@@ -15615,16 +15644,16 @@ function dashboardModuleSummary(){
         [metric(fmtNum(open.length), 'Open'), metric(fmtNum(over), 'Overdue'), metric(fmtNum(done), 'Completed this month')],
         [over ? note(plural(over, 'task') + ' past the due date', 'crit') : '', soon ? note(plural(soon, 'task') + ' due in the next 7 days', 'warn') : '']);
     }),
-    safe(() => {
-      const ds = state.documents, pend = ds.filter(d => d.status === 'Pending approval').length, al = ds.filter(docAlert), crit = al.filter(d => (docAlert(d) || {}).k === 'crit').length;
-      return card('docs-memo', 'doc_memo', 'Documents',
-        [metric(fmtNum(ds.length), 'Documents'), metric(fmtNum(ds.filter(d => inMonth(d.date)).length), 'This month'), metric(fmtNum(pend), 'Pending approval')],
-        [pend ? note(plural(pend, 'document') + ' awaiting approval', 'warn') : '', crit ? note(plural(crit, 'document') + ' overdue / expired', 'crit') : '', al.length - crit ? note(fmtNum(al.length - crit) + ' expiring or due for review', 'warn') : '']);
-    }),
+    ...DOC_TYPES.map(t => safe(() => {
+      const ds = state.documents.filter(d => d.type === t.k), pend = ds.filter(d => d.status === 'Pending approval').length, al = ds.filter(docAlert), crit = al.filter(d => (docAlert(d) || {}).k === 'crit').length;
+      return card('docs-' + t.k, 'doc_' + t.k, t.plural || t.label,
+        [metric(fmtNum(ds.length), 'Total'), metric(fmtNum(ds.filter(d => inMonth(d.date)).length), 'This month'), metric(fmtNum(pend), 'Pending approval')],
+        [pend ? note(fmtNum(pend) + ' awaiting approval', 'warn') : '', crit ? note(fmtNum(crit) + ' overdue / expired', 'crit') : '', al.length - crit ? note(fmtNum(al.length - crit) + ' expiring or due for review', 'warn') : '']);
+    })),
     safe(() => {
       const ba = state.businessAdvances || [], live = ba.filter(r => r.status !== 'Settled'), bal = live.reduce((t, r) => t + baTotals(r).balance, 0), pend = baPendingAll();
       return card('business-advance', 'wallet', 'Business Advance',
-        [metric(fmtNum(live.length), 'Open advances'), metric(vMoney0(bal), 'Balance in hand'), metric(fmtNum(pend), 'Invoices pending')],
+        [metric(fmtNum(live.length), 'Open advances'), metric(fmtNum(ba.filter(r => r.status === 'Settled').length), 'Settled'), metric(fmtNum(pend), 'Invoices pending')],
         [pend ? note(plural(pend, 'payment') + ' without an invoice', 'warn') : '']);
     }),
     safe(() => {
@@ -15648,7 +15677,13 @@ function dashboardModuleSummary(){
         [!thisWk ? note("This week's report not started", 'warn') : '']);
     }),
   ].filter(Boolean);
-  return `<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">${cards.join('')}</div>`;
+  // grouped and ordered like the menu, with a small heading per area
+  const nav = (() => { try{ return currentNav(); }catch(e){ return []; } })(), order = {}, sect = {}; let cur = '';
+  nav.forEach((n, i) => { if(n.section){ cur = n.section; return; } order[n.id] = i; sect[n.id] = cur; });
+  const tabOf = h => (/goTo\('([^']+)'\)/.exec(h) || [])[1] || '';
+  const list = cards.map((h, i) => ({ h, t:tabOf(h), i })).sort((a, b) => (order[a.t] ?? 999) - (order[b.t] ?? 999) || a.i - b.i), groups = [];
+  list.forEach(c => { const g = sect[c.t] || 'Other'; if(!groups.length || groups[groups.length - 1].g !== g) groups.push({ g, items:[] }); groups[groups.length - 1].items.push(c.h); });
+  return groups.map(g => `<div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mt-5 mb-2.5 first:mt-0">${esc(g.g)}</div><div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">${g.items.join('')}</div>`).join('');
 }
 
 /* ---------- Stock Report: units on hand by category (moved from the Dashboard) ---------- */

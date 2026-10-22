@@ -1916,7 +1916,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.276';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.277';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -8528,9 +8528,10 @@ function anyaDownload(t){
   if(/\bweekly report|\bweek report\b/.test(t)){
     if(no('weekly reports', 'weekly-report')) return true;
     const all = state.weeklyReports || []; if(!all.length){ anyaSay('There are no weekly reports yet.'); anyaDraw(); return true; }
-    const lab = r => `Week ${r.weekNo} — ${r.department || ''} (PDF)`;
+    const word = fmt === 'docx', lab = r => `Week ${r.weekNo} — ${r.department || ''} (${word ? 'Word' : 'PDF'})`;
     const { one, list } = anyaPick(all, t.replace(/\bweek (\d+)/, 'week$1'), r => 'week' + r.weekNo + ' ' + (r.department || ''), r => r.weekStart);
-    if(one) anyaDlRun(lab(one), () => wrPdf(one.id)); else anyaDlChoose('weekly report', list, lab, r => wrPdf(r.id));
+    const go = r => word ? wrDocx(r.id) : wrPdf(r.id);
+    if(one) anyaDlRun(lab(one), () => go(one)); else anyaDlChoose('weekly report', list, lab, go);
     return true;
   }
   // handover
@@ -11474,7 +11475,7 @@ function viewWeeklyReport(){
   return vHead('Department Weekly Report', 'Each department\'s weekly report: document entries, dispatch, stock requests, vehicles, tasks, PRs and staff on leave — filled from the app and downloaded as a PDF.', vBtnPlain('Blank template', 'openWrBlank()') + vBtnPrimary('+ Weekly report', 'openWrNew()')) +
     vKpis(statCard('This week', 'Week ' + wrIsoWeek(thisWeek), pcOrdinalDate(clIsoAdd(thisWeek, -5)) + ' – ' + pcOrdinalDate(thisWeek), 'brand') + statCard('Reports this week', fmtNum(mine.length), mine.map(r => r.department).join(', ') || 'None yet', mine.length ? 'emerald' : 'amber') +
       statCard('Open tasks', fmtNum(list[0] ? (list[0].tasks || []).filter(t => t.status !== 'Completed').length : 0), list[0] ? 'In the latest report (' + esc(list[0].department) + ')' : '—', 'slate') + statCard('Staff on leave this week', fmtNum(lvBetween(clIsoAdd(thisWeek, -5), thisWeek).length), 'From the Staff Leave Plan', 'slate')) +
-    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${fmtD(r.updatedAt)}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><button onclick="event.stopPropagation(); wrMailOpen('${r.id}')" title="Email draft with the PDF attached" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✉ Mail</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
+    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${fmtD(r.updatedAt)}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><button onclick="event.stopPropagation(); wrDocx('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Word</button><button onclick="event.stopPropagation(); wrMailOpen('${r.id}')" title="Email draft with the PDF attached" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✉ Mail</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No weekly reports yet. Start one with "+ Weekly report" — the tasks of the last report carry over each week.')}</div>`);
 }
 function openWrNew(){
@@ -11579,7 +11580,7 @@ function wrEditor(r){
   const entries = vPanel('Document Entry', `<button onclick="wrAddEntryDept()" class="text-xs font-semibold text-brand-600 hover:underline">+ Department</button>`, `<div class="overflow-x-auto"><table id="wr-entries" class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="px-3 py-2 w-48">Department</th><th class="px-2 py-2">Number of entries · type of entry</th></tr></thead><tbody>${ent.map(e => wrEntryRow(e)).join('')}</tbody></table></div>`);
   const leaveHtml = vPanel('Staff Leaves', `<button onclick="goTo('leave-plan')" class="text-xs font-semibold text-brand-600 hover:underline">Staff Leave Plan →</button>`, leave.length ? `<div class="divide-y divide-slate-100">${leave.map(x => `<div class="px-5 sm:px-6 py-2.5 flex justify-between gap-3 text-sm"><span><b class="text-slate-800">${esc(x.name)}</b> <span class="text-xs text-slate-400">${esc(x.department || '')}</span></span><span class="text-slate-600 text-right">${x.items.map(i => `<span class="px-1 rounded font-bold text-[11px]" style="background:${esc(lvType(i.code).color)};color:${lvInk(lvType(i.code).color)}">${esc(i.code)}</span> ${pcOrdinalDate(i.from).replace(/ \d{4}$/, '')}${i.to !== i.from ? ' – ' + pcOrdinalDate(i.to).replace(/ \d{4}$/, '') : ''}`).join(' · ')}</span></div>`).join('')}</div>` : vEmpty('Nobody is on leave this week, according to the Staff Leave Plan.'));
   return `<div class="flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.wrId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All weekly reports</button><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Weekly Report — ${esc(r.department)}</h1><p class="text-sm text-slate-500 mt-0.5">Week ${r.weekNo} · ${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}${r.preparedBy ? ' · prepared by ' + esc(r.preparedBy) : ''}</p></div>
-      <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}${vBtnPlain('Blank template', `wrBlankPdf('${r.id}', this)`)}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
+      <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}${vBtnPlain('Blank template', `wrBlankPdf('${r.id}', this)`)}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('Download Word', `wrSave('${r.id}', 'word', this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
     <datalist id="wr-depts">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist><datalist id="wr-etypes">${['Invoice', 'Statement', 'Letter', 'Memo', 'Contract', 'Agreement', 'Quotation', 'Purchase Order', 'Payment Voucher'].map(t => `<option value="${t}"></option>`).join('')}</datalist><datalist id="wr-people">${state.profiles.map(p => `<option value="${esc(p.name || '')}"></option>`).join('')}</datalist>
     <div id="wr-form">${entries}${sec('dispatch')}${sec('stock')}${sec('vehicles')}${sec('tasks')}${sec('prs')}${sec('complaints')}${leaveHtml}
     ${vPanel('Notes', '', `<div class="p-4"><textarea id="wr-notes" rows="3" class="${VEH_FIELD}" placeholder="Anything else for this week">${esc(r.notes || '')}</textarea></div>`)}</div>
@@ -11605,7 +11606,7 @@ function wrLiveMark(r, data){                                                   
 async function wrSave(id, pdf, btn){
   const r = wrById(id); if(!r) return; const data = wrLiveMark(r, wrCollect());
   if(btn) btn.disabled = true;
-  try{ await vehSave('weeklyReports', Object.assign({ id }, data)); if(pdf) await wrPdf(id); else toast('Weekly report saved.'); }
+  try{ await vehSave('weeklyReports', Object.assign({ id }, data)); if(pdf === 'word') await wrDocx(id); else if(pdf) await wrPdf(id); else toast('Weekly report saved.'); }
   finally{ if(btn && btn.isConnected) btn.disabled = false; }
 }
 function deleteWr(id){ if(!vehRequireAdmin('delete weekly reports')) return; const r = wrById(id); if(!r) return; confirmAction('Delete the weekly report of ' + r.department + ', week ' + r.weekNo + '?', async () => { await vehDelete('weeklyReports', id); vehUi.wrId = ''; rerenderMain(); toast('Deleted.'); }); }
@@ -11843,6 +11844,53 @@ async function wrBlankPdf(r, btn){
   const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
   try{ downloadBlob(await buildWeeklyReportPdf(r, { blank:true }), wrFileName(r).replace(/\.pdf$/, ' - Template.pdf')); }
   catch(e){ console.error(e); toast('Could not create the template: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+// the same report as an editable Word file on the letterhead: title block, then each section as a table
+async function buildWeeklyReportDocx(r){
+  const F = { font:'Aptos', sz:17 }, f = o => Object.assign({}, F, o || {}), TW = 9026;
+  const para = (t, o, po) => wP(String(t || '').split('\n').map((ln, i) => (i ? '<w:r><w:br/></w:r>' : '') + wR(ln, f(o))).join(''), po);
+  const ordDate = s => { if(!s) return ''; const d = pcReplDateParts(s); return wR(d.d.padStart(2, '0'), f({ sz:20 })) + wR(d.suf, f({ sz:20, sup:true })) + wR(' ' + PC_MONTH_NAMES[+s.slice(5, 7) - 1], f({ sz:20 })); };
+  const cell = (inner, w, o) => `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${o && o.head ? '<w:shd w:val="clear" w:color="auto" w:fill="D9E3BA"/>' : ''}<w:tcMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>${inner}</w:tc>`;
+  const B = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(k => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="737373"/>`).join('') + '</w:tblBorders>';
+  const out = [];
+  const table = (title, cols, rows) => {
+    const tot = cols.reduce((t, c) => t + c[1], 0), ws = cols.map(c => Math.round(TW * c[1] / tot));
+    out.push(para(title, { b:true, sz:22 }, { before:200, after:80 }).replace('<w:pPr>', '<w:pPr><w:keepNext/>'));
+    const head = `<w:tr><w:trPr><w:tblHeader/></w:trPr>${cols.map((c, i) => cell(para(c[0], { b:true }), ws[i], { head:true })).join('')}</w:tr>`;
+    const body = (rows.length ? rows : [cols.map(() => '')]).map(row => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${row.map((t, i) => cell(para(t), ws[i])).join('')}</w:tr>`).join('');
+    out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${B}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${ws.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${head}${body}</w:tbl>`);
+  };
+  out.push(para('WEEKLY REPORT', { b:true, sz:30 }, { jc:'center', after:60 }), para(r.department, { b:true, sz:22 }, { jc:'center', after:200 }));
+  out.push(wP(wR('Week: ', f({ b:true, sz:20 })) + wR(String(r.weekNo), f({ sz:20 })), { after:60 }));
+  out.push(wP(wR('Date: ', f({ b:true, sz:20 })) + ordDate(r.weekStart) + wR(' – ', f({ sz:20 })) + ordDate(r.weekEnd), { after:120 }));
+  table('Document Entry', [['Department', 2], ['Number of Entries', 1.2], ['Type of Entry', 3]], (r.entries || []).map(e => [e.department, (e.lines || []).map(l => l.count ? String(l.count).padStart(2, '0') : '').join('\n'), (e.lines || []).map(l => l.type || '').join('\n')]));
+  table('Dispatch', [['Department', 1.4], ['Dispatch Item', 2], ['Dispatched By', 1.3], ['Dispatch Date', 1.2]], (r.dispatch || []).map(x => [x.department, x.item, x.by, x.date ? (pcFindDates(x.date)[0] ? pcOrdinalDate(pcFindDates(x.date)[0]) : x.date) : '']));
+  table('Stock Request', [['Department', 2], ['Pending', 1.5], ['Completed', 1.5]], wrRows(r, 'stock').map(x => [x.department, x.pending, x.completed]));
+  table('Vehicle Management', [['Vehicle', 1.1], ['Fueling', 1.6], ['Service', 1.4], ['Comment', 2.4]], wrRows(r, 'vehicles').map(x => [x.vehicle, x.fueling, x.service, x.comment]));
+  table('Tasks', [['Task', 2.2], ['Assigned To', 1.2], ['Status', 1], ['Progress', 2.4]], wrRows(r, 'tasks').map(x => [x.task, x.assigned, x.status, x.progress]));
+  table('Purchase Requisition Request', [['PR Number', 1.5], ['PR Request', 2], ['Requested Date', 1.2], ['Status', 1], ['Details', 1.5]], wrRows(r, 'prs').map(x => [x.number, x.request, x.date, x.status, x.details]));
+  // complaints in point form, as in the PDF
+  const cps = wrRows(r, 'complaints');
+  out.push(para('Admin Complaints', { b:true, sz:22 }, { before:200, after:80 }));
+  if(!cps.length) out.push(para('No complaints for this period.'));
+  cps.forEach((x, n) => {
+    const cl = String(x.complaint || '').split('\n').map(z => z.trim()).filter(Boolean);
+    out.push(wP(wR((n + 1) + '.  ' + (cl[0] || 'Complaint'), f({ b:true, sz:19 })) + wR('   [' + (x.status || 'Open') + ']', f({ b:true })), { before:100, after:40 }));
+    const pt = (label, text) => { text = String(text || '').trim(); if(text) out.push(wP(wR('•  ' + label + ': ', f({ b:true })) + String(text).split('\n').map((ln, i) => (i ? '<w:r><w:br/></w:r>' : '') + wR(ln, f())).join(''), { ind:'<w:ind w:left="360"/>', after:20 })); };
+    pt('Raised by', String(x.raised || '').split('\n').map(z => z.trim()).filter(Boolean).join(' · '));
+    pt('Details', cl.slice(1).join(' ')); pt('Progress', x.processing);
+  });
+  const lv = lvBetween(r.weekStart, r.weekEnd);
+  table('Staff Leaves', [['Staff', 2], ['Department', 1.6], ['Leave', 2.4]], lv.map(x => [x.name, x.department || '', x.items.map(i => lvType(i.code).name + ': ' + pcOrdinalDate(i.from) + (i.to !== i.from ? ' – ' + pcOrdinalDate(i.to) : '')).join('\n')]));
+  if(r.notes){ out.push(para('Notes', { b:true, sz:22 }, { before:200, after:80 })); out.push(para(r.notes, { sz:18 })); }
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
+  return lhDocx(doc, LH_NS);
+}
+async function wrDocx(id, btn){
+  const r = wrById(id); if(!r) return; const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ downloadBlob(await buildWeeklyReportDocx(r), ('Week ' + r.weekNo + ' - ' + pcOrdinalDate(r.weekStart).replace(/ \d{4}$/, '') + ' - ' + pcOrdinalDate(r.weekEnd).replace(/ \d{4}$/, '') + ' - ' + r.department).replace(/[^A-Za-z0-9 -]+/g, '') + '.docx'); }
+  catch(e){ console.error(e); toast('Could not create the Word file: ' + (e && e.message ? e.message : e), true); }
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
 async function wrPdf(id, btn){

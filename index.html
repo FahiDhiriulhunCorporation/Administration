@@ -1959,7 +1959,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.285';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.286';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7111,7 +7111,10 @@ function tkLocCount(){ const n = document.querySelectorAll('#tk-locs .tk-li:chec
 function tkBoard(){
   const list = tkFiltered(), admin = canManageInventory(), t0 = vToday(), openSet = vehUi.tkBoardDone || {};
   // "General" holds the tasks that are not tied to one location; it always comes first
-  const cols = [{ id:TK_NOLOC, name:'General', color:'#94a3b8' }].concat(LOCATIONS.map(l => ({ id:l.id, name:l.name, color:l.color || '#6366f1' })));
+  const allCols = [{ id:TK_NOLOC, name:'General', color:'#94a3b8' }].concat(LOCATIONS.map(l => ({ id:l.id, name:l.name, color:l.color || '#6366f1' })));
+  // only the locations that have tasks assigned show, unless "Show all locations" is on
+  const used = allCols.filter(c => list.some(t => tkInLoc(t, c.id))), showAll = !!vehUi.tkBoardAll;
+  const cols = showAll || !used.length ? allCols : used, hidden = allCols.length - cols.length;
   const chipCls = 'inline-block px-2 py-0.5 rounded text-[10.5px] font-semibold';
   const card = t => {
     const done = tkDone(t), can = tkCanUpdate(t), cl = t.checklist || [], cd = cl.filter(c => c.done).length;
@@ -7120,7 +7123,7 @@ function tkBoard(){
       t.priority === 'Urgent' || t.priority === 'High' ? `<span class="${chipCls} ${t.priority === 'Urgent' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}">${esc(t.priority)}</span>` : '',
       pr ? `<span class="${chipCls} bg-violet-100 text-violet-800">${esc(pr.prNumber || 'PR')}</span>` : '',
       t.status === 'On hold' ? `<span class="${chipCls} bg-amber-100 text-amber-800">On hold</span>` : '',
-      tkLocs(t).length > 1 ? `<span class="${chipCls} bg-slate-100 text-slate-600" title="${esc(tkLocNames(t))}">📍 ${tkLocs(t).length} locations</span>` : ''].join('');
+      tkLocs(t).length > 1 ? `<span class="${chipCls} bg-slate-100 text-slate-600" title="${esc(tkLocNames(t))}">📍 ${esc(tkLocs(t).slice(0, 3).map(id => getLocation(id).code || getLocation(id).name).join(' · '))}${tkLocs(t).length > 3 ? ' +' + (tkLocs(t).length - 3) : ''}</span>` : ''].join('');
     const late = tkOverdue(t), dd = t.due ? tkDays(t0, t.due) : null;
     const due = done ? (t.completedOn ? `<span class="${chipCls} bg-emerald-50 text-emerald-700">✓ ${isoToDmy(t.completedOn)}</span>` : '')
       : t.due ? `<span class="${chipCls} ${late ? 'bg-rose-600 text-white' : dd <= 3 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}" title="Due ${vDate(t.due)}">📅 ${isoToDmy(t.due)}</span>`
@@ -7146,7 +7149,8 @@ function tkBoard(){
       <div class="tkb-list flex-1 px-3 pb-3 space-y-2 min-h-[3rem]">${open.map(card).join('') || `<div class="text-xs text-slate-400 text-center py-4">${mine.length ? 'All done here 🎉' : 'No tasks'}</div>`}
         ${done.length ? `<button type="button" onclick="tkBoardToggleDone('${c.id}')" class="w-full flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 pt-1"><span class="inline-block transition-transform ${showDone ? 'rotate-90' : ''}">›</span> Completed <span class="num">${done.length}</span></button>${showDone ? done.map(card).join('') : ''}` : ''}</div></div>`;
   };
-  return `<div class="text-[11.5px] text-slate-400 mb-2">${admin ? 'Drag a card to another column to change its location. ' : ''}Tick the circle to mark a task completed.</div>
+  return `<div class="flex items-center justify-between gap-3 flex-wrap mb-2"><div class="text-[11.5px] text-slate-400">${admin ? 'Drag a card to another column to change its location. ' : ''}Tick the circle to mark a task completed.</div>
+    ${hidden || showAll ? `<button type="button" onclick="vehUi.tkBoardAll = !vehUi.tkBoardAll; rerenderMain()" class="text-xs font-semibold text-brand-600 hover:underline">${showAll ? 'Show only locations with tasks' : 'Show all locations (' + hidden + ' without tasks)'}</button>` : ''}</div>
     <div class="tkb flex gap-3 overflow-x-auto pb-3 items-start">${cols.map(col).join('')}</div>`;
 }
 function tkBoardToggleDone(id){ vehUi.tkBoardDone = Object.assign({}, vehUi.tkBoardDone || {}); vehUi.tkBoardDone[id] = !vehUi.tkBoardDone[id]; rerenderMain(); }

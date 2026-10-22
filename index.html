@@ -1959,7 +1959,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.286';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.288';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -10319,7 +10319,7 @@ async function agSealPng(){
 /* --- PDF (A4, the template's layout: logo strip, Calibri-like type, page X of Y from the first page after the cover) --- */
 async function buildAgreementPdf(d){
   const B = agBlocks(d), K = [0, 0, 0], X0 = 72, X1 = 523, W = X1 - X0, TOP = 112, BOT = 752, FS = 11.5, LH = 17.2;
-  let seal = null; try{ const sp = await agSealPng(); seal = sp ? await pdfSignatureImage(sp.url) : null; }catch(e){}
+  let seal = null; try{ const sp = await agSealPng(); seal = sp ? await pdfSignatureImage(sp.url, true) : null; }catch(e){}
   const F = { r:'cal_regular', b:'cal_bold' }, tw = (s, b, z) => pdfTextWidthK(s, b ? F.b : F.r, z || FS);
   const pages = []; let pg, y;
   const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP; };
@@ -10364,7 +10364,7 @@ async function buildAgreementPdf(d){
     }
   });
   // frame: cover has the full letterhead; other pages the stripes at the top right and the logo in the footer; Page X of Y counts from the page after the cover
-  const hdr = await pdfSignatureImage('data:image/png;base64,' + EXCO_HDR_PNG), hh = hdr ? PCA4_W * hdr.h / hdr.w : 0, total = pages.length - 1, G = [0.35, 0.35, 0.35];
+  const hdr = await pdfSignatureImage('data:image/png;base64,' + EXCO_HDR_PNG, true), hh = hdr ? PCA4_W * hdr.h / hdr.w : 0, total = pages.length - 1, G = [0.35, 0.35, 0.35];
   const clip = (f, x, yy, w, h, draw) => { f.ops.push(`q ${pdfN(x)} ${pdfN(PCA4_H - yy - h)} ${pdfN(w)} ${pdfN(h)} re W n`); draw(); f.ops.push('Q'); };
   pages.forEach((p, i) => { const f = new PdfPage(PCA4_H);
     if(hdr){ if(i === 0) f.image('ExH', 0, 0, PCA4_W, hh); else clip(f, PCA4_W - 70, 0, 70, hh, () => f.image('ExH', 0, 0, PCA4_W, hh));
@@ -10773,9 +10773,11 @@ function exDocxXml(D){
 async function buildExcoDocx(d){ const X = exDocxXml(exData(d)); return lhDocx(X.doc, X.NS); }
 const LH_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
 // a Word file on the FDC letterhead (the logo strip in the header, the address footer with page numbers)
+// where the letterhead picture sits on the page, in points — the same place and size as in the company's Word template
+const LH_HDR = { x:14.4, y:12, w:566.3, h:69 };
 async function lhDocx(docXml, NS){
   await loadScriptOnce(JSZIP_URL); if(typeof JSZip === 'undefined') throw new Error('The Word builder could not be loaded. Check your internet connection.');
-  const zip = new JSZip(), EW = 7543800, EH = 1051560, X = { NS };
+  const zip = new JSZip(), EW = 7192010, EH = 876300, X = { NS };
   zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>');
   zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
   zip.file('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdFT" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/><Relationship Id="rIdH" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rIdF" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
@@ -10784,7 +10786,7 @@ async function lhDocx(docXml, NS){
   // the font table of the FDC templates, so a font missing on a PC is replaced the same way as in the templates (e.g. SF UI Display → Calibri)
   zip.file('word/fontTable.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:font w:name="Aptos"><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/><w:sig w:usb0="20000287" w:usb1="00000003" w:usb2="00000000" w:usb3="00000000" w:csb0="0000019F" w:csb1="00000000"/></w:font><w:font w:name="Poppins"><w:altName w:val="Nirmala UI"/><w:panose1 w:val="00000500000000000000"/><w:charset w:val="00"/><w:family w:val="auto"/><w:pitch w:val="variable"/><w:sig w:usb0="00008007" w:usb1="00000000" w:usb2="00000000" w:usb3="00000000" w:csb0="00000093" w:csb1="00000000"/></w:font><w:font w:name="SF UI Display"><w:altName w:val="Calibri"/><w:panose1 w:val="00000A00000000000000"/><w:charset w:val="00"/><w:family w:val="modern"/><w:notTrueType/><w:pitch w:val="variable"/><w:sig w:usb0="2000028F" w:usb1="00000003" w:usb2="00000000" w:usb3="00000000" w:csb0="0000019F" w:csb1="00000000"/></w:font><w:font w:name="Lato"><w:altName w:val="Segoe UI"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/><w:sig w:usb0="E10002FF" w:usb1="5000ECFF" w:usb2="00000021" w:usb3="00000000" w:csb0="0000019F" w:csb1="00000000"/></w:font><w:font w:name="Calibri Light"><w:panose1 w:val="020F0302020204030204"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/><w:sig w:usb0="E4002EFF" w:usb1="C200247B" w:usb2="00000009" w:usb3="00000000" w:csb0="000001FF" w:csb1="00000000"/></w:font><w:font w:name="Segoe UI Black"><w:panose1 w:val="020B0A02040204020203"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/><w:sig w:usb0="E00002FF" w:usb1="4000E47F" w:usb2="00000021" w:usb3="00000000" w:csb0="0000019F" w:csb1="00000000"/></w:font><w:font w:name="Franklin Gothic Book"><w:panose1 w:val="020B0503020102020204"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/></w:font><w:font w:name="Franklin Gothic Medium"><w:panose1 w:val="020B0603020102020204"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/></w:font><w:font w:name="Franklin Gothic Heavy"><w:panose1 w:val="020B0903020102020204"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/></w:font></w:fonts>');
   zip.file('word/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="Aptos" w:cs="Aptos"/><w:sz w:val="18"/><w:szCs w:val="18"/><w:lang w:val="en-US"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="264" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style></w:styles>');
-  zip.file('word/header1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ${X.NS}><w:p><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="1" locked="1" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="${EW}" cy="${EH}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="1" name="Letterhead"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="letterhead.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${EW}" cy="${EH}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p></w:hdr>`);
+  zip.file('word/header1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ${X.NS}><w:p><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="1" locked="1" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>182880</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>152400</wp:posOffset></wp:positionV><wp:extent cx="${EW}" cy="${EH}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="1" name="Letterhead"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="letterhead.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${EW}" cy="${EH}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p></w:hdr>`);
   const fld = c => `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${c} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${wR('1', { b:true, font:'Aptos', sz:16 })}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
   zip.file('word/footer1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${X.NS}>${wP(wR('Page ', { font:'Aptos', sz:16 }) + fld('PAGE') + wR(' of ', { font:'Aptos', sz:16 }) + fld('NUMPAGES'), { jc:'right', after:80 })}${EXCO_FOOT.map(l => wP(wR(l, { font:'Aptos', color:'808080', sz:18 }), { jc:'center', line:240 })).join('')}</w:ftr>`);
   zip.file('word/document.xml', docXml);
@@ -10838,9 +10840,9 @@ async function buildExcoPdfIn(d){
 // a PDF on the same letterhead as the Word files: the logo strip, page X of Y and the address footer
 async function lhPdfFinish(pages, docTitle, right, o){
   o = o || {};
-  const hdr = await pdfSignatureImage('data:image/png;base64,' + EXCO_HDR_PNG), G = [0.5, 0.5, 0.5], total = pages.length;
+  const hdr = await pdfSignatureImage('data:image/png;base64,' + EXCO_HDR_PNG, true), G = [0.5, 0.5, 0.5], total = pages.length;
   pages.forEach((p, i) => {
-    const f = new PdfPage(PCA4_H); if(hdr) f.image('ExH', 0, 0, PCA4_W, PCA4_W * hdr.h / hdr.w);
+    const f = new PdfPage(PCA4_H); if(hdr) f.image('ExH', LH_HDR.x, LH_HDR.y, LH_HDR.w, LH_HDR.h);       // placed and sized as in the Word letterhead template
     if(o.calFoot){ const pt = 'Page ' + (i + 1) + ' of ' + total; f.text((right || 553.6) - pdfTextWidth(pt, false, 8), 799, pt, { size:8, italic:true });
       EXCO_FOOT.forEach((l, k) => f.text((PCA4_W - pdfTextWidthK(l, 'cal_regular', 10)) / 2, 801 + k * 12.5, l, { size:10, color:[0.25, 0.25, 0.25], font:'F9' })); p.ops = f.ops.concat(p.ops); return; }
     const pn = [['Page ', 0], [String(i + 1), 1], [' of ', 0], [String(total), 1]], pw = pn.reduce((a, r) => a + pdfTextWidthK(r[0], r[1] ? 'apt_bold' : 'apt_regular', 8), 0);   // footer in the template's Aptos (Inter in the PDF)
@@ -11745,7 +11747,7 @@ function wr2Editor(r){
   return `<div class="flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.wrId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All weekly reports</button><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Weekly Departmental Update — ${esc(r.department)}</h1><div class="text-sm text-slate-500 mt-1">Week ${r.weekNo} · ${esc(wr2Period(r))}</div></div>
       <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}<button onclick="wr2Fill('all')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">✨ Fill all from the app</button>${vBtnPlain('Blank template', `wrBlankPdf('${r.id}', this)`)}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('Download Word', `wrSave('${r.id}', 'word', this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
     <div id="wr2-form">
-    ${vPanel('Report details', '', `<div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">${f('wr2-period', 'Reporting period', wr2Period(r), 'text')}${f('wr2-dept', 'Division / Department', r.department)}${f('wr2-subdate', 'Date of submission', r.submissionDate || vToday(), 'date')}${f('wr2-prepared', 'Prepared by', r.preparedBy)}${f('wr2-approved', 'Approved by', r.approvedBy, 'text', 'e.g. Director, Administration')}</div>`)}
+    ${vPanel('Report details', '', `<div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">${f('wr2-period', 'Reporting period', wr2Period(r), 'text')}${f('wr2-dept', 'Division / Department', r.department)}${f('wr2-subdate', 'Date of submission', r.submissionDate || vToday(), 'date')}${f('wr2-prepared', 'Prepared by', r.preparedBy)}<div><label class="${VEH_LBL}">Approved by</label><input id="wr2-approved" list="wr2-staff" value="${esc(r.approvedBy || '')}" placeholder="Choose the approver" oninput="wr2ApproverPick(this.value)" class="${VEH_FIELD}"><datalist id="wr2-staff">${sdAll().map(p => `<option value="${esc(p.name)}">${esc([p.designation, p.staffNo].filter(Boolean).join(' · '))}</option>`).join('')}</datalist></div>${f('wr2-approverid', 'Approver ID', r.approverId || wr2StaffNo(r.approvedBy), 'text', 'Staff number')}</div>`)}
     ${sec(1, 'Main Activities This Week', fill('activities') + add('activities'), help('The main activities, tasks and key achievements completed during the reporting period — one row per area, with the records behind it.') + `<datalist id="wr2-areas">${['Tasks', 'Petty cash', 'Procurement', 'Travel', 'Documents', 'Fleet', 'Stock', 'Complaints', 'Handovers', 'Utilities', 'Meetings', 'Other'].map(x => `<option value="${x}"></option>`).join('')}</datalist>` + tbl('activities', ['Area', 'Activity', 'Details'], wr2ActRows(r).length ? wr2ActRows(r) : [{}, {}]))}
     ${sec(2, 'Progress Toward Key Objectives', fill('objectives') + add('objectives'), help('Progress made toward departmental targets, ongoing projects and key objectives.') + tbl('objectives', ['Key objective / activity', 'Progress / achievement', 'Current status'], (r.objectives || []).length ? r.objectives : [{}, {}, {}]))}
     ${sec(3, 'Ongoing Activities / Pending Matters', fill('pending') + add('pending'), help('Activities still in progress, pending approvals, or awaiting action from other departments or external parties.') + tbl('pending', ['Activity / pending matter', 'Current status', 'Expected completion date'], (r.pending || []).length ? r.pending : [{}, {}, {}]))}
@@ -11755,6 +11757,9 @@ function wr2Editor(r){
     </div>
     <div class="flex justify-end gap-2.5 mb-8">${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('Download Word', `wrSave('${r.id}', 'word', this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div>`;
 }
+// the approver's staff number, from Admin Staff
+const wr2StaffNo = name => { const n = String(name || '').trim().toLowerCase(); if(!n) return ''; const p = sdAll().find(x => String(x.name || '').toLowerCase() === n); return p ? p.staffNo || '' : ''; };
+function wr2ApproverPick(v){ const no = wr2StaffNo(v), el = document.getElementById('wr2-approverid'); if(el && no) el.value = no; }
 function wr2Fill(k){
   const r = wrById(vehUi.wrId); if(!r) return; const a = wr2Auto(Object.assign({}, r, { department:(document.getElementById('wr2-dept') || {}).value || r.department }));
   const doText = (id, v) => { const el = document.getElementById(id); if(!el) return; if(el.value.trim() && !confirm('Replace what is typed with a draft from the app?')) return; el.value = wr2Lines(v).map(x => '• ' + x).join('\n'); };
@@ -11770,7 +11775,7 @@ function wr2Collect(){
   const rows = key => [...document.querySelectorAll('#wr2-' + key + ' .wr2-row')].map(tr => { const o = {}; tr.querySelectorAll('.wr2-in').forEach(i => { o[i.dataset.f] = i.value.trim(); }); return o; }).filter(o => Object.entries(o).some(([k, v]) => v && k !== 'status'));
   const v = id => ((document.getElementById(id) || {}).value || '').trim();
   const concerns = rows('concerns'), nilBox = document.getElementById('wr2-nil');
-  return { format:'dept', department:v('wr2-dept'), submissionDate:v('wr2-subdate'), preparedBy:v('wr2-prepared'), approvedBy:v('wr2-approved'), activityRows:rows('activities'), activities:rows('activities').map(x => x.activity).join('\n'), objectives:rows('objectives'), pending:rows('pending'),
+  return { format:'dept', department:v('wr2-dept'), submissionDate:v('wr2-subdate'), preparedBy:v('wr2-prepared'), approvedBy:v('wr2-approved'), approverId:v('wr2-approverid'), activityRows:rows('activities'), activities:rows('activities').map(x => x.activity).join('\n'), objectives:rows('objectives'), pending:rows('pending'),
     concerns, concernsNil:!concerns.length && !!(nilBox && nilBox.checked), priorities:v('wr2-priorities'), submittedBy:v('wr2-subby'), designation:v('wr2-desig'), signDate:v('wr2-sdate') };
 }
 // the PDF, laid out like the template on the letterhead
@@ -11782,22 +11787,30 @@ async function buildWr2Pdf(r, blank){
   const para = (t, o) => { o = Object.assign({ size:FS }, o || {}); pdfWrap(String(t || ''), !!o.bold, o.size, R - L - (o.indent || 0)).forEach((ln, i, a) => { need(LH); const ws = o.justify && i < a.length - 1 ? ((R - L - (o.indent || 0) - pdfTextWidth(ln, !!o.bold, o.size)) / Math.max(1, (ln.match(/ /g) || []).length)) : 0; pg.text(L + (o.indent || 0), y, ln, Object.assign({}, o, ws ? { ws } : {})); y += LH; }); };
   const field = (label, value) => { need(LH + 4); pg.text(L, y, label, { bold:true, size:FS }); const x = L + pdfTextWidth(label + ' ', true, FS); if(value) pg.text(x, y, String(value), { size:FS }); else pg.line(x, y + 1.5, x + 175, y + 1.5, K, 0.6); y += LH + 7; };
   const heading = (n, t) => { y += 10; need(LH * 6); pg.text(L + 14, y, n + '.', { bold:true, size:10 }); pg.text(L + 28, y, t, { bold:true, size:10 }); y += LH + 4; };
-  const bullets = (list, empty) => { (list.length ? list : Array(empty || 2).fill('')).forEach(t => { need(LH); pg.text(L + 12, y, '•', { size:FS }); if(t) { pdfWrap(t, false, FS, R - L - 28).forEach((ln, i) => { if(i) need(LH); pg.text(L + 26, y, ln, { size:FS }); y += LH; }); } else y += LH + 4; y += 2; }); };
+  const bullets = (list, empty) => { (list.length ? list : Array(empty || 2).fill('')).forEach(t => { const ls = t ? pdfWrap(t, false, FS, R - L - 28) : []; need(Math.min(ls.length || 1, 20) * LH + 4); pg.text(L + 12, y, '•', { size:FS }); if(t) { ls.forEach((ln, i) => { if(i) need(LH); pg.text(L + 26, y, ln, { size:FS }); y += LH; }); } else y += LH + 4; y += 2; }); };
   const table = (cols, rows, n) => {             // cols: [label, share]; rows: arrays
     const tw = R - L, tot = cols.reduce((t, c) => t + c[1], 0), xs = [L]; cols.forEach(c => xs.push(xs[xs.length - 1] + tw * c[1] / tot));
     const hw = cols.map((c, i) => pdfWrap(c[0], true, FS, xs[i + 1] - xs[i] - 8)), hh = Math.max(...hw.map(w => w.length)) * LH + 8;
     const drawHead = () => { hw.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 12 + k * LH, ln, { bold:true, size:FS }))); xs.forEach(x => pg.line(x, y, x, y + hh, GRID, 0.6)); pg.line(L, y, R, y, GRID, 0.6); y += hh; pg.line(L, y, R, y, GRID, 0.6); };
     need(hh + 24); drawHead();
     const body = rows.length ? rows : Array.from({ length:n || 3 }, (_, i) => [String(i + 1)].concat(cols.slice(1).map(() => '')));
-    body.forEach(row => { const wr = row.map((t, i) => pdfWrap(String(t || ''), false, i === row.length - 1 && blank ? 7 : FS, xs[i + 1] - xs[i] - 8)), h = Math.max(20, Math.max(...wr.map(w => w.length)) * LH + 7);
-      if(y + h > BOT){ newPage(); drawHead(); }
-      wr.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 12 + k * LH, ln, { size:i === row.length - 1 && blank ? 7 : FS })));
-      xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.6)); y += h; pg.line(L, y, R, y, GRID, 0.6); });
+    // a row that does not fit goes whole onto the next page (header repeated); a row taller than a whole page continues there
+    body.forEach(row => { const sz = i => i === row.length - 1 && blank ? 7 : FS, wr = row.map((t, i) => pdfWrap(String(t || ''), false, sz(i), xs[i + 1] - xs[i] - 8));
+      let from = 0; const lines = Math.max(1, ...wr.map(w => w.length)), rowH = n => Math.max(20, n * LH + 7), fresh = BOT - TOP - hh;
+      if(y + rowH(lines) > BOT && rowH(lines) <= fresh){ newPage(); drawHead(); }
+      while(from < lines){
+        let n = Math.min(lines - from, Math.floor((BOT - y - 7) / LH));
+        if(n < 1){ newPage(); drawHead(); continue; }
+        const h = rowH(n);
+        wr.forEach((w, i) => w.slice(from, from + n).forEach((ln, k) => pg.text(xs[i] + 4, y + 12 + k * LH, ln, { size:sz(i) })));
+        xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.6)); y += h; pg.line(L, y, R, y, GRID, 0.6); from += n;
+        if(from < lines){ newPage(); drawHead(); }
+      } });
     y += 10;
   };
   center('FDC – WEEKLY DEPARTMENTAL UPDATE REPORT', { bold:true, size:12.5 }); y += 26;
   field('Reporting Period:', blank ? '' : wr2Period(r)); field('Division / Department:', blank ? (r.department || '') : r.department); field('Date of Submission:', blank ? '' : r.submissionDate ? pcOrdinalDate(r.submissionDate) : '');
-  field('Prepared By:', blank ? '' : r.preparedBy); field('Approved By:', blank ? '' : r.approvedBy);
+  field('Prepared By:', blank ? '' : r.preparedBy); field('Approved By:', blank ? '' : r.approvedBy); field('Approver ID:', blank ? '' : (r.approverId || wr2StaffNo(r.approvedBy)));
   pg.line(L, y - 2, R, y - 2, [0.6, 0.6, 0.6], 0.8); y += 10;
   heading(1, 'Main Activities This Week'); para('Provide a summary of the main activities, tasks, and key achievements completed during the reporting period.', { justify:true }); y += 4;
   table([['No.', 0.45], ['Area', 1.1], ['Activity', 2.1], ['Details', 3.2]], blank ? [1, 2, 3].map(n => [String(n), '', '', '']) : wr2ActRows(r).map((x, k) => [String(k + 1), x.area, x.activity, x.details]));
@@ -11808,7 +11821,7 @@ async function buildWr2Pdf(r, blank){
   heading(4, 'Significant Concerns / Support Required'); para('Highlight any challenges, risks, delays, resource constraints, or decisions requiring management attention or support from other divisions.', { justify:true }); y += 4;
   const cs = blank ? [] : (r.concerns || []);
   if(!blank && !cs.length){ need(LH); pg.text(L + 12, y, 'Nil', { bold:true, size:FS }); y += LH + 4; }
-  (cs.length ? cs : blank ? [{}] : []).forEach((c, i) => { [['Concern / Issue:', c.issue], ['Impact:', c.impact], ['Support / Action Required:', c.support]].forEach(([l, v]) => { need(LH + 2); pg.text(L + 12, y, '•', { size:FS }); pg.text(L + 26, y, l, { bold:true, size:FS });
+  (cs.length ? cs : blank ? [{}] : []).forEach((c, i) => { need([c.issue, c.impact, c.support].reduce((t, v) => t + Math.max(1, pdfWrap(String(v || ''), false, FS, R - L - 150).length) * LH + 4, 0)); [['Concern / Issue:', c.issue], ['Impact:', c.impact], ['Support / Action Required:', c.support]].forEach(([l, v]) => { need(LH + 2); pg.text(L + 12, y, '•', { size:FS }); pg.text(L + 26, y, l, { bold:true, size:FS });
       const x0 = L + 26 + pdfTextWidth(l + ' ', true, FS), lines = pdfWrap(String(v || ''), false, FS, R - x0); if(lines.length){ lines.forEach((ln, k) => { if(k){ need(LH); } pg.text(k ? L + 26 : x0, y, ln, { size:FS }); if(k < lines.length - 1) y += LH; }); } y += LH + 4; }); if(i < cs.length - 1) y += 4; });
   if(blank){ need(LH); pg.text(L, y, 'If there are no significant concerns or support requirements, please state "Nil".', { size:FS, italic:true }); y += LH; }
   heading(5, 'Priorities for Next Week'); para('List the key activities, deliverables, and targets planned for the upcoming reporting period.', { justify:true }); y += 4; bullets(blank ? [] : wr2Lines(r.priorities), 3);
@@ -11825,14 +11838,15 @@ async function buildWr2Docx(r, blank){
   const field = (l, v) => out.push(P(T(l + ' ', { b:true }) + (v ? T(v) : T('______________________________', { b:true })), { after:120 }));
   const head = (n, t) => out.push(keep(P(T(n + '.  ' + t, { b:true, sz:20 }), { before:280, after:120, ind:'<w:ind w:left="360"/>' })));
   const desc = t => out.push(keep(P(T(t), { after:120, jc:'both' })));
-  const bullet = t => out.push(P(T('•') + '<w:r><w:tab/></w:r>' + multi(t), { after:60, ind:'<w:ind w:left="720" w:hanging="360"/>' }));
+  const kl = x => x.replace('<w:pPr>', '<w:pPr><w:keepLines/>');
+  const bullet = t => out.push(kl(P(T('•') + '<w:r><w:tab/></w:r>' + multi(t), { after:60, ind:'<w:ind w:left="720" w:hanging="360"/>' })));
   const B = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(k => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join('') + '</w:tblBorders>';
   const cell = (inner, w) => `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/><w:tcMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>${inner}</w:tc>`;
   const table = (cols, rows) => { const tot = cols.reduce((t, c) => t + c[1], 0), ws = cols.map(c => Math.round(TW * c[1] / tot));
     out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${B}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${ws.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid><w:tr><w:trPr><w:tblHeader/></w:trPr>${cols.map((c, i) => cell(P(T(c[0], { b:true })), ws[i])).join('')}</w:tr>${rows.map(rw => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${rw.map((t, i) => cell(P(multi(t, blank && i === rw.length - 1 ? { sz:14 } : {})), ws[i])).join('')}</w:tr>`).join('')}</w:tbl>`, P('', { after:120 })); };
   out.push(P(T('FDC – WEEKLY DEPARTMENTAL UPDATE REPORT', { b:true, sz:26 }), { jc:'center', after:280 }));
   field('Reporting Period:', blank ? '' : wr2Period(r)); field('Division / Department:', r.department || ''); field('Date of Submission:', blank ? '' : r.submissionDate ? pcOrdinalDate(r.submissionDate) : '');
-  field('Prepared By:', blank ? '' : r.preparedBy); field('Approved By:', blank ? '' : r.approvedBy);
+  field('Prepared By:', blank ? '' : r.preparedBy); field('Approved By:', blank ? '' : r.approvedBy); field('Approver ID:', blank ? '' : (r.approverId || wr2StaffNo(r.approvedBy)));
   out.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="A6A6A6"/></w:pBdr><w:spacing w:after="120"/></w:pPr></w:p>');
   head(1, 'Main Activities This Week'); desc('Provide a summary of the main activities, tasks, and key achievements completed during the reporting period.');
   table([['No.', 0.45], ['Area', 1.1], ['Activity', 2.1], ['Details', 3.2]], blank ? [1, 2, 3].map(n => [String(n), '', '', '']) : (wr2ActRows(r).length ? wr2ActRows(r) : [{}]).map((x, k) => [String(k + 1), x.area, x.activity, x.details]));
@@ -11843,7 +11857,7 @@ async function buildWr2Docx(r, blank){
   head(4, 'Significant Concerns / Support Required'); desc('Highlight any challenges, risks, delays, resource constraints, or decisions requiring management attention or support from other divisions.');
   const cs = blank ? [{}] : (r.concerns || []);
   if(!blank && !cs.length) out.push(P(T('Nil', { b:true }), { after:120, ind:'<w:ind w:left="360"/>' }));
-  cs.forEach(c => [['Concern / Issue:', c.issue], ['Impact:', c.impact], ['Support / Action Required:', c.support]].forEach(([l, v]) => out.push(P(T('•') + '<w:r><w:tab/></w:r>' + T(l + ' ', { b:true }) + multi(v), { after:60, ind:'<w:ind w:left="720" w:hanging="360"/>' }))));
+  cs.forEach(c => [['Concern / Issue:', c.issue], ['Impact:', c.impact], ['Support / Action Required:', c.support]].forEach(([l, v], k) => { const x = kl(P(T('•') + '<w:r><w:tab/></w:r>' + T(l + ' ', { b:true }) + multi(v), { after:60, ind:'<w:ind w:left="720" w:hanging="360"/>' })); out.push(k < 2 ? keep(x) : x); }));
   if(blank) out.push(P(T('If there are no significant concerns or support requirements, please state "Nil".', { i:true }), { before:80, after:120 }));
   head(5, 'Priorities for Next Week'); desc('List the key activities, deliverables, and targets planned for the upcoming reporting period.'); (blank ? ['', '', ''] : wr2Lines(r.priorities)).forEach(bullet);
   out.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="A6A6A6"/></w:pBdr><w:spacing w:before="200" w:after="400"/></w:pPr></w:p>');
@@ -11872,7 +11886,7 @@ async function saveWrNew(){
   const dup = state.weeklyReports.find(r => r.weekEnd === end && String(r.department).toLowerCase() === o.department.toLowerCase()); if(dup){ closeModal(); vehUi.wrId = dup.id; rerenderMain(); toast('That report already exists — opened it.'); return; }
   const prev = state.weeklyReports.filter(r => String(r.department).toLowerCase() === o.department.toLowerCase() && r.weekEnd < end).sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)))[0];
   if(o.format !== 'detail'){
-    const base = { format:'dept', department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '', approvedBy:(prev && prev.approvedBy) || '', submissionDate:vToday(), submittedBy:authUser ? authUser.name : '', designation:(prev && prev.designation) || ((sdAll().find(p => authUser && p.name === authUser.name) || {}).designation || ''), signDate:vToday(), concerns:[] };
+    const base = { format:'dept', department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '', approvedBy:(prev && prev.approvedBy) || '', approverId:(prev && prev.approverId) || '', submissionDate:vToday(), submittedBy:authUser ? authUser.name : '', designation:(prev && prev.designation) || ((sdAll().find(p => authUser && p.name === authUser.name) || {}).designation || ''), signDate:vToday(), concerns:[] };
     const a = wr2Auto(base); Object.assign(base, { activityRows:a.activityRows, activities:a.activities, objectives:a.objectives, pending:a.pending, priorities:wr2Lines(a.priorities).map(x => '• ' + x).join('\n'), concerns:a.concerns, concernsNil:!a.concerns.length });
     closeModal(); vehUi.wrId = await vehSave('weeklyReports', base); rerenderMain(); toast('Weekly departmental update started — drafted from the app; check and edit each section.'); return;
   }
@@ -19810,13 +19824,14 @@ function pdfRuns(pg, x, base, runs){
   return cx;
 }
 // a signature picture as a PDF image (transparent background kept)
-async function pdfSignatureImage(dataUrl){
+// raw: keep the picture's own colours (letterheads, logos, seals); otherwise light paper is cleaned off a scanned signature
+async function pdfSignatureImage(dataUrl, raw){
   if(!/^data:image\/png;base64,/.test(dataUrl || '')) return null;
   try{
     const img = new Image(); img.src = dataUrl; await img.decode();
     const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
     const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
-    const d = ctx.getImageData(0, 0, c.width, c.height).data, n = c.width * c.height; sigCleanPixels(d);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data, n = c.width * c.height; if(!raw) sigCleanPixels(d);
     const rgb = new Uint8Array(n * 3), alpha = new Uint8Array(n); let translucent = false;
     for(let i = 0, j = 0; i < n; i++){ rgb[j++] = d[i*4]; rgb[j++] = d[i*4+1]; rgb[j++] = d[i*4+2]; alpha[i] = d[i*4+3]; if(d[i*4+3] !== 255) translucent = true; }
     const zRgb = await pdfDeflate(rgb), zAlpha = translucent ? await pdfDeflate(alpha) : null;

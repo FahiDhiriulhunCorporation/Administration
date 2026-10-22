@@ -1916,7 +1916,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.277';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.278';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7839,7 +7839,7 @@ const ANYA_GUIDES = [
     steps:['Open **Docs → Handovers** and press **+ New Handover**.', 'List what is handed over, then both people sign.', 'Unsigned handovers show as a badge until complete.'],
     acts:[['+ New handover', "goTo('handovers'); openHandoverForm()"]] },
   { id:'weekly', title:'Weekly report', page:'weekly-report', keys:['weekly report','report to','admin report','week report'],
-    steps:['Open **Team → Weekly Report** and press **+ Weekly report**.', 'Fill in the week\'s items, then download the **PDF**.', 'Press **✉ Mail** to make an email draft with the PDF attached — review it and send it yourself.'],
+    steps:['Open **Team → Weekly Report** and press **+ Weekly report** — the FDC "Weekly Departmental Update" template is the default.', 'It is drafted from the app: main activities, progress on objectives (from Tasks), pending matters (open tasks, PRs, complaints, travel) and next week\'s priorities. Edit anything; use **✨ Fill from the app** to redraft a section.', 'Add any concerns (or leave "Nil"), set Approved by, then **Download PDF / Word** or **✉ Email draft** — it is never sent by itself.'],
     acts:[['+ Weekly report', "goTo('weekly-report'); openWrNew()"]] },
   { id:'tasks', title:'Tasks', page:'tasks', keys:['task','to-do','todo','assign'],
     steps:['Open **Team → Tasks** and press **+ Task**.', 'Give it an owner and a due date; overdue tasks show in red on the menu.'],
@@ -11468,26 +11468,196 @@ const wrIsoWeek = thu => { const d = new Date(thu + 'T00:00:00Z'); const t = new
 const wrTitle = r => 'Week ' + r.weekNo + ' - ' + pcOrdinalDate(r.weekStart).replace(/ \d{4}$/, '').replace(/ (\w+)$/, ' $1') + ' - ' + pcOrdinalDate(r.weekEnd).replace(/ \d{4}$/, '');
 const wrById = id => state.weeklyReports.find(r => r.id === id) || null;
 
+/* =====================================================================
+   DEPARTMENTAL UPDATE REPORT (the FDC template, from October 2026):
+   header (period, department, submission, prepared / approved by), 1 main activities, 2 progress toward key objectives,
+   3 ongoing activities / pending matters, 4 significant concerns / support required, 5 priorities for next week, sign-off.
+   Reports made before keep their own (detailed) layout.
+===================================================================== */
+const WR2_STATUS = ['Not Started', 'Ongoing', 'Completed'];
+const wr2Is = r => !!r && r.format === 'dept';
+const wr2Lines = s => String(s || '').split('\n').map(x => x.replace(/^\s*[•\-–*]\s*/, '').trim()).filter(Boolean);
+const wr2Period = r => pcOrdinalDate(r.weekStart) + ' – ' + pcOrdinalDate(r.weekEnd);
+// a first draft from the app's own records for the week (department's tasks, and the work recorded in the app)
+function wr2Auto(r){
+  const start = r.weekStart, end = r.weekEnd, inW = d => !!d && String(d).slice(0, 10) >= start && String(d).slice(0, 10) <= end, dept = String(r.department || '').toLowerCase();
+  const sameDept = x => !x || !dept || String(x).toLowerCase().startsWith(dept.split(' ')[0]);
+  const tasks = (state.tasks || []).filter(t => t.status !== 'Cancelled');
+  const deptOf = a => String((sdPerson(a.key) || {}).department || '').toLowerCase();
+  const myTasks = tasks.filter(t => !dept || (t.assignees || []).some(a => { const d = deptOf(a); return !d || d.startsWith(dept.split(' ')[0]) || dept.startsWith(d.split(' ')[0]); }));
+  const T = myTasks.length ? myTasks : tasks;
+  const act = [];
+  T.filter(t => t.status === 'Completed' && inW(t.completedOn)).forEach(t => act.push('Completed ' + (t.no ? t.no + ' — ' : '') + t.title));
+  const cnt = (n, one, many) => { if(n) act.push(n + ' ' + (n === 1 ? one : many)); };
+  try{ cnt(state.pettyCash.filter(x => sameDept(x.department) && inW(x.processedDate || (x.processedAt && localDateStr(new Date(x.processedAt))))).length, 'petty cash request processed', 'petty cash requests processed'); }catch(e){}
+  try{ cnt(state.purchaseRequisitions.filter(p => inW(prRequisitionDate(p))).length, 'purchase requisition raised', 'purchase requisitions raised'); }catch(e){}
+  try{ cnt(state.travelRequests.filter(x => inW(x.formDate || (x.createdAt && localDateStr(new Date(x.createdAt))))).length, 'travel request handled', 'travel requests handled'); }catch(e){}
+  try{ cnt(state.documents.filter(d => sameDept(d.department) && inW(d.date)).length, 'document registered (letters, memos, agreements …)', 'documents registered (letters, memos, agreements …)'); }catch(e){}
+  try{ cnt(state.fuelRecords.filter(x => inW(x.date)).length, 'vehicle fill-up recorded', 'vehicle fill-ups recorded'); }catch(e){}
+  try{ cnt(state.complaints.filter(c => /resolved|closed/i.test(c.status || '') && inW(c.resolvedOn || c.updatedOn || c.date)).length, 'complaint resolved', 'complaints resolved'); }catch(e){}
+  const stMap = s => s === 'Completed' ? 'Completed' : s === 'Not started' ? 'Not Started' : 'Ongoing';
+  const active = T.filter(t => (t.start || '') <= end && (t.status !== 'Completed' || (t.completedOn || '') >= start));
+  const objectives = active.map(t => ({ activity:(t.no ? t.no + ' — ' : '') + t.title, progress:tkProg(t) + '%' + (t.status === 'Completed' ? ' — completed ' + pcOrdinalDate(t.completedOn || t.due) : t.due ? ' — due ' + pcOrdinalDate(t.due) : ''), status:stMap(t.status) }));
+  const pending = [];
+  T.filter(t => t.status !== 'Completed' && (t.start || '') <= end).forEach(t => pending.push({ matter:(t.no ? t.no + ' — ' : '') + t.title, status:tkOverdue(t) ? 'Overdue' : t.status === 'On hold' ? 'On hold' : 'In progress', expected:t.due ? pcOrdinalDate(t.due) : '' }));
+  try{ state.purchaseRequisitions.filter(p => (p.status || 'open') === 'pending_approval').forEach(p => pending.push({ matter:'PR ' + (p.prNumber || '') + ' — ' + (prFirstItem(p) || p.title || ''), status:'Pending approval', expected:'' })); }catch(e){}
+  try{ state.complaints.filter(c => !/resolved|closed/i.test(c.status || 'Open')).forEach(c => pending.push({ matter:'Complaint — ' + String(c.title || c.complaint || '').split('\n')[0], status:c.status || 'Open', expected:'' })); }catch(e){}
+  try{ state.travelRequests.filter(x => x.status === 'Pending').forEach(x => pending.push({ matter:'Travel to ' + (x.destination || '—') + (x.formNumber ? ' (' + x.formNumber + ')' : ''), status:'Pending approval', expected:x.fromDate ? pcOrdinalDate(x.fromDate) : '' })); }catch(e){}
+  const next = clIsoAdd(end, 7), priorities = T.filter(t => t.status !== 'Completed' && t.due && t.due <= next).sort((a, b) => String(a.due).localeCompare(String(b.due))).map(t => (t.due < clIsoAdd(end, 1) ? 'Clear overdue: ' : 'Complete ') + t.title + ' (due ' + pcOrdinalDate(t.due) + ')');
+  return { activities:act.join('\n'), objectives, pending:pending.slice(0, 15), priorities:priorities.join('\n') };
+}
+// the editor
+function wr2Row(key, x){
+  const inp = `${VEH_FIELD} !px-2 !py-1.5 text-[13px]`, area = (f, v) => `<textarea data-f="${f}" rows="${Math.max(1, String(v || '').split('\n').length)}" oninput="this.rows = Math.max(1, this.value.split('\\n').length)" class="wr2-in ${inp}">${esc(v || '')}</textarea>`;
+  const cells = key === 'objectives' ? [area('activity', x.activity), area('progress', x.progress), `<select data-f="status" class="wr2-in ${inp} bg-white">${WR2_STATUS.concat(x.status && !WR2_STATUS.includes(x.status) ? [x.status] : []).map(s => `<option ${s === (x.status || 'Ongoing') ? 'selected' : ''}>${s}</option>`).join('')}</select>`]
+    : key === 'pending' ? [area('matter', x.matter), `<input data-f="status" value="${esc(x.status || '')}" class="wr2-in ${inp}" placeholder="e.g. Awaiting approval">`, `<input data-f="expected" value="${esc(x.expected || '')}" class="wr2-in ${inp}" placeholder="e.g. 30th October 2026">`]
+    : [area('issue', x.issue), area('impact', x.impact), area('support', x.support)];
+  return `<tr class="wr2-row align-top border-t border-slate-100"><td class="p-1 text-xs text-slate-400 pt-3 w-6 wr2-no"></td>${cells.map(c => `<td class="p-1">${c}</td>`).join('')}<td class="p-1 w-8 text-center"><button type="button" onclick="this.closest('tr').remove(); wr2Renum()" class="text-slate-400 hover:text-rose-600 text-lg leading-none" title="Remove">×</button></td></tr>`;
+}
+function wr2Renum(){ ['objectives', 'pending', 'concerns'].forEach(k => document.querySelectorAll('#wr2-' + k + ' .wr2-no').forEach((td, i) => { td.textContent = i + 1; })); }
+function wr2AddRow(key){ const tb = document.querySelector('#wr2-' + key + ' tbody'); tb.insertAdjacentHTML('beforeend', wr2Row(key, {})); wr2Renum(); const i = tb.lastElementChild.querySelector('.wr2-in'); if(i) i.focus(); }
+function wr2Editor(r){
+  const head = (cols) => `<thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="w-6">No.</th>${cols.map(c => `<th class="px-2 py-2">${c}</th>`).join('')}<th></th></tr></thead>`;
+  const tbl = (key, cols, rows) => `<div class="overflow-x-auto"><table id="wr2-${key}" class="w-full text-sm">${head(cols)}<tbody>${rows.map(x => wr2Row(key, x)).join('')}</tbody></table></div>`;
+  const ta = (id, v, ph, rows) => `<textarea id="${id}" rows="${rows || 4}" class="${VEH_FIELD}" placeholder="${esc(ph)}">${esc(v || '')}</textarea>`;
+  const help = t => `<p class="text-[12px] text-slate-500 mb-2">${t}</p>`;
+  const sec = (n, title, btns, body) => vPanel(n + '. ' + title, btns, `<div class="p-4">${body}</div>`);
+  const fill = k => `<button onclick="wr2Fill('${k}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✨ Fill from the app</button>`;
+  const add = k => `<button onclick="wr2AddRow('${k}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Row</button>`;
+  const nil = !(r.concerns || []).length && r.concernsNil !== false;
+  const f = (id, label, v, type, ph) => `<div><label class="${VEH_LBL}">${label}</label><input id="${id}" type="${type || 'text'}" value="${esc(v || '')}" ${ph ? `placeholder="${esc(ph)}"` : ''} class="${VEH_FIELD}"></div>`;
+  setTimeout(wr2Renum, 0);
+  return `<div class="flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.wrId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All weekly reports</button><h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Weekly Departmental Update — ${esc(r.department)}</h1><div class="text-sm text-slate-500 mt-1">Week ${r.weekNo} · ${esc(wr2Period(r))}</div></div>
+      <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}<button onclick="wr2Fill('all')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">✨ Fill all from the app</button>${vBtnPlain('Blank template', `wrBlankPdf('${r.id}', this)`)}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('Download Word', `wrSave('${r.id}', 'word', this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
+    <div id="wr2-form">
+    ${vPanel('Report details', '', `<div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">${f('wr2-period', 'Reporting period', wr2Period(r), 'text')}${f('wr2-dept', 'Division / Department', r.department)}${f('wr2-subdate', 'Date of submission', r.submissionDate || vToday(), 'date')}${f('wr2-prepared', 'Prepared by', r.preparedBy)}${f('wr2-approved', 'Approved by', r.approvedBy, 'text', 'e.g. Director, Administration')}</div>`)}
+    ${sec(1, 'Main Activities This Week', fill('activities'), help('A summary of the main activities, tasks and key achievements completed during the reporting period — one per line (each becomes a bullet).') + ta('wr2-activities', r.activities, '• Processed …\n• Completed …', 5))}
+    ${sec(2, 'Progress Toward Key Objectives', fill('objectives') + add('objectives'), help('Progress made toward departmental targets, ongoing projects and key objectives.') + tbl('objectives', ['Key objective / activity', 'Progress / achievement', 'Current status'], (r.objectives || []).length ? r.objectives : [{}, {}, {}]))}
+    ${sec(3, 'Ongoing Activities / Pending Matters', fill('pending') + add('pending'), help('Activities still in progress, pending approvals, or awaiting action from other departments or external parties.') + tbl('pending', ['Activity / pending matter', 'Current status', 'Expected completion date'], (r.pending || []).length ? r.pending : [{}, {}, {}]))}
+    ${sec(4, 'Significant Concerns / Support Required', add('concerns'), help('Challenges, risks, delays, resource constraints, or decisions needing management attention or support from other divisions.') + `<label class="flex items-center gap-2 text-sm text-slate-700 mb-2"><input type="checkbox" id="wr2-nil" ${nil ? 'checked' : ''}> Nil — no significant concerns or support required</label>` + tbl('concerns', ['Concern / issue', 'Impact', 'Support / action required'], (r.concerns || []).length ? r.concerns : []))}
+    ${sec(5, 'Priorities for Next Week', fill('priorities'), help('Key activities, deliverables and targets planned for the next reporting period — one per line.') + ta('wr2-priorities', r.priorities, '• …', 4))}
+    ${vPanel('Sign-off', '', `<div class="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3.5">${f('wr2-subby', 'Submitted by', r.submittedBy || r.preparedBy)}${f('wr2-desig', 'Designation', r.designation || ((sdAll().find(p => p.name === (r.submittedBy || r.preparedBy)) || {}).designation || ''))}${f('wr2-sdate', 'Date', r.signDate || vToday(), 'date')}</div>`)}
+    </div>
+    <div class="flex justify-end gap-2.5 mb-8">${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('Download Word', `wrSave('${r.id}', 'word', this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div>`;
+}
+function wr2Fill(k){
+  const r = wrById(vehUi.wrId); if(!r) return; const a = wr2Auto(Object.assign({}, r, { department:(document.getElementById('wr2-dept') || {}).value || r.department }));
+  const doText = (id, v) => { const el = document.getElementById(id); if(!el) return; if(el.value.trim() && !confirm('Replace what is typed with a draft from the app?')) return; el.value = wr2Lines(v).map(x => '• ' + x).join('\n'); };
+  const doTbl = (key, rows) => { const tb = document.querySelector('#wr2-' + key + ' tbody'); if(!tb) return; const typed = [...tb.querySelectorAll('.wr2-in')].some(i => i.tagName !== 'SELECT' && i.value.trim()); if(typed && !confirm('Replace the rows with what the app has?')) return; tb.innerHTML = (rows.length ? rows : [{}]).map(x => wr2Row(key, x)).join(''); wr2Renum(); };
+  if(k === 'activities' || k === 'all') doText('wr2-activities', a.activities);
+  if(k === 'objectives' || k === 'all') doTbl('objectives', a.objectives);
+  if(k === 'pending' || k === 'all') doTbl('pending', a.pending);
+  if(k === 'priorities' || k === 'all') doText('wr2-priorities', a.priorities);
+  toast('Drafted from the app — check it and save.');
+}
+function wr2Collect(){
+  const rows = key => [...document.querySelectorAll('#wr2-' + key + ' .wr2-row')].map(tr => { const o = {}; tr.querySelectorAll('.wr2-in').forEach(i => { o[i.dataset.f] = i.value.trim(); }); return o; }).filter(o => Object.entries(o).some(([k, v]) => v && k !== 'status'));
+  const v = id => ((document.getElementById(id) || {}).value || '').trim();
+  const concerns = rows('concerns'), nilBox = document.getElementById('wr2-nil');
+  return { format:'dept', department:v('wr2-dept'), submissionDate:v('wr2-subdate'), preparedBy:v('wr2-prepared'), approvedBy:v('wr2-approved'), activities:v('wr2-activities'), objectives:rows('objectives'), pending:rows('pending'),
+    concerns, concernsNil:!concerns.length && !!(nilBox && nilBox.checked), priorities:v('wr2-priorities'), submittedBy:v('wr2-subby'), designation:v('wr2-desig'), signDate:v('wr2-sdate') };
+}
+// the PDF, laid out like the template on the letterhead
+async function buildWr2Pdf(r, blank){
+  const K = [0, 0, 0], GRID = [0.2, 0.2, 0.2], L = 72, R = 523.3, FS = 9.5, LH = 13, TOP = 112, BOT = 772;
+  const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = 118;
+  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP; }, need = h => { if(y + h > BOT) newPage(); };
+  const center = (t, o) => { pg.text(L + (R - L - pdfTextWidth(t, !!o.bold, o.size)) / 2, y, t, o); };
+  const para = (t, o) => { o = Object.assign({ size:FS }, o || {}); pdfWrap(String(t || ''), !!o.bold, o.size, R - L - (o.indent || 0)).forEach((ln, i, a) => { need(LH); const ws = o.justify && i < a.length - 1 ? ((R - L - (o.indent || 0) - pdfTextWidth(ln, !!o.bold, o.size)) / Math.max(1, (ln.match(/ /g) || []).length)) : 0; pg.text(L + (o.indent || 0), y, ln, Object.assign({}, o, ws ? { ws } : {})); y += LH; }); };
+  const field = (label, value) => { need(LH + 4); pg.text(L, y, label, { bold:true, size:FS }); const x = L + pdfTextWidth(label + ' ', true, FS); if(value) pg.text(x, y, String(value), { size:FS }); else pg.line(x, y + 1.5, x + 175, y + 1.5, K, 0.6); y += LH + 7; };
+  const heading = (n, t) => { y += 10; need(LH * 6); pg.text(L + 14, y, n + '.', { bold:true, size:10 }); pg.text(L + 28, y, t, { bold:true, size:10 }); y += LH + 4; };
+  const bullets = (list, empty) => { (list.length ? list : Array(empty || 2).fill('')).forEach(t => { need(LH); pg.text(L + 12, y, '•', { size:FS }); if(t) { pdfWrap(t, false, FS, R - L - 28).forEach((ln, i) => { if(i) need(LH); pg.text(L + 26, y, ln, { size:FS }); y += LH; }); } else y += LH + 4; y += 2; }); };
+  const table = (cols, rows, n) => {             // cols: [label, share]; rows: arrays
+    const tw = R - L, tot = cols.reduce((t, c) => t + c[1], 0), xs = [L]; cols.forEach(c => xs.push(xs[xs.length - 1] + tw * c[1] / tot));
+    const hw = cols.map((c, i) => pdfWrap(c[0], true, FS, xs[i + 1] - xs[i] - 8)), hh = Math.max(...hw.map(w => w.length)) * LH + 8;
+    const drawHead = () => { hw.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 12 + k * LH, ln, { bold:true, size:FS }))); xs.forEach(x => pg.line(x, y, x, y + hh, GRID, 0.6)); pg.line(L, y, R, y, GRID, 0.6); y += hh; pg.line(L, y, R, y, GRID, 0.6); };
+    need(hh + 24); drawHead();
+    const body = rows.length ? rows : Array.from({ length:n || 3 }, (_, i) => [String(i + 1)].concat(cols.slice(1).map(() => '')));
+    body.forEach(row => { const wr = row.map((t, i) => pdfWrap(String(t || ''), false, i === row.length - 1 && blank ? 7 : FS, xs[i + 1] - xs[i] - 8)), h = Math.max(20, Math.max(...wr.map(w => w.length)) * LH + 7);
+      if(y + h > BOT){ newPage(); drawHead(); }
+      wr.forEach((w, i) => w.forEach((ln, k) => pg.text(xs[i] + 4, y + 12 + k * LH, ln, { size:i === row.length - 1 && blank ? 7 : FS })));
+      xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.6)); y += h; pg.line(L, y, R, y, GRID, 0.6); });
+    y += 10;
+  };
+  center('FDC – WEEKLY DEPARTMENTAL UPDATE REPORT', { bold:true, size:12.5 }); y += 26;
+  field('Reporting Period:', blank ? '' : wr2Period(r)); field('Division / Department:', blank ? (r.department || '') : r.department); field('Date of Submission:', blank ? '' : r.submissionDate ? pcOrdinalDate(r.submissionDate) : '');
+  field('Prepared By:', blank ? '' : r.preparedBy); field('Approved By:', blank ? '' : r.approvedBy);
+  pg.line(L, y - 2, R, y - 2, [0.6, 0.6, 0.6], 0.8); y += 10;
+  heading(1, 'Main Activities This Week'); para('Provide a summary of the main activities, tasks, and key achievements completed during the reporting period.', { justify:true }); y += 4; bullets(blank ? [] : wr2Lines(r.activities));
+  heading(2, 'Progress Toward Key Objectives'); para('Outline the progress made toward departmental targets, ongoing projects, and key objectives.', { justify:true }); y += 4;
+  table([['No.', 0.5], ['Key Objective / Activity', 2.2], ['Progress / Achievement', 2.2], ['Current Status', 2]], blank ? [1, 2, 3].map(n => [String(n), '', '', 'Not Started / Ongoing / Completed']) : (r.objectives || []).map((x, i) => [String(i + 1), x.activity, x.progress, x.status]));
+  heading(3, 'Ongoing Activities / Pending Matters'); para('List activities that are still in progress, pending approvals, or awaiting action from other departments or external parties.', { justify:true }); y += 4;
+  table([['No.', 0.5], ['Activity / Pending Matter', 2.4], ['Current Status', 1.9], ['Expected Completion Date', 1.9]], blank ? [] : (r.pending || []).map((x, i) => [String(i + 1), x.matter, x.status, x.expected]));
+  heading(4, 'Significant Concerns / Support Required'); para('Highlight any challenges, risks, delays, resource constraints, or decisions requiring management attention or support from other divisions.', { justify:true }); y += 4;
+  const cs = blank ? [] : (r.concerns || []);
+  if(!blank && !cs.length){ need(LH); pg.text(L + 12, y, 'Nil', { bold:true, size:FS }); y += LH + 4; }
+  (cs.length ? cs : blank ? [{}] : []).forEach((c, i) => { [['Concern / Issue:', c.issue], ['Impact:', c.impact], ['Support / Action Required:', c.support]].forEach(([l, v]) => { need(LH + 2); pg.text(L + 12, y, '•', { size:FS }); pg.text(L + 26, y, l, { bold:true, size:FS });
+      const x0 = L + 26 + pdfTextWidth(l + ' ', true, FS), lines = pdfWrap(String(v || ''), false, FS, R - x0); if(lines.length){ lines.forEach((ln, k) => { if(k){ need(LH); } pg.text(k ? L + 26 : x0, y, ln, { size:FS }); if(k < lines.length - 1) y += LH; }); } y += LH + 4; }); if(i < cs.length - 1) y += 4; });
+  if(blank){ need(LH); pg.text(L, y, 'If there are no significant concerns or support requirements, please state "Nil".', { size:FS, italic:true }); y += LH; }
+  heading(5, 'Priorities for Next Week'); para('List the key activities, deliverables, and targets planned for the upcoming reporting period.', { justify:true }); y += 4; bullets(blank ? [] : wr2Lines(r.priorities), 3);
+  need(LH * 7); pg.line(L, y, R, y, [0.6, 0.6, 0.6], 0.8); y += 30;
+  field('Submitted By:', blank ? '' : (r.submittedBy || r.preparedBy)); field('Designation:', blank ? '' : r.designation); field('Date:', blank ? '' : r.signDate ? pcOrdinalDate(r.signDate) : '');
+  return lhPdfFinish(pages, 'Weekly Departmental Update ' + (r.department || '') + ' Week ' + r.weekNo, R, {});
+}
+// the same as an editable Word file on the letterhead
+async function buildWr2Docx(r, blank){
+  const F = { font:'Aptos', sz:19 }, f = o => Object.assign({}, F, o || {}), TW = 9026;
+  const P = (inner, o) => wP(inner, o), T = (t, o) => wR(String(t == null ? '' : t), f(o));
+  const multi = (t, o) => String(t || '').split('\n').map((ln, i) => (i ? '<w:r><w:br/></w:r>' : '') + T(ln, o)).join('');
+  const out = [], keep = x => x.replace('<w:pPr>', '<w:pPr><w:keepNext/>');
+  const field = (l, v) => out.push(P(T(l + ' ', { b:true }) + (v ? T(v) : T('______________________________', { b:true })), { after:120 }));
+  const head = (n, t) => out.push(keep(P(T(n + '.  ' + t, { b:true, sz:20 }), { before:280, after:120, ind:'<w:ind w:left="360"/>' })));
+  const desc = t => out.push(keep(P(T(t), { after:120, jc:'both' })));
+  const bullet = t => out.push(P(T('•') + '<w:r><w:tab/></w:r>' + multi(t), { after:60, ind:'<w:ind w:left="720" w:hanging="360"/>' }));
+  const B = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(k => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join('') + '</w:tblBorders>';
+  const cell = (inner, w) => `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/><w:tcMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>${inner}</w:tc>`;
+  const table = (cols, rows) => { const tot = cols.reduce((t, c) => t + c[1], 0), ws = cols.map(c => Math.round(TW * c[1] / tot));
+    out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${B}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${ws.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid><w:tr><w:trPr><w:tblHeader/></w:trPr>${cols.map((c, i) => cell(P(T(c[0], { b:true })), ws[i])).join('')}</w:tr>${rows.map(rw => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${rw.map((t, i) => cell(P(multi(t, blank && i === rw.length - 1 ? { sz:14 } : {})), ws[i])).join('')}</w:tr>`).join('')}</w:tbl>`, P('', { after:120 })); };
+  out.push(P(T('FDC – WEEKLY DEPARTMENTAL UPDATE REPORT', { b:true, sz:26 }), { jc:'center', after:280 }));
+  field('Reporting Period:', blank ? '' : wr2Period(r)); field('Division / Department:', r.department || ''); field('Date of Submission:', blank ? '' : r.submissionDate ? pcOrdinalDate(r.submissionDate) : '');
+  field('Prepared By:', blank ? '' : r.preparedBy); field('Approved By:', blank ? '' : r.approvedBy);
+  out.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="A6A6A6"/></w:pBdr><w:spacing w:after="120"/></w:pPr></w:p>');
+  head(1, 'Main Activities This Week'); desc('Provide a summary of the main activities, tasks, and key achievements completed during the reporting period.'); (blank ? ['', ''] : wr2Lines(r.activities)).forEach(bullet);
+  head(2, 'Progress Toward Key Objectives'); desc('Outline the progress made toward departmental targets, ongoing projects, and key objectives.');
+  table([['No.', 0.5], ['Key Objective / Activity', 2.2], ['Progress / Achievement', 2.2], ['Current Status', 2]], blank ? [1, 2, 3].map(n => [String(n), '', '', 'Not Started / Ongoing / Completed']) : ((r.objectives || []).length ? r.objectives : [{}]).map((x, i) => [String(i + 1), x.activity, x.progress, x.status]));
+  head(3, 'Ongoing Activities / Pending Matters'); desc('List activities that are still in progress, pending approvals, or awaiting action from other departments or external parties.');
+  table([['No.', 0.5], ['Activity / Pending Matter', 2.4], ['Current Status', 1.9], ['Expected Completion Date', 1.9]], blank ? [1, 2, 3].map(n => [String(n), '', '', '']) : ((r.pending || []).length ? r.pending : [{}]).map((x, i) => [String(i + 1), x.matter, x.status, x.expected]));
+  head(4, 'Significant Concerns / Support Required'); desc('Highlight any challenges, risks, delays, resource constraints, or decisions requiring management attention or support from other divisions.');
+  const cs = blank ? [{}] : (r.concerns || []);
+  if(!blank && !cs.length) out.push(P(T('Nil', { b:true }), { after:120, ind:'<w:ind w:left="360"/>' }));
+  cs.forEach(c => [['Concern / Issue:', c.issue], ['Impact:', c.impact], ['Support / Action Required:', c.support]].forEach(([l, v]) => out.push(P(T('•') + '<w:r><w:tab/></w:r>' + T(l + ' ', { b:true }) + multi(v), { after:60, ind:'<w:ind w:left="720" w:hanging="360"/>' }))));
+  if(blank) out.push(P(T('If there are no significant concerns or support requirements, please state "Nil".', { i:true }), { before:80, after:120 }));
+  head(5, 'Priorities for Next Week'); desc('List the key activities, deliverables, and targets planned for the upcoming reporting period.'); (blank ? ['', '', ''] : wr2Lines(r.priorities)).forEach(bullet);
+  out.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="A6A6A6"/></w:pBdr><w:spacing w:before="200" w:after="400"/></w:pPr></w:p>');
+  field('Submitted By:', blank ? '' : (r.submittedBy || r.preparedBy)); field('Designation:', blank ? '' : r.designation); field('Date:', blank ? '' : r.signDate ? pcOrdinalDate(r.signDate) : '');
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
+  return lhDocx(doc, LH_NS);
+}
 function viewWeeklyReport(){
-  if(vehUi.wrId && wrById(vehUi.wrId)) return wrEditor(wrById(vehUi.wrId));
+  if(vehUi.wrId && wrById(vehUi.wrId)){ const r0 = wrById(vehUi.wrId); return wr2Is(r0) ? wr2Editor(r0) : wrEditor(r0); }
   const list = state.weeklyReports.slice().sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)) || String(a.department).localeCompare(String(b.department)));
   const thisWeek = wrWeekEnd(vToday()), mine = list.filter(r => r.weekEnd === thisWeek);
-  return vHead('Department Weekly Report', 'Each department\'s weekly report: document entries, dispatch, stock requests, vehicles, tasks, PRs and staff on leave — filled from the app and downloaded as a PDF.', vBtnPlain('Blank template', 'openWrBlank()') + vBtnPrimary('+ Weekly report', 'openWrNew()')) +
+  return vHead('Department Weekly Report', 'Each department\'s weekly departmental update (FDC template): main activities, progress on objectives, pending matters, concerns and next week\'s priorities — drafted from the app, downloaded as PDF or Word.', vBtnPlain('Blank template', 'openWrBlank()') + vBtnPrimary('+ Weekly report', 'openWrNew()')) +
     vKpis(statCard('This week', 'Week ' + wrIsoWeek(thisWeek), pcOrdinalDate(clIsoAdd(thisWeek, -5)) + ' – ' + pcOrdinalDate(thisWeek), 'brand') + statCard('Reports this week', fmtNum(mine.length), mine.map(r => r.department).join(', ') || 'None yet', mine.length ? 'emerald' : 'amber') +
       statCard('Open tasks', fmtNum(list[0] ? (list[0].tasks || []).filter(t => t.status !== 'Completed').length : 0), list[0] ? 'In the latest report (' + esc(list[0].department) + ')' : '—', 'slate') + statCard('Staff on leave this week', fmtNum(lvBetween(clIsoAdd(thisWeek, -5), thisWeek).length), 'From the Staff Leave Plan', 'slate')) +
-    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(`${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${fmtD(r.updatedAt)}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><button onclick="event.stopPropagation(); wrDocx('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Word</button><button onclick="event.stopPropagation(); wrMailOpen('${r.id}')" title="Email draft with the PDF attached" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✉ Mail</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
+    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Week' }, { t:'Department' }, { t:'Tasks' }, { t:'Prepared by' }, { t:'' }])}<tbody>${list.map(r => { const open = (r.tasks || []).filter(t => t.status !== 'Completed').length; return `<tr class="${vTr} cursor-pointer" onclick="vehUi.wrId='${r.id}'; rerenderMain()">${vTd(`<span class="font-semibold">Week ${r.weekNo}</span><div class="text-[11.5px] text-slate-400">${pcOrdinalDate(r.weekStart)} – ${pcOrdinalDate(r.weekEnd)}</div>`, { first:1 })}${vTd(esc(r.department))}${vTd(wr2Is(r) ? `${(r.objectives || []).length} objective${(r.objectives || []).length === 1 ? '' : 's'}${(r.pending || []).length ? ` · <span class="text-amber-600">${r.pending.length} pending</span>` : ''}<div class="text-[11px] text-slate-400">Departmental update</div>` : `${(r.tasks || []).length} task${(r.tasks || []).length === 1 ? '' : 's'}${open ? ` · <span class="text-amber-600">${open} open</span>` : ''}<div class="text-[11px] text-slate-400">Detailed (previous format)</div>`)}${vTd(esc(r.preparedBy || '—') + (r.updatedAt ? `<div class="text-[11px] text-slate-400">updated ${fmtD(r.updatedAt)}</div>` : ''))}${vTd(`<button onclick="event.stopPropagation(); wrPdf('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">PDF</button><button onclick="event.stopPropagation(); wrDocx('${r.id}', this)" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Word</button><button onclick="event.stopPropagation(); wrMailOpen('${r.id}')" title="Email draft with the PDF attached" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✉ Mail</button><span class="text-xs font-semibold text-brand-600">Open ›</span>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No weekly reports yet. Start one with "+ Weekly report" — the tasks of the last report carry over each week.')}</div>`);
 }
 function openWrNew(){
   const me = authUser && authUser.department ? authUser.department : 'Administration';
   openModal('New weekly report', vFormOpen + vGrid(2, `<div><label class="${VEH_LBL}">Department${vReqStar}</label><input name="department" list="wr-depts" value="${esc(me)}" class="${VEH_FIELD}"><datalist id="wr-depts">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist></div>` +
-    vF('Any day in the week', 'day', vToday(), 'date', { req:1 })) + `<p class="text-[11.5px] text-slate-400 mt-2">A report week runs Saturday to Thursday. Tasks are filled from Department › Tasks (with the week's progress updates); the other sections are filled from the app too, and everything can be edited.</p>` + vFoot('Create', 'saveWrNew()'));
+    vF('Any day in the week', 'day', vToday(), 'date', { req:1 })) + `<div class="mt-3.5"><label class="${VEH_LBL}">Template</label><select name="format" class="${VEH_FIELD} bg-white"><option value="dept" selected>Weekly Departmental Update (FDC template)</option><option value="detail">Detailed Administration report (previous format)</option></select></div><p class="text-[11.5px] text-slate-400 mt-2">A report week runs Saturday to Thursday. The departmental update is drafted from the app (tasks, pending matters, the week's work) and everything can be edited.</p>` + vFoot('Create', 'saveWrNew()'));
 }
 async function saveWrNew(){
   const o = vehFormObj(document.getElementById('vform')); if(!o.department) return vFail('Enter the department.'); if(!o.day) return vFail('Choose the week.');
   const end = wrWeekEnd(o.day), start = clIsoAdd(end, -5);
   const dup = state.weeklyReports.find(r => r.weekEnd === end && String(r.department).toLowerCase() === o.department.toLowerCase()); if(dup){ closeModal(); vehUi.wrId = dup.id; rerenderMain(); toast('That report already exists — opened it.'); return; }
   const prev = state.weeklyReports.filter(r => String(r.department).toLowerCase() === o.department.toLowerCase() && r.weekEnd < end).sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)))[0];
+  if(o.format !== 'detail'){
+    const base = { format:'dept', department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '', approvedBy:(prev && prev.approvedBy) || '', submissionDate:vToday(), submittedBy:authUser ? authUser.name : '', designation:(prev && prev.designation) || ((sdAll().find(p => authUser && p.name === authUser.name) || {}).designation || ''), signDate:vToday(), concerns:[] };
+    const a = wr2Auto(base); Object.assign(base, { activities:wr2Lines(a.activities).map(x => '• ' + x).join('\n'), objectives:a.objectives, pending:a.pending, priorities:wr2Lines(a.priorities).map(x => '• ' + x).join('\n') });
+    closeModal(); vehUi.wrId = await vehSave('weeklyReports', base); rerenderMain(); toast('Weekly departmental update started — drafted from the app; check and edit each section.'); return;
+  }
   const rec = { department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '',
     entries:WR_ENTRY_DEPTS.map(d => ({ department:d, lines:[] })), dispatch:[], stock:[], vehicles:[], tasks:[], prs:[], complaints:[], edited:{}, notes:'' };   // the app-fed sections stay live
   closeModal(); vehUi.wrId = await vehSave('weeklyReports', rec); rerenderMain(); toast('Weekly report started — stock, vehicles, tasks, PRs, complaints and leave fill in from the app.');
@@ -11604,7 +11774,7 @@ function wrLiveMark(r, data){                                                   
   return data;
 }
 async function wrSave(id, pdf, btn){
-  const r = wrById(id); if(!r) return; const data = wrLiveMark(r, wrCollect());
+  const r = wrById(id); if(!r) return; const data = wr2Is(r) ? wr2Collect() : wrLiveMark(r, wrCollect());
   if(btn) btn.disabled = true;
   try{ await vehSave('weeklyReports', Object.assign({ id }, data)); if(pdf === 'word') await wrDocx(id); else if(pdf) await wrPdf(id); else toast('Weekly report saved.'); }
   finally{ if(btn && btn.isConnected) btn.disabled = false; }
@@ -11612,6 +11782,7 @@ async function wrSave(id, pdf, btn){
 function deleteWr(id){ if(!vehRequireAdmin('delete weekly reports')) return; const r = wrById(id); if(!r) return; confirmAction('Delete the weekly report of ' + r.department + ', week ' + r.weekNo + '?', async () => { await vehDelete('weeklyReports', id); vehUi.wrId = ''; rerenderMain(); toast('Deleted.'); }); }
 // the PDF: letterhead, title block, then each section as a table that runs over pages
 async function buildWeeklyReportPdf(r, opt){
+  if(wr2Is(r)) return buildWr2Pdf(r, !!(opt && opt.blank));
   const blank = !!(opt && opt.blank), B = (n, k, h) => Array.from({ length:n }, () => Array(k).fill(h || ' \n '));   // blank: a template to fill by hand
   const K = [0, 0, 0], HEAD = [0.85, 0.89, 0.73], GRID = [0.45, 0.45, 0.45], SOFT = [0.75, 0.75, 0.75], L = 48, R = 547, FS = 8.5, LH = 10.6;
   const TOP = PC_TOP + 10, ROOM = PC_BOTTOM - TOP;                                  // usable height of a fresh page
@@ -11768,7 +11939,8 @@ function wrMailText(r){
 }
 async function wrMailOpen(id){
   const r = wrById(id); if(!r) return;
-  if(document.getElementById('wr-form') && vehUi.wrId === id){ try{ await vehSave('weeklyReports', Object.assign({ id }, wrLiveMark(r, wrCollect()))); }catch(e){} }   // save edits only when the report is open
+  if(document.getElementById('wr2-form') && vehUi.wrId === id){ try{ await vehSave('weeklyReports', Object.assign({ id }, wr2Collect())); }catch(e){} }
+  else if(document.getElementById('wr-form') && vehUi.wrId === id){ try{ await vehSave('weeklyReports', Object.assign({ id }, wrLiveMark(r, wrCollect()))); }catch(e){} }   // save edits only when the report is open
   const m = wrMailText(wrById(id) || r), inp = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm';
   openModal('Email draft — weekly report', `<p class="text-xs text-slate-500 mb-3">Nothing is sent from here. Review the draft, then open it in Outlook (with the PDF attached) and press Send there.</p>
     <div class="grid grid-cols-[3.5rem_1fr] gap-x-3 gap-y-2 items-center text-sm mb-3">
@@ -11832,11 +12004,11 @@ async function wrMailShare(id, btn){
 function openWrBlank(){
   const me = authUser && authUser.department ? authUser.department : 'Administration';
   openModal('Blank weekly report template', vFormOpen + vGrid(2, `<div><label class="${VEH_LBL}">Department${vReqStar}</label><input name="department" list="wr-depts-b" value="${esc(me)}" class="${VEH_FIELD}"><datalist id="wr-depts-b">${DEPARTMENTS.map(d => `<option value="${esc(d.name)}"></option>`).join('')}</datalist></div>` +
-    vF('Any day in the week', 'day', vToday(), 'date', { req:1 })) + `<p class="text-[11.5px] text-slate-400 mt-2">Downloads a PDF with the week number, dates and every section with empty rows — departments and vehicles are listed so it can be filled by hand.</p>` + vFoot('Download template', 'wrBlankGo(this)'));
+    vF('Any day in the week', 'day', vToday(), 'date', { req:1 })) + `<div class="mt-3.5"><label class="${VEH_LBL}">Template</label><select name="format" class="${VEH_FIELD} bg-white"><option value="dept" selected>Weekly Departmental Update (FDC template)</option><option value="detail">Detailed Administration report (previous format)</option></select></div><p class="text-[11.5px] text-slate-400 mt-2">Downloads a PDF with the week number, dates and every section with empty rows — departments and vehicles are listed so it can be filled by hand.</p>` + vFoot('Download template', 'wrBlankGo(this)'));
 }
 async function wrBlankGo(btn){
   const o = vehFormObj(document.getElementById('vform')); if(!o.department) return vFail('Enter the department.'); if(!o.day) return vFail('Choose the week.');
-  const end = wrWeekEnd(o.day), r = { department:o.department, weekStart:clIsoAdd(end, -5), weekEnd:end, weekNo:wrIsoWeek(end) };
+  const end = wrWeekEnd(o.day), r = { format:o.format === 'detail' ? '' : 'dept', department:o.department, weekStart:clIsoAdd(end, -5), weekEnd:end, weekNo:wrIsoWeek(end) };
   await wrBlankPdf(r, btn); closeModal();
 }
 async function wrBlankPdf(r, btn){
@@ -11847,7 +12019,8 @@ async function wrBlankPdf(r, btn){
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
 // the same report as an editable Word file on the letterhead: title block, then each section as a table
-async function buildWeeklyReportDocx(r){
+async function buildWeeklyReportDocx(r, opt){
+  if(wr2Is(r)) return buildWr2Docx(r, !!(opt && opt.blank));
   const F = { font:'Aptos', sz:17 }, f = o => Object.assign({}, F, o || {}), TW = 9026;
   const para = (t, o, po) => wP(String(t || '').split('\n').map((ln, i) => (i ? '<w:r><w:br/></w:r>' : '') + wR(ln, f(o))).join(''), po);
   const ordDate = s => { if(!s) return ''; const d = pcReplDateParts(s); return wR(d.d.padStart(2, '0'), f({ sz:20 })) + wR(d.suf, f({ sz:20, sup:true })) + wR(' ' + PC_MONTH_NAMES[+s.slice(5, 7) - 1], f({ sz:20 })); };

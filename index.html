@@ -431,6 +431,10 @@ function refreshAppearanceModal(){
   .anya-vset select{ width:100%; padding:5px 6px; background:var(--an-bg2); color:var(--an-tx); border:1px solid color-mix(in srgb,var(--an-b) 45%,transparent); font:inherit; }
   html[data-anya="modern"] .anya-vset select{ border-radius:8px; }
   .anya-vset input[type=range]{ width:100%; accent-color:var(--an-a); }
+  .tkb-over{ outline:2px dashed #6366f1; outline-offset:-2px; background:rgba(99,102,241,.06)!important; }
+.tkb-dragging{ opacity:.4; }
+.tkb::-webkit-scrollbar{ height:8px; }
+#wr2-activities{ table-layout:fixed; } #wr2-activities th:nth-child(1){ width:2rem; } #wr2-activities th:nth-child(2){ width:17%; } #wr2-activities th:nth-child(3){ width:30%; } #wr2-activities th:last-child{ width:2.2rem; }
   #toast-wrap{ bottom:92px !important; }
   @media (max-width:639px){ #anya-fab{ right:12px; bottom:12px; width:54px; height:54px; } #anya-fab svg{ width:54px; height:54px; } #anya-fab .anya-tag{ right:46px; bottom:-4px; font-size:9.5px; padding:1px 7px; } #anya-panel{ left:8px; right:8px; width:auto; max-width:none; bottom:74px; height:calc(100vh - 90px); height:calc(100dvh - 90px); } #anya-peek{ right:74px; bottom:18px; max-width:calc(100vw - 96px); } }
   @media print{ #anya-fab,#anya-panel,#anya-peek{ display:none !important; } }
@@ -1916,7 +1920,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.280';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.284';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2190,17 +2194,18 @@ function currentNav(){
     { section:'Assets' },
     { id:'assets', label:'Assets', icon:'assets' },
     { id:'asset-transactions', label:'Asset Movements', icon:'assettx' },
-    { id:'keys', label:'Key Registry', icon:'key' },
     { id:'asset-report', label:'Asset Report', icon:'chart' },
     { section:'Fleet' },
     { id:'vehicles', label:'Vehicles', icon:'vehicle', badge:vAlerts.length, tone:tone(vAlerts) },
     { id:'fueling', label:'Fueling', icon:'fuel', badge:rAlerts.length, tone:tone(rAlerts) },
     { id:'servicing', label:'Servicing', icon:'service', badge:nIssues, tone:'warn', hint:'Open vehicle issues' },
     { id:'vehicle-log', label:'Vehicle Log', icon:'vlog', badge:(()=>{ try{ return state.vehicleLogs.filter(l => !l.inDate).length; }catch(e){ return 0; } })(), tone:'warn', hint:'Vehicles out, not returned yet' },
+    { id:'vehicle-keys', label:'Vehicle Keys', icon:'key' },
     { id:'vehicle-reports', label:'Fleet Report', icon:'chart' },
     { section:'Facilities' },
     ...UT_TYPE_LIST.map(t => ({ id:'utility-' + UT_TYPES[t].slug, label:t, icon:UT_TYPES[t].icon, badge:utAl.filter(a=>a.type===t).length, tone:utAl.some(a=>a.type===t && a.st.k==='crit') ? 'crit' : 'warn' })),
     { id:'utility-report', label:'Report', icon:'chart' },
+    { id:'keys', label:'Key Registry', icon:'key' },
     { section:'Maintenance' },
     { id:'cleaning', label:'Cleaning Checklist', icon:'broom', badge:cntOf(clPendingCount), tone:'warn', hint:"Locations whose last week's checklist is not completed or attached" },
     { section:'Travel' },
@@ -7009,8 +7014,8 @@ function tkStaffList(){
   return out;
 }
 function tkFiltered(){
-  const q = String(vehUi.tkQ || '').toLowerCase().trim(), who = vehUi.tkWho || '', st = vehUi.tkSt || '', cat = vehUi.tkCat || '';
-  return state.tasks.filter(t => (!who || (t.assignees || []).some(a => a.key === who)) && (!cat || t.category === cat) &&
+  const q = String(vehUi.tkQ || '').toLowerCase().trim(), lf = vehUi.tkTab === 'board' ? '' : vehUi.tkLocF || '', who = vehUi.tkWho || '', st = vehUi.tkSt || '', cat = vehUi.tkCat || '';
+  return state.tasks.filter(t => (!who || (t.assignees || []).some(a => a.key === who)) && (!cat || t.category === cat) && (!lf || tkLoc(t) === lf) &&
     (!st || (st === 'open' ? !tkDone(t) : st === 'Overdue' ? tkOverdue(t) : t.status === st)) &&
     (!q || [t.no, t.title, t.description, t.category, tkWho(t)].join(' ').toLowerCase().includes(q)));
 }
@@ -7026,11 +7031,11 @@ function viewTasks(){
     statCard('Completed this month', fmtNum(doneM.length), 'Marked completed in ' + new Date().toLocaleString('en-GB', { month:'long' }), 'emerald') +
     statCard('On time', comp.length ? Math.round(onTime.length / comp.length * 100) + '%' : '—', 'Completed tasks finished by the due date', comp.length && onTime.length / comp.length < 0.7 ? 'amber' : 'slate'));
   const staff = tkStaffList(), cats = [...new Set(all.map(t => t.category).filter(Boolean))].sort();
-  const filters = `<div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['list', 'Tasks'], ['gantt', 'Gantt chart'], ['report', 'Staff report']], tab, 'tkSetTab')}
-    ${tab !== 'report' ? vSelect('tkWho', staff.map(s => [s.key, s.name]), vehUi.tkWho || '', 'All staff') + vSelect('tkSt', [['open', 'Open (not done)'], ['Overdue', 'Overdue']].concat(TK_STATUS.map(s => [s, s])), vehUi.tkSt || '', 'All statuses') + (cats.length ? vSelect('tkCat', cats, vehUi.tkCat || '', 'All categories') : '') +
+  const filters = `<div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['list', 'Tasks'], ['board', 'Board (by location)'], ['gantt', 'Gantt chart'], ['report', 'Staff report']], tab, 'tkSetTab')}
+    ${tab !== 'report' ? vSelect('tkWho', staff.map(s => [s.key, s.name]), vehUi.tkWho || '', 'All staff') + vSelect('tkSt', [['open', 'Open (not done)'], ['Overdue', 'Overdue']].concat(TK_STATUS.map(s => [s, s])), vehUi.tkSt || '', 'All statuses') + (cats.length ? vSelect('tkCat', cats, vehUi.tkCat || '', 'All categories') : '') + (tab !== 'board' ? vSelect('tkLocF', LOCATIONS.map(l => [l.id, l.name]).concat([[TK_NOLOC, 'No location']]), vehUi.tkLocF || '', 'All locations') : '') +
       `<input type="search" id="tk-q" value="${esc(vehUi.tkQ || '')}" oninput="vehUi.tkQ = this.value; clearTimeout(window._tkT); window._tkT = setTimeout(rerenderMain, 250)" placeholder="Search tasks…" class="${VEH_INPUT} flex-1 min-w-[12rem]">` : ''}</div>`;
   const head = vHead('Tasks', 'Tasks assigned to staff, with start and due dates. Staff update the progress of their own tasks.', admin ? vBtnPrimary('+ Task', "openTkEdit('')") : '');
-  return head + kpis + filters + (tab === 'gantt' ? tkGantt() : tab === 'report' ? tkReport() : tkList());
+  return head + kpis + filters + (tab === 'gantt' ? tkGantt() : tab === 'board' ? tkBoard() : tab === 'report' ? tkReport() : tkList());
 }
 function tkSetTab(t){ vehUi.tkTab = t; rerenderMain(); }
 
@@ -7049,6 +7054,76 @@ function tkList(){
   return vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Task' }, { t:'Team' }, { t:'Dates' }, { t:'Progress' }, { t:'Status' }, { t:'' }])}<tbody>${list.map(t => `<tr class="${vTr} cursor-pointer" onclick="openTkView('${t.id}')" title="Open task details">
     ${vTd(`<div class="font-semibold text-slate-900">${esc(t.title)}${prio(t)}</div><div class="text-[11px] text-slate-400">${esc([t.no, t.category].filter(Boolean).join(' · '))}</div>`, { first:1 })}
     ${vTd(who(t))}${vTd(dates(t))}${vTd(bar(t))}${vTd(tkPill(t))}${vTd(`<span class="text-slate-300 text-lg leading-none">›</span>`, { last:1, cls:'w-6 text-right' })}</tr>`).join('')}</tbody></table>`);
+}
+
+/* ---------- Board: tasks in buckets by location (like Planner); drag a card to move it to another location ---------- */
+const TK_NOLOC = '_none';
+function tkLoc(t){
+  if(t.locationId && getLocation(t.locationId)) return t.locationId;
+  if(t.prId){ const pr = (state.purchaseRequisitions || []).find(x => x.id === t.prId); if(pr && pr.locationId && getLocation(pr.locationId)) return pr.locationId; }
+  return TK_NOLOC;
+}
+function tkBoard(){
+  const list = tkFiltered(), admin = canManageInventory(), t0 = vToday(), openSet = vehUi.tkBoardDone || {};
+  const cols = LOCATIONS.map(l => ({ id:l.id, name:l.name, color:l.color || '#6366f1' }));
+  if(list.some(t => tkLoc(t) === TK_NOLOC) || !cols.length) cols.push({ id:TK_NOLOC, name:'No location', color:'#94a3b8' });
+  const chipCls = 'inline-block px-2 py-0.5 rounded text-[10.5px] font-semibold';
+  const card = t => {
+    const done = tkDone(t), can = tkCanUpdate(t), cl = t.checklist || [], cd = cl.filter(c => c.done).length;
+    const pr = t.prId ? (state.purchaseRequisitions || []).find(x => x.id === t.prId) : null;
+    const chips = [t.category ? `<span class="${chipCls} bg-sky-100 text-sky-800">${esc(t.category)}</span>` : '',
+      t.priority === 'Urgent' || t.priority === 'High' ? `<span class="${chipCls} ${t.priority === 'Urgent' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}">${esc(t.priority)}</span>` : '',
+      pr ? `<span class="${chipCls} bg-violet-100 text-violet-800">${esc(pr.prNumber || 'PR')}</span>` : '',
+      t.status === 'On hold' ? `<span class="${chipCls} bg-amber-100 text-amber-800">On hold</span>` : ''].join('');
+    const late = tkOverdue(t), dd = t.due ? tkDays(t0, t.due) : null;
+    const due = done ? (t.completedOn ? `<span class="${chipCls} bg-emerald-50 text-emerald-700">✓ ${isoToDmy(t.completedOn)}</span>` : '')
+      : t.due ? `<span class="${chipCls} ${late ? 'bg-rose-600 text-white' : dd <= 3 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}" title="Due ${vDate(t.due)}">📅 ${isoToDmy(t.due)}</span>`
+      : `<span class="${chipCls} bg-slate-50 text-slate-400">No due date</span>`;
+    const as = t.assignees || [], av = as.slice(0, 3).map(a => `<span class="w-6 h-6 -ml-1.5 first:ml-0 rounded-full bg-brand-600 text-white text-[9px] font-bold inline-flex items-center justify-center ring-2 ring-white" title="${esc(a.name)}">${esc(tkInitials(a.name))}</span>`).join('') + (as.length > 3 ? `<span class="w-6 h-6 -ml-1.5 rounded-full bg-slate-200 text-slate-600 text-[9px] font-bold inline-flex items-center justify-center ring-2 ring-white">+${as.length - 3}</span>` : '');
+    const p = tkProg(t);
+    return `<div class="tkb-card group bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 p-3 cursor-pointer ${done ? 'opacity-70' : ''}" ${admin ? `draggable="true" ondragstart="tkDragStart(event, '${t.id}')" ondragend="tkDragEnd()"` : ''} onclick="openTkView('${t.id}')" title="Open task details">
+      ${chips ? `<div class="flex flex-wrap gap-1 mb-2">${chips}</div>` : ''}
+      <div class="flex items-start gap-2">
+        <button type="button" ${can && t.status !== 'Cancelled' ? `onclick="event.stopPropagation(); tkQuickDone('${t.id}')"` : 'disabled'} title="${done ? 'Mark as not completed' : 'Mark completed'}" class="tkb-chk mt-0.5 w-[18px] h-[18px] shrink-0 rounded-full border-2 inline-flex items-center justify-center text-[10px] leading-none ${done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-transparent hover:border-emerald-500 hover:text-emerald-500'}">✓</button>
+        <div class="flex-1 min-w-0 text-sm font-semibold leading-snug ${done ? 'line-through text-slate-400' : 'text-slate-900'}">${esc(t.title)}</div></div>
+      ${!done && p > 0 ? `<div class="h-1 rounded-full bg-slate-100 overflow-hidden mt-2.5"><div class="h-full rounded-full" style="width:${p}%;background:${TK_COL[tkState(t)]}"></div></div>` : ''}
+      <div class="flex items-center justify-between gap-2 mt-2.5"><div class="flex items-center gap-1.5 flex-wrap">${due}${cl.length ? `<span class="${chipCls} ${cd === cl.length ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}" title="Checklist">☑ ${cd}/${cl.length}</span>` : ''}</div><div class="flex items-center">${av}</div></div></div>`;
+  };
+  const sortOpen = (a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')) || (TK_WEIGHT[b.priority] || 1) - (TK_WEIGHT[a.priority] || 1);
+  const col = c => {
+    const mine = list.filter(t => tkLoc(t) === c.id), open = mine.filter(t => !tkDone(t)).sort(sortOpen), done = mine.filter(tkDone).sort((a, b) => String(b.completedOn || '').localeCompare(String(a.completedOn || '')));
+    const over = open.filter(tkOverdue).length, showDone = !!openSet[c.id];
+    return `<div class="tkb-col w-[290px] shrink-0 flex flex-col rounded-xl bg-slate-100/70 border border-slate-200" data-loc="${c.id}" ${admin ? `ondragover="tkDragOver(event, this)" ondragleave="this.classList.remove('tkb-over')" ondrop="tkDrop(event, '${c.id}')"` : ''}>
+      <div class="px-3 pt-3 pb-2"><div class="h-1 rounded-full mb-2.5" style="background:${c.color}"></div>
+        <div class="flex items-center justify-between gap-2"><div class="font-bold text-slate-900 text-sm truncate">${esc(c.name)}</div><div class="flex items-center gap-1.5 shrink-0">${over ? `<span class="text-[10.5px] font-bold text-rose-600" title="Overdue">${over} late</span>` : ''}<span class="text-[11px] font-semibold text-slate-500 bg-white rounded-full px-2 py-0.5 num">${open.length}</span></div></div></div>
+      ${admin ? `<div class="px-3 pb-2"><button type="button" onclick="openTkEdit('', '${c.id === TK_NOLOC ? '' : c.id}')" class="w-full text-left text-[13px] font-semibold text-brand-700 hover:bg-white rounded-lg px-2.5 py-1.5 border border-dashed border-slate-300 hover:border-brand-400">+ Add task</button></div>` : ''}
+      <div class="tkb-list flex-1 px-3 pb-3 space-y-2 min-h-[3rem]">${open.map(card).join('') || `<div class="text-xs text-slate-400 text-center py-4">${mine.length ? 'All done here 🎉' : 'No tasks'}</div>`}
+        ${done.length ? `<button type="button" onclick="tkBoardToggleDone('${c.id}')" class="w-full flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 pt-1"><span class="inline-block transition-transform ${showDone ? 'rotate-90' : ''}">›</span> Completed <span class="num">${done.length}</span></button>${showDone ? done.map(card).join('') : ''}` : ''}</div></div>`;
+  };
+  return `<div class="text-[11.5px] text-slate-400 mb-2">${admin ? 'Drag a card to another column to change its location. ' : ''}Tick the circle to mark a task completed.</div>
+    <div class="tkb flex gap-3 overflow-x-auto pb-3 items-start">${cols.map(col).join('')}</div>`;
+}
+function tkBoardToggleDone(id){ vehUi.tkBoardDone = Object.assign({}, vehUi.tkBoardDone || {}); vehUi.tkBoardDone[id] = !vehUi.tkBoardDone[id]; rerenderMain(); }
+async function tkQuickDone(id){
+  const t = tkById(id); if(!t || !tkCanUpdate(t) || t.status === 'Cancelled') return;
+  const by = authUser ? authUser.name : '', was = t.status === 'Completed';
+  const cl = t.checklist || [], clp = cl.length ? Math.round(cl.filter(c => c.done).length / cl.length * 100) : 0;
+  const rec = was ? { id, status:'In progress', progress:Math.min(clp || +t.progress || 0, 95), completedOn:'' } : { id, status:'Completed', progress:100, completedOn:vToday() };
+  rec.updates = (t.updates || []).concat([{ at:Date.now(), by, text:was ? 'Reopened (In progress)' : 'Marked completed', progress:rec.progress, status:rec.status }]);
+  await vehSave('tasks', rec); rerenderMain(); toast(was ? 'Task reopened.' : 'Task completed. ✓');
+  if(!was) try{ eggTaskDone(tkById(id)); }catch(e){}
+}
+function tkDragStart(e, id){ window._tkDrag = id; try{ e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed = 'move'; }catch(x){} setTimeout(() => { const el = e.target; if(el && el.classList) el.classList.add('tkb-dragging'); }, 0); }
+function tkDragEnd(){ document.querySelectorAll('.tkb-dragging,.tkb-over').forEach(el => el.classList.remove('tkb-dragging', 'tkb-over')); }
+function tkDragOver(e, el){ e.preventDefault(); try{ e.dataTransfer.dropEffect = 'move'; }catch(x){} document.querySelectorAll('.tkb-over').forEach(x => x !== el && x.classList.remove('tkb-over')); el.classList.add('tkb-over'); }
+async function tkDrop(e, loc){
+  e.preventDefault(); tkDragEnd();
+  const id = (() => { try{ return e.dataTransfer.getData('text/plain'); }catch(x){ return ''; } })() || window._tkDrag; window._tkDrag = '';
+  const t = tkById(id); if(!t || !canManageInventory()) return;
+  if(tkLoc(t) === loc) return;
+  const l = getLocation(loc), by = authUser ? authUser.name : '';
+  await vehSave('tasks', { id, locationId:loc === TK_NOLOC ? '' : loc, updates:(t.updates || []).concat([{ at:Date.now(), by, text:'Location: ' + (l ? l.name : 'none') }]) });
+  rerenderMain(); toast('Moved to ' + (l ? l.name : 'No location') + '.');
 }
 
 /* ---------- Gantt chart ---------- */
@@ -7185,20 +7260,21 @@ function tkReportCsv(){
 }
 
 /* ---------- add / edit ---------- */
-function openTkEdit(id){
+function openTkEdit(id, presetLoc){
   if(!vehRequireAdmin('add or change tasks')) return;
   const t = id ? tkById(id) : null; if(id && !t) return;
   const staff = tkStaffList(), on = new Set((t ? t.assignees || [] : []).map(a => a.key));
   const cats = [...new Set(state.tasks.map(x => x.category).filter(Boolean))].sort();
   openModal(t ? 'Edit task' : 'New task', vFormOpen + `<datalist id="tk-cats">${cats.map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist>` +
     vGrid(2, vF('Task', 'title', t ? t.title : '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="e.g. Renew vehicle insurance for all fleet"' }) +
-      vF('Category / project', 'category', t ? t.category : '', 'text', { attrs:' list="tk-cats" placeholder="Optional — e.g. Office move, Fleet"' }) + vS('Priority', 'priority', TK_PRIORITY, t ? t.priority || 'Normal' : 'Normal') +
-      vF('Start date', 'start', t ? t.start : vToday(), 'date', { req:1 }) + vF('Due date', 'due', t ? t.due : '', 'date') +
+      vF('Category / project', 'category', t ? t.category : '', 'text', { attrs:' list="tk-cats" placeholder="Optional — e.g. Office move, Fleet"' }) + vS('Priority', 'priority', TK_PRIORITY, t ? t.priority || 'Normal' : 'Normal') + vS('Location (board bucket)', 'locationId', [['', '— None']].concat(LOCATIONS.map(l => [l.id, l.name])), t ? (tkLoc(t) === TK_NOLOC ? '' : tkLoc(t)) : (presetLoc || '')) + vF('Due date', 'due', t ? t.due : '', 'date') +
+      vF('Start date', 'start', t ? t.start : vToday(), 'date', { req:1 }) +
       vS('Status', 'status', TK_STATUS, t ? t.status || 'Not started' : 'Not started') + vF('Progress (%)', 'progress', t ? tkProg(t) : 0, 'number', { attrs:' min="0" max="100" step="5"' }) + vS('Linked purchase requisition (optional)', 'prId', [['', '— None']].concat((state.purchaseRequisitions || []).map(p => [p.id, (p.prNumber || 'PR') + ' · ' + (prFirstItem(p) || p.title || '')])), t && t.prId ? t.prId : '')) +
     vSec('Assign to') +
     `<input type="search" placeholder="Find staff…" oninput="tkFilterStaff(this.value)" class="${VEH_FIELD} mb-2">
      <div id="tk-staff" class="max-h-56 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">${staff.map(s => `<label class="tk-st flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer" data-s="${esc((s.name + ' ' + s.department + ' ' + s.designation).toLowerCase())}"><input type="checkbox" class="tk-as" value="${esc(s.key)}" data-name="${esc(s.name)}" ${on.has(s.key) ? 'checked' : ''}><span class="text-sm text-slate-800">${esc(s.name)}</span><span class="text-[11.5px] text-slate-400 truncate">${esc([s.designation, s.department].filter(Boolean).join(' · '))}</span></label>`).join('') || '<div class="px-3 py-4 text-sm text-slate-500">No staff yet — add them under Admin Staff.</div>'}</div>` +
     `<div class="mt-3.5">${vTa('Details', 'description', t ? t.description : '', { rows:3 })}</div>` +
+    `<div class="mt-3.5">${vTa('Checklist (one item per line)', 'checklist', t ? (t.checklist || []).map(c => c.text).join('\n') : '', { rows:4, attrs:' placeholder="e.g. Count stock in the main store\nCompare with the system\nReport the differences"' })}<div class="text-[11px] text-slate-400 mt-1">Items already ticked stay ticked. Staff tick them off in the task, and progress follows the checklist.</div></div>` +
     vFoot(t ? 'Save' : 'Add task', `saveTkEdit('${id || ''}')`, t ? `deleteTk('${id}')` : ''), true);
 }
 function tkFilterStaff(q){ q = String(q || '').toLowerCase().trim(); document.querySelectorAll('#tk-staff .tk-st').forEach(el => { el.style.display = !q || el.dataset.s.includes(q) ? '' : 'none'; }); }
@@ -7211,8 +7287,11 @@ async function saveTkEdit(id){
   if(!assignees.length) return vFail('Assign the task to at least one staff member.');
   const status = TK_STATUS.includes(o.status) ? o.status : 'Not started';
   let progress = Math.max(0, Math.min(100, Math.round(+o.progress || 0))); if(status === 'Completed') progress = 100;
-  const by = authUser ? authUser.name : '', rec = { id:id || undefined, title:o.title, category:o.category || '', priority:TK_PRIORITY.includes(o.priority) ? o.priority : 'Normal', start:o.start, due:o.due, status, progress, assignees, description:o.description || '', prId:o.prId || '' };
+  const by = authUser ? authUser.name : '', rec = { id:id || undefined, title:o.title, category:o.category || '', priority:TK_PRIORITY.includes(o.priority) ? o.priority : 'Normal', start:o.start, due:o.due, status, progress, assignees, description:o.description || '', prId:o.prId || '', locationId:getLocation(o.locationId) ? o.locationId : '' };
   rec.completedOn = status === 'Completed' ? (t && t.completedOn) || vToday() : '';
+  // the checklist: items kept by their text (ticks preserved), new ones added, removed ones dropped
+  const oldCl = (t && t.checklist) || [], texts = String(o.checklist || '').split('\n').map(x => x.replace(/^\s*[-•*\[\]x✓☐☑]+\s*/i, '').trim()).filter(Boolean);
+  rec.checklist = texts.map(tx => oldCl.find(c => c.text === tx) || { id:uid(), text:tx, done:false });
   const log = [];
   if(!t){ rec.no = tkNextNo(); log.push({ at:Date.now(), by, text:'Task created and assigned to ' + assignees.map(a => a.name).join(', '), progress, status }); }
   else {
@@ -7220,6 +7299,7 @@ async function saveTkEdit(id){
     else if(tkProg(t) !== progress) log.push({ at:Date.now(), by, text:'Progress set to ' + progress + '%', progress, status });
     const was = (t.assignees || []).map(a => a.key).sort().join(), now = assignees.map(a => a.key).sort().join();
     if(was !== now) log.push({ at:Date.now(), by, text:'Assigned to ' + assignees.map(a => a.name).join(', ') });
+    if(tkLoc(t) !== (rec.locationId || TK_NOLOC)) log.push({ at:Date.now(), by, text:'Location: ' + ((getLocation(rec.locationId) || {}).name || 'none') });
     if((t.due || '') !== o.due) log.push({ at:Date.now(), by, text:o.due ? 'Due date ' + (t.due ? 'changed from ' + vDate(t.due) + ' to ' : 'set to ') + vDate(o.due) : 'Due date removed' });
   }
   rec.updates = (t ? t.updates || [] : []).concat(log);
@@ -7237,7 +7317,7 @@ function openTkView(id){
   const t = tkById(id); if(!t) return;
   const can = tkCanUpdate(t), admin = canManageInventory(), p = tkProg(t), c = TK_COL[tkState(t)], ups = (t.updates || []).slice().reverse();
   const dur = t.start && t.due ? tkDays(t.start, t.due) + 1 : 0, gone = t.start && t.due ? Math.max(0, Math.min(dur, tkDays(t.start, vToday()) + 1)) : 0, timePct = dur ? Math.round(gone / dur * 100) : 0;
-  openModal((t.no ? t.no + ' · ' : '') + t.title, `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${tkPill(t)}${t.priority && t.priority !== 'Normal' ? vPill(t.priority === 'Urgent' || t.priority === 'High' ? 'warn' : '', esc(t.priority) + ' priority') : ''}${t.category ? `<span class="text-xs text-slate-500">${esc(t.category)}</span>` : ''}</div>
+  openModal((t.no ? t.no + ' · ' : '') + t.title, `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${tkPill(t)}${t.priority && t.priority !== 'Normal' ? vPill(t.priority === 'Urgent' || t.priority === 'High' ? 'warn' : '', esc(t.priority) + ' priority') : ''}${t.category ? `<span class="text-xs text-slate-500">${esc(t.category)}</span>` : ''}${tkLoc(t) !== TK_NOLOC ? `<span class="text-xs text-slate-500">📍 ${esc(getLocation(tkLoc(t)).name)}</span>` : ''}</div>
       ${admin ? `<div class="flex gap-2">${vBtnPlain('Edit', `openTkEdit('${t.id}')`)}</div>` : ''}</div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">${[['Start', vDate(t.start)], ['Due', t.due ? vDate(t.due) : 'No due date'], ['Duration', dur ? dur + ' days' : '—'], ['Completed', t.completedOn ? vDate(t.completedOn) : '—']].map(([l, v]) => `<div class="rounded-lg bg-slate-50 px-3 py-2"><div class="text-[11px] text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800">${v}</div></div>`).join('')}</div>
     <div class="mb-1 flex justify-between text-xs text-slate-500"><span>Progress</span><span class="num font-semibold text-slate-800">${p}%</span></div>
@@ -7246,6 +7326,7 @@ function openTkView(id){
     <div class="text-xs text-slate-500 mb-1.5">Assigned to</div><div class="flex flex-wrap gap-1.5 mb-4">${(t.assignees || []).map(a => `<span class="inline-flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full bg-slate-100 text-xs text-slate-700"><span class="w-5 h-5 rounded-full bg-brand-600 text-white text-[9px] font-bold inline-flex items-center justify-center">${esc(tkInitials(a.name))}</span>${esc(a.name)}</span>`).join('')}</div>
     ${t.prId ? (() => { const pr = (state.purchaseRequisitions || []).find(x => x.id === t.prId); return `<div class="text-xs text-slate-500 mb-4">Purchase requisition: <b class="text-slate-800">${esc(pr ? (pr.prNumber || '') + ' · ' + (prFirstItem(pr) || pr.title || '') : '(no longer in the list)')}</b></div>`; })() : ''}
     ${t.description ? `<div class="text-sm text-slate-700 whitespace-pre-wrap mb-4">${esc(t.description)}</div>` : ''}
+    ${tkChecklistHtml(t, can)}
     ${can && t.status !== 'Cancelled' ? `${vSec('Update progress')}<div class="rounded-lg border border-slate-200 p-3.5 mb-2">
       <div class="inline-flex flex-wrap rounded-lg bg-slate-100 p-1 gap-1 mb-3">${TK_STATUS.filter(s => s !== 'Cancelled' || admin).map(s => `<button type="button" onclick="tkPickStatus(this, '${s}')" data-st="${s}" class="tk-stb px-3 py-1 rounded-md text-xs font-semibold ${(t.status || 'Not started') === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}">${s}</button>`).join('')}</div>
       <div class="flex items-center gap-3 mb-3"><input id="tk-prog" type="range" min="0" max="100" step="5" value="${p}" oninput="document.getElementById('tk-prog-v').textContent = this.value + '%'" class="flex-1 accent-brand-600"><span id="tk-prog-v" class="text-sm font-semibold text-slate-800 num w-11 text-right">${p}%</span></div>
@@ -7255,6 +7336,41 @@ function openTkView(id){
     <div class="space-y-2">${ups.length ? ups.map(u => `<div class="flex gap-3"><div class="w-1.5 rounded-full shrink-0 mt-1 mb-1" style="background:${TK_COL[u.status] || '#cbd5e1'}"></div><div class="flex-1"><div class="text-sm text-slate-800 whitespace-pre-wrap">${esc(u.text)}</div><div class="text-[11px] text-slate-400">${esc(u.by || '')}${u.at ? ' · ' + fmtDT(u.at) : ''}${u.progress != null ? ' · ' + u.progress + '%' : ''}</div></div></div>`).join('') : '<div class="text-sm text-slate-400">No activity yet.</div>'}</div>`, true);
   window._tkPick = t.status || 'Not started';
 }
+/* ---------- the task's checklist: tick items off; progress follows the share of items done ---------- */
+function tkChecklistHtml(t, can){
+  const cl = t.checklist || [], done = cl.filter(c => c.done).length;
+  if(!cl.length && !can) return '';
+  const pct = cl.length ? Math.round(done / cl.length * 100) : 0;
+  return `<div class="mb-4"><div class="flex items-center justify-between mb-1.5"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Checklist${cl.length ? ` <span class="font-semibold normal-case tracking-normal text-slate-400">· ${done} of ${cl.length} done</span>` : ''}</div>${cl.length ? `<span class="text-xs font-semibold num ${done === cl.length ? 'text-emerald-600' : 'text-slate-500'}">${pct}%</span>` : ''}</div>
+    ${cl.length ? `<div class="h-1.5 rounded-full bg-slate-100 overflow-hidden mb-2"><div class="h-full rounded-full bg-emerald-500" style="width:${pct}%"></div></div>` : ''}
+    <div class="rounded-lg border border-slate-200 divide-y divide-slate-100">${cl.map(c => `<div class="flex items-start gap-3 px-3 py-2 group">
+      <input type="checkbox" ${c.done ? 'checked' : ''} ${can ? `onchange="tkChk('${t.id}', '${c.id}', this.checked)"` : 'disabled'} class="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0 cursor-pointer">
+      <div class="flex-1 min-w-0"><div class="text-sm ${c.done ? 'line-through text-slate-400' : 'text-slate-800'}">${esc(c.text)}</div>${c.done && c.by ? `<div class="text-[11px] text-slate-400">✓ ${esc(c.by)}${c.at ? ' · ' + fmtDT(c.at) : ''}</div>` : ''}</div>
+      ${can ? `<button type="button" onclick="tkChkDel('${t.id}', '${c.id}')" title="Remove" class="text-slate-300 hover:text-rose-600 text-base leading-none opacity-60 group-hover:opacity-100">×</button>` : ''}</div>`).join('') || '<div class="px-3 py-2 text-xs text-slate-400">No checklist yet — add the steps of this task.</div>'}
+    ${can ? `<div class="flex gap-2 px-2 py-2"><input id="tk-chk-new" placeholder="+ Add an item" onkeydown="if(event.key==='Enter'){ event.preventDefault(); tkChkAdd('${t.id}'); }" class="${VEH_FIELD} !py-1.5 text-sm flex-1"><button type="button" onclick="tkChkAdd('${t.id}')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 !py-1.5">Add</button></div>` : ''}</div></div>`;
+}
+// saves the checklist; progress (and Not started → In progress) follow it, and each tick is noted in the activity
+async function tkChkSave(id, cl, note){
+  const t = tkById(id); if(!t) return; const by = authUser ? authUser.name : '', done = cl.filter(c => c.done).length;
+  const rec = { id, checklist:cl };
+  if(cl.length && t.status !== 'Completed' && t.status !== 'Cancelled'){ rec.progress = Math.round(done / cl.length * 100); if((t.status || 'Not started') === 'Not started' && done) rec.status = 'In progress'; }
+  if(note) rec.updates = (t.updates || []).concat([{ at:Date.now(), by, text:note, progress:rec.progress != null ? rec.progress : tkProg(t), status:rec.status || t.status }]);
+  const body = document.getElementById('modal-body'), y = body ? body.scrollTop : 0, ov = document.getElementById('modal-overlay'), oy = ov ? ov.scrollTop : 0;
+  await vehSave('tasks', rec); openTkView(id);
+  try{ const b2 = document.getElementById('modal-body'); if(b2) b2.scrollTop = y; if(ov) ov.scrollTop = oy; }catch(e){}
+  if(cl.length && done === cl.length && t.status !== 'Completed') toast('All checklist items done — mark the task Completed when it is finished. 🎉');
+}
+function tkChk(id, cid, on){
+  const t = tkById(id); if(!t || !tkCanUpdate(t)) return; const by = authUser ? authUser.name : '';
+  const cl = (t.checklist || []).map(c => c.id === cid ? Object.assign({}, c, on ? { done:true, by, at:Date.now() } : { done:false, by:'', at:0 }) : c), it = cl.find(c => c.id === cid);
+  tkChkSave(id, cl, (on ? '☑ ' : '☐ ') + (it ? it.text : '') + (on ? '' : ' (unticked)'));
+}
+function tkChkAdd(id){
+  const t = tkById(id), inp = document.getElementById('tk-chk-new'); if(!t || !inp || !tkCanUpdate(t)) return; const tx = inp.value.trim(); if(!tx) return;
+  tkChkSave(id, (t.checklist || []).concat([{ id:uid(), text:tx, done:false }]), 'Checklist item added: ' + tx);
+  setTimeout(() => { const i = document.getElementById('tk-chk-new'); if(i) i.focus(); }, 60);
+}
+function tkChkDel(id, cid){ const t = tkById(id); if(!t || !tkCanUpdate(t)) return; const it = (t.checklist || []).find(c => c.id === cid); tkChkSave(id, (t.checklist || []).filter(c => c.id !== cid), it ? 'Checklist item removed: ' + it.text : ''); }
 function tkPickStatus(btn, s){
   window._tkPick = s;
   document.querySelectorAll('.tk-stb').forEach(b => { const on = b.dataset.st === s; b.classList.toggle('bg-white', on); b.classList.toggle('text-slate-900', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('text-slate-500', !on); });
@@ -7714,7 +7830,7 @@ function gsIndex(){
   safe(() => state.purchaseRequisitions.forEach(p => add('PR', 'PR ' + (p.prNumber || ''), [prFirstItem(p) || p.title, p.requester, prStatusMeta(p.status).label].filter(Boolean).join(' · '), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`)));
   safe(() => state.pettyCash.forEach(r => add('Petty cash', r.number || 'Petty cash request', [pcRequester(r).name, r.purpose, r.category].filter(Boolean).join(' · '), `goTo('petty-cash'); openPcDetails('${r.id}')`)));
   safe(() => state.complaints.forEach(c => add('Complaint', c.title, [c.no, c.department, c.status].filter(Boolean).join(' · '), `goTo('complaints'); openCpView('${c.id}')`)));
-  safe(() => state.keyRegistry.forEach(k => add('Key', k.details || k.no, [k.site, k.kind].filter(Boolean).join(' · '), `goTo('keys')`)));
+  safe(() => state.keyRegistry.forEach(k => add('Key', k.details || k.no, [k.site, k.kind].filter(Boolean).join(' · '), k.kind === 'Vehicle Key' ? `goTo('vehicle-keys')` : `goTo('keys')`)));
   safe(() => state.handovers.forEach(h => add('Handover', h.handoverNumber || h.number || h.title || 'Handover', [h.toName || h.receiverName, h.date].filter(Boolean).join(' · '), `goTo('handovers')`)));
   safe(() => state.travelRequests.forEach(t => add('Travel', t.purpose || t.destination || 'Travel request', [t.staffName || t.name, t.destination, t.status].filter(Boolean).join(' · '), `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelDetail('${t.id}')`)));
   safe(() => currentNav().filter(n => n.id).forEach(n => add('Page', n.label, '', `goTo('${n.id}')`)));
@@ -9006,6 +9122,7 @@ const ANYA_REC_TYPES = [
   { rx:/\bassets?\b/, gs:'Asset', label:'asset', page:'assets' }, { rx:/\b(items?|stock|products?)\b/, gs:'Item', label:'item', page:'products' },
   { rx:/\btasks?\b/, gs:'Task', label:'task', page:'tasks' }, { rx:/\bcomplaints?\b/, gs:'Complaint', label:'complaint', page:'complaints' },
   { rx:/\bhandovers?\b/, gs:'Handover', label:'handover', page:'handovers' }, { rx:/\b(prs?|purchase requisitions?|requisitions?)\b/, gs:'PR', label:'purchase requisition', page:'purchase-requisitions' },
+  { rx:/\bvehicle keys?\b|\bcar keys?\b/, gs:'Key', label:'vehicle key', page:'vehicle-keys' },
   { rx:/\bkeys?\b/, gs:'Key', label:'key', page:'keys' },
 ];
 const ANYA_Q_STOP = new Set('named called is are was were there any anything some do does did we you i us our have has had a an the of from for to with by in on at about regarding related me my show list find get give tell need want asked ask please can could would which what who whom whose when where how many much all every latest last recent newest current active open existing still yet one ones that this these those it its and or not no yes kind sort type look search check see know if exist exists available registered saved recorded file files copy'.split(' '));
@@ -11486,42 +11603,46 @@ function wr2Auto(r){
   const deptOf = a => String((sdPerson(a.key) || {}).department || '').toLowerCase();
   const myTasks = tasks.filter(t => !dept || (t.assignees || []).some(a => { const d = deptOf(a); return !d || d.startsWith(dept.split(' ')[0]) || dept.startsWith(d.split(' ')[0]); }));
   const T = myTasks.length ? myTasks : tasks;
-  const act = [];
-  // each line names the work done: what, how many, totals, and the records themselves
-  const money = n => 'MVR ' + pcMoneyPlain(pcRound(n)), list = (arr, n) => arr.slice(0, n || 4).join('; ') + (arr.length > (n || 4) ? `; and ${arr.length - (n || 4)} more` : '');
-  const dShort = d => d ? pcOrdinalDate(d).replace(/ \d{4}$/, '') : '';
+  // one row per area of work: what was done (with totals) and the records behind it
+  const money = n => 'MVR ' + pcMoneyPlain(pcRound(n)), dShort = d => d ? pcOrdinalDate(d).replace(/ \d{4}$/, '') : '';
+  const rows = [], row = (area, activity, details) => rows.push({ area, activity, details:(details || []).join('\n') });
+  const pl = (n, w) => n + ' ' + (n === 1 ? w : w + 's');
   const done = T.filter(t => t.status === 'Completed' && inW(t.completedOn));
-  if(done.length) act.push(`Completed ${done.length} task${done.length === 1 ? '' : 's'}: ${list(done.map(t => (t.no ? t.no + ' — ' : '') + t.title + (t.completedOn ? ' (' + dShort(t.completedOn) + ')' : '')), 5)}`);
+  if(done.length) row('Tasks', 'Completed ' + pl(done.length, 'task'), done.map(t => (t.no ? t.no + ' — ' : '') + t.title + (t.completedOn ? ' (' + dShort(t.completedOn) + ')' : '')));
   const moved = T.filter(t => t.status !== 'Completed' && (t.updates || []).some(u => u.at && inW(localDateStr(new Date(u.at)))));
-  if(moved.length) act.push(`Progressed ${moved.length} ongoing task${moved.length === 1 ? '' : 's'}: ${list(moved.map(t => t.title + ' (' + tkProg(t) + '%)'))}`);
-  try{ const pc = state.pettyCash.filter(x => sameDept(x.department) && inW(x.processedDate || (x.processedAt && localDateStr(new Date(x.processedAt)))));
-    if(pc.length){ const tot = pc.reduce((t, x) => t + vNum(x.processedAmount != null ? x.processedAmount : pcTotal(x)), 0); act.push(`Processed ${pc.length} petty cash request${pc.length === 1 ? '' : 's'} totalling ${money(tot)}: ${list(pc.map(x => x.number + ' — ' + (x.purpose || pcItems(x).map(i => i.name).join(', ') || '—') + ' (' + money(x.processedAmount != null ? x.processedAmount : pcTotal(x)) + ')'))}`); }
+  if(moved.length) row('Tasks', 'Progressed ' + pl(moved.length, 'ongoing task'), moved.map(t => t.title + ' — ' + tkProg(t) + '%' + ((t.checklist || []).length ? ' (checklist ' + t.checklist.filter(c => c.done).length + '/' + t.checklist.length + ')' : '')));
+  try{ const amt = x => x.processedAmount != null ? vNum(x.processedAmount) : pcTotal(x), pc = state.pettyCash.filter(x => sameDept(x.department) && inW(x.processedDate || (x.processedAt && localDateStr(new Date(x.processedAt)))));
+    if(pc.length) row('Petty cash', 'Processed ' + pl(pc.length, 'request') + ' — ' + money(pc.reduce((t, x) => t + amt(x), 0)), pc.map(x => x.number + ' — ' + (x.purpose || pcItems(x).map(i => i.name).join(', ') || '—') + ' (' + money(amt(x)) + ')'));
     const inv = state.pettyCash.filter(x => sameDept(x.department) && pcInvoices(x).some(i => inW(i.date)));
-    if(inv.length) act.push(`Settled ${inv.length} petty cash voucher${inv.length === 1 ? '' : 's'} with invoices: ${list(inv.map(x => x.number + ' — ' + pcInvoices(x).map(i => i.supplier).filter(Boolean).join(', ')))}`);
+    if(inv.length) row('Petty cash', 'Settled ' + pl(inv.length, 'voucher') + ' with invoices', inv.map(x => x.number + ' — ' + (pcInvoices(x).map(i => i.supplier).filter(Boolean).join(', ') || '—')));
     const stm = []; pcFundList().forEach(f => pcStatements(f.id).forEach(st => { const rec = pcStmtRec(st.no) || {}; if(inW(rec.closedOn || (rec.closedAt && localDateStr(new Date(rec.closedAt))))) stm.push(st.no + ' (' + f.name + ')'); }));
-    if(stm.length) act.push(`Closed petty cash statement${stm.length === 1 ? '' : 's'} ${list(stm)}`); }catch(e){}
+    if(stm.length) row('Petty cash', 'Closed ' + pl(stm.length, 'statement'), stm); }catch(e){}
   try{ const pr = state.purchaseRequisitions.filter(p => inW(prRequisitionDate(p)));
-    if(pr.length) act.push(`Raised ${pr.length} purchase requisition${pr.length === 1 ? '' : 's'}: ${list(pr.map(p => (p.prNumber || 'PR') + ' — ' + (prFirstItem(p) || p.title || '') + (vNum(p.totalCost) ? ' (' + money(p.totalCost) + ')' : '')))}`); }catch(e){}
+    if(pr.length) row('Procurement', 'Raised ' + pl(pr.length, 'purchase requisition'), pr.map(p => (p.prNumber || 'PR') + ' — ' + (prFirstItem(p) || p.title || '') + (vNum(p.totalCost) ? ' (' + money(p.totalCost) + ')' : ''))); }catch(e){}
   try{ const tr = state.travelRequests.filter(x => inW(x.formDate || (x.createdAt && localDateStr(new Date(x.createdAt)))));
-    if(tr.length) act.push(`Handled ${tr.length} travel request${tr.length === 1 ? '' : 's'}: ${list(tr.map(x => (x.destination || '—') + ' (' + [x.fromDate ? dShort(x.fromDate) + (x.toDate && x.toDate !== x.fromDate ? '–' + dShort(x.toDate) : '') : '', trParts(x).length ? trParts(x).length + ' staff' : '', trDsaOn(x) && x.dsa.memoNo ? 'DSA memo ' + x.dsa.memoNo : ''].filter(Boolean).join(', ') + ')'))}`); }catch(e){}
+    if(tr.length) row('Travel', 'Handled ' + pl(tr.length, 'travel request'), tr.map(x => (x.destination || '—') + ' — ' + [x.fromDate ? dShort(x.fromDate) + (x.toDate && x.toDate !== x.fromDate ? ' – ' + dShort(x.toDate) : '') : '', trParts(x).length ? trParts(x).length + ' staff' : '', trDsaOn(x) && x.dsa.memoNo ? 'DSA memo ' + x.dsa.memoNo : ''].filter(Boolean).join(', '))); }catch(e){}
   try{ const docs = state.documents.filter(d => sameDept(d.department) && inW(d.date));
     if(docs.length){ const by = {}; docs.forEach(d => { const l = (docType(d.type) || {}).label || d.type; (by[l] = by[l] || []).push(d); });
-      act.push(`Registered ${docs.length} document${docs.length === 1 ? '' : 's'} — ${Object.entries(by).map(([l, ds]) => ds.length + ' ' + l.toLowerCase() + (ds.length === 1 ? '' : 's')).join(', ')}: ${list(docs.map(d => (d.refNo ? d.refNo + ' ' : '') + '“' + (d.title || '') + '”'))}`); } }catch(e){}
+      row('Documents', 'Registered ' + pl(docs.length, 'document') + ' (' + Object.entries(by).map(([l, ds]) => ds.length + ' ' + l.toLowerCase() + (ds.length === 1 ? '' : 's')).join(', ') + ')', docs.map(d => (d.refNo ? d.refNo + ' — ' : '') + (d.title || ''))); } }catch(e){}
   try{ const fr = state.fuelRecords.filter(x => inW(x.date));
-    if(fr.length){ const L = fr.reduce((t, x) => t + vNum(x.litres), 0), C = fr.reduce((t, x) => t + vNum(x.total), 0), byV = {}; fr.forEach(x => { const v = vehById(x.vehicleId), k = v ? v.plate : 'Other'; byV[k] = (byV[k] || 0) + 1; });
-      act.push(`Recorded ${fr.length} vehicle fill-up${fr.length === 1 ? '' : 's'} — ${fmtNum(Math.round(L))} litres, ${money(C)} across ${Object.keys(byV).length} vehicle${Object.keys(byV).length === 1 ? '' : 's'} (${list(Object.entries(byV).map(([k, n]) => k + (n > 1 ? ' ×' + n : '')), 6)})`); } }catch(e){}
+    if(fr.length){ const L = fr.reduce((t, x) => t + vNum(x.litres), 0), C = fr.reduce((t, x) => t + vNum(x.total), 0), byV = {};
+      fr.forEach(x => { const v = vehById(x.vehicleId), k = v ? v.plate : 'Other', o = byV[k] = byV[k] || { n:0, L:0, C:0 }; o.n++; o.L += vNum(x.litres); o.C += vNum(x.total); });
+      row('Fleet', 'Recorded ' + pl(fr.length, 'fill-up') + ' — ' + fmtNum(Math.round(L)) + ' L, ' + money(C), Object.entries(byV).map(([k, o]) => k + ' — ' + fmtNum(Math.round(o.L)) + ' L, ' + money(o.C) + (o.n > 1 ? ' (' + o.n + ' fill-ups)' : ''))); } }catch(e){}
   try{ const sv = state.serviceRecords.filter(x => inW(x.date));
-    if(sv.length) act.push(`Vehicle servicing / issues: ${list(sv.map(x => ((vehById(x.vehicleId) || {}).plate || '') + ' — ' + (x.kind === 'incident' ? (x.issue || 'issue') + (x.status ? ' (' + x.status + ')' : '') : (x.serviceType || x.type || 'service'))))}`); }catch(e){}
-  try{ const vl = state.vehicleLogs.filter(l => inW(l.outDate)); if(vl.length) act.push(`Logged ${vl.length} vehicle trip${vl.length === 1 ? '' : 's'} in the vehicle log`); }catch(e){}
+    if(sv.length) row('Fleet', 'Servicing / issues: ' + sv.length, sv.map(x => ((vehById(x.vehicleId) || {}).plate || '') + ' — ' + (x.kind === 'incident' ? (x.issue || 'issue') + (x.status ? ' (' + x.status + ')' : '') : (x.serviceType || x.type || 'service')))); }catch(e){}
+  try{ const vl = state.vehicleLogs.filter(l => inW(l.outDate)); if(vl.length){ const byV = {}; vl.forEach(l => { const k = (vehById(l.vehicleId) || {}).plate || 'Other'; byV[k] = (byV[k] || 0) + 1; }); row('Fleet', 'Logged ' + pl(vl.length, 'vehicle trip'), Object.entries(byV).map(([k, n]) => k + ' — ' + pl(n, 'trip'))); } }catch(e){}
   try{ const mv = (state.movements || []).filter(m => inW(m.date)), outs = mv.filter(m => m.type === 'out'), ins = mv.filter(m => m.type === 'in');
-    if(outs.length || ins.length) act.push(`Stock: ${[ins.length ? ins.length + ' receipt' + (ins.length === 1 ? '' : 's') : '', outs.length ? outs.length + ' issue' + (outs.length === 1 ? '' : 's') + ' to staff / departments' : ''].filter(Boolean).join(' and ')}`); }catch(e){}
-  try{ const cp = state.complaints.filter(c => /resolved|closed/i.test(c.status || '') && inW(c.resolvedOn || c.updatedOn || c.date)); if(cp.length) act.push(`Resolved ${cp.length} complaint${cp.length === 1 ? '' : 's'}: ${list(cp.map(c => String(c.title || c.complaint || '').split('\n')[0]))}`);
-    const cn = state.complaints.filter(c => inW(c.date) && !/resolved|closed/i.test(c.status || '')); if(cn.length) act.push(`Received ${cn.length} new complaint${cn.length === 1 ? '' : 's'}: ${list(cn.map(c => String(c.title || c.complaint || '').split('\n')[0]))}`); }catch(e){}
-  try{ const ho = state.handovers.filter(h => inW(h.date)); if(ho.length) act.push(`Completed ${ho.length} handover${ho.length === 1 ? '' : 's'}${ho.some(h => h.title) ? ': ' + list(ho.map(h => h.title).filter(Boolean)) : ''}`); }catch(e){}
-  try{ const ub = state.utilityBills.filter(b => inW(b.billDate || b.date)); if(ub.length) act.push(`Recorded ${ub.length} utility bill${ub.length === 1 ? '' : 's'} (${money(ub.reduce((t, b) => t + vNum(b.amount), 0))})`); }catch(e){}
+    if(outs.length || ins.length){ const byD = {}; outs.forEach(m => { const k = m.department || 'Other'; byD[k] = (byD[k] || 0) + 1; });
+      row('Stock', [ins.length ? pl(ins.length, 'receipt') : '', outs.length ? pl(outs.length, 'issue') : ''].filter(Boolean).join(' and '), Object.entries(byD).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + ' — ' + pl(n, 'issue'))); } }catch(e){}
+  try{ const cp = state.complaints.filter(c => /resolved|closed/i.test(c.status || '') && inW(c.resolvedOn || c.updatedOn || c.date)); if(cp.length) row('Complaints', 'Resolved ' + pl(cp.length, 'complaint'), cp.map(c => (c.no ? c.no + ' — ' : '') + String(c.title || c.complaint || '').split('\n')[0]));
+    const cn = state.complaints.filter(c => inW(c.date) && !/resolved|closed/i.test(c.status || '')); if(cn.length) row('Complaints', 'Received ' + pl(cn.length, 'new complaint'), cn.map(c => (c.no ? c.no + ' — ' : '') + String(c.title || c.complaint || '').split('\n')[0])); }catch(e){}
+  try{ const ho = state.handovers.filter(h => inW(h.date)); if(ho.length) row('Handovers', 'Completed ' + pl(ho.length, 'handover'), ho.map(h => h.title || h.number || '').filter(Boolean)); }catch(e){}
+  try{ const ub = state.utilityBills.filter(b => inW(b.billDate || b.date)); if(ub.length) row('Utilities', 'Recorded ' + pl(ub.length, 'bill') + ' — ' + money(ub.reduce((t, b) => t + vNum(b.amount), 0)), ub.map(b => [b.type, b.billNo, vNum(b.amount) ? money(b.amount) : ''].filter(Boolean).join(' — '))); }catch(e){}
+  const act = rows.map(r0 => r0.activity);
   const stMap = s => s === 'Completed' ? 'Completed' : s === 'Not started' ? 'Not Started' : 'Ongoing';
   const active = T.filter(t => (t.start || '') <= end && (t.status !== 'Completed' || (t.completedOn || '') >= start));
-  const objectives = active.map(t => ({ activity:(t.no ? t.no + ' — ' : '') + t.title, progress:tkProg(t) + '%' + (t.status === 'Completed' ? ' — completed ' + pcOrdinalDate(t.completedOn || t.due) : t.due ? ' — due ' + pcOrdinalDate(t.due) : ''), status:stMap(t.status) }));
+  const clTxt = t => (t.checklist || []).length ? ' · checklist ' + t.checklist.filter(c => c.done).length + '/' + t.checklist.length : '';
+  const objectives = active.map(t => ({ activity:(t.no ? t.no + ' — ' : '') + t.title, progress:tkProg(t) + '%' + clTxt(t) + (t.status === 'Completed' ? ' — completed ' + pcOrdinalDate(t.completedOn || t.due) : t.due ? ' — due ' + pcOrdinalDate(t.due) : ''), status:stMap(t.status) }));
   const pending = [];
   T.filter(t => t.status !== 'Completed' && (t.start || '') <= end).forEach(t => pending.push({ matter:(t.no ? t.no + ' — ' : '') + t.title, status:tkOverdue(t) ? 'Overdue' : t.status === 'On hold' ? 'On hold' : 'In progress', expected:t.due ? pcOrdinalDate(t.due) : '' }));
   try{ state.purchaseRequisitions.filter(p => (p.status || 'open') === 'pending_approval').forEach(p => pending.push({ matter:'PR ' + (p.prNumber || '') + ' — ' + (prFirstItem(p) || p.title || ''), status:'Pending approval', expected:'' })); }catch(e){}
@@ -11536,19 +11657,21 @@ function wr2Auto(r){
       impact:[String(c.description || '').trim().slice(0, 240), 'Open for ' + days + ' day' + (days === 1 ? '' : 's') + (c.raisedBy || c.department ? ' — raised by ' + [c.raisedBy, c.department].filter(Boolean).join(', ') : '') + (c.status && !/^open$/i.test(c.status) ? ' · ' + c.status : '')].filter(Boolean).join('\n'),
       support:last ? last.text + (last.challenge ? '\nChallenge: ' + last.challenge : '') + (sug.length > 1 ? '\n(' + sug.length + ' solutions suggested)' : '') : 'Action needed — no solution suggested yet; assign and follow up.' };
   }); }catch(e){}
-  return { activities:act.join('\n'), objectives, pending:pending.slice(0, 15), priorities:priorities.join('\n'), concerns };
+  return { activities:act.join('\n'), activityRows:rows, objectives, pending:pending.slice(0, 15), priorities:priorities.join('\n'), concerns };
 }
 // the editor
+const wr2ActRows = r => (r.activityRows && r.activityRows.length) ? r.activityRows : wr2Lines(r.activities).map(t => ({ area:'', activity:t, details:'' }));
 function wr2Row(key, x){
   const inp = `${VEH_FIELD} !px-2 !py-1.5 text-[13px]`, area = (f, v) => `<textarea data-f="${f}" rows="${Math.max(1, String(v || '').split('\n').length)}" oninput="this.style.height = 'auto'; this.style.height = (this.scrollHeight + 2) + 'px'" class="wr2-in ${inp}" style="resize:vertical;overflow:hidden">${esc(v || '')}</textarea>`;
-  const cells = key === 'objectives' ? [area('activity', x.activity), area('progress', x.progress), `<select data-f="status" class="wr2-in ${inp} bg-white">${WR2_STATUS.concat(x.status && !WR2_STATUS.includes(x.status) ? [x.status] : []).map(s => `<option ${s === (x.status || 'Ongoing') ? 'selected' : ''}>${s}</option>`).join('')}</select>`]
+  const cells = key === 'activities' ? [`<input data-f="area" value="${esc(x.area || '')}" list="wr2-areas" class="wr2-in ${inp}" placeholder="e.g. Petty cash">`, area('activity', x.activity), area('details', x.details)]
+    : key === 'objectives' ? [area('activity', x.activity), area('progress', x.progress), `<select data-f="status" class="wr2-in ${inp} bg-white">${WR2_STATUS.concat(x.status && !WR2_STATUS.includes(x.status) ? [x.status] : []).map(s => `<option ${s === (x.status || 'Ongoing') ? 'selected' : ''}>${s}</option>`).join('')}</select>`]
     : key === 'pending' ? [area('matter', x.matter), `<input data-f="status" value="${esc(x.status || '')}" class="wr2-in ${inp}" placeholder="e.g. Awaiting approval">`, `<input data-f="expected" value="${esc(x.expected || '')}" class="wr2-in ${inp}" placeholder="e.g. 30th October 2026">`]
     : [area('issue', x.issue), area('impact', x.impact), area('support', x.support)];
   return `<tr class="wr2-row align-top border-t border-slate-100"><td class="p-1 text-xs text-slate-400 pt-3 w-6 wr2-no"></td>${cells.map(c => `<td class="p-1">${c}</td>`).join('')}<td class="p-1 w-8 text-center"><button type="button" onclick="this.closest('tr').remove(); wr2Renum()" class="text-slate-400 hover:text-rose-600 text-lg leading-none" title="Remove">×</button></td></tr>`;
 }
 document.addEventListener('input', e => { try{ if(e.target.closest && e.target.closest('#wr2-concerns') && e.target.value.trim()){ const n = document.getElementById('wr2-nil'); if(n) n.checked = false; } }catch(x){} });
 function wr2Fit(){ document.querySelectorAll('#wr2-form textarea.wr2-in').forEach(t => { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }); }
-function wr2Renum(){ setTimeout(wr2Fit, 0); ['objectives', 'pending', 'concerns'].forEach(k => document.querySelectorAll('#wr2-' + k + ' .wr2-no').forEach((td, i) => { td.textContent = i + 1; })); }
+function wr2Renum(){ setTimeout(wr2Fit, 0); ['activities', 'objectives', 'pending', 'concerns'].forEach(k => document.querySelectorAll('#wr2-' + k + ' .wr2-no').forEach((td, i) => { td.textContent = i + 1; })); }
 function wr2AddRow(key){ const tb = document.querySelector('#wr2-' + key + ' tbody'); tb.insertAdjacentHTML('beforeend', wr2Row(key, {})); wr2Renum(); const i = tb.lastElementChild.querySelector('.wr2-in'); if(i) i.focus(); }
 function wr2Editor(r){
   const head = (cols) => `<thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="w-6">No.</th>${cols.map(c => `<th class="px-2 py-2">${c}</th>`).join('')}<th></th></tr></thead>`;
@@ -11565,7 +11688,7 @@ function wr2Editor(r){
       <div class="flex gap-2.5 flex-wrap">${canManageInventory() ? `<button onclick="deleteWr('${r.id}')" class="${VEH_BTN} text-rose-600 hover:bg-rose-50">Delete</button>` : ''}<button onclick="wr2Fill('all')" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">✨ Fill all from the app</button>${vBtnPlain('Blank template', `wrBlankPdf('${r.id}', this)`)}${vBtnPlain('Download PDF', `wrSave('${r.id}', true, this)`)}${vBtnPlain('Download Word', `wrSave('${r.id}', 'word', this)`)}${vBtnPlain('✉ Email draft', `wrMailOpen('${r.id}')`)}${vBtnPrimary('Save', `wrSave('${r.id}', false, this)`)}</div></div>
     <div id="wr2-form">
     ${vPanel('Report details', '', `<div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">${f('wr2-period', 'Reporting period', wr2Period(r), 'text')}${f('wr2-dept', 'Division / Department', r.department)}${f('wr2-subdate', 'Date of submission', r.submissionDate || vToday(), 'date')}${f('wr2-prepared', 'Prepared by', r.preparedBy)}${f('wr2-approved', 'Approved by', r.approvedBy, 'text', 'e.g. Director, Administration')}</div>`)}
-    ${sec(1, 'Main Activities This Week', fill('activities'), help('A summary of the main activities, tasks and key achievements completed during the reporting period — one per line (each becomes a bullet).') + ta('wr2-activities', r.activities, '• Processed …\n• Completed …', 5))}
+    ${sec(1, 'Main Activities This Week', fill('activities') + add('activities'), help('The main activities, tasks and key achievements completed during the reporting period — one row per area, with the records behind it.') + `<datalist id="wr2-areas">${['Tasks', 'Petty cash', 'Procurement', 'Travel', 'Documents', 'Fleet', 'Stock', 'Complaints', 'Handovers', 'Utilities', 'Meetings', 'Other'].map(x => `<option value="${x}"></option>`).join('')}</datalist>` + tbl('activities', ['Area', 'Activity', 'Details'], wr2ActRows(r).length ? wr2ActRows(r) : [{}, {}]))}
     ${sec(2, 'Progress Toward Key Objectives', fill('objectives') + add('objectives'), help('Progress made toward departmental targets, ongoing projects and key objectives.') + tbl('objectives', ['Key objective / activity', 'Progress / achievement', 'Current status'], (r.objectives || []).length ? r.objectives : [{}, {}, {}]))}
     ${sec(3, 'Ongoing Activities / Pending Matters', fill('pending') + add('pending'), help('Activities still in progress, pending approvals, or awaiting action from other departments or external parties.') + tbl('pending', ['Activity / pending matter', 'Current status', 'Expected completion date'], (r.pending || []).length ? r.pending : [{}, {}, {}]))}
     ${sec(4, 'Significant Concerns / Support Required', `<button onclick="wr2Fill('concerns')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✨ Fill from Admin Complaints</button>` + add('concerns'), help('Challenges, risks, delays, resource constraints, or decisions needing management attention or support from other divisions.') + `<label class="flex items-center gap-2 text-sm text-slate-700 mb-2"><input type="checkbox" id="wr2-nil" ${nil ? 'checked' : ''}> Nil — no significant concerns or support required</label>` + tbl('concerns', ['Concern / issue', 'Impact', 'Support / action required'], (r.concerns || []).length ? r.concerns : []))}
@@ -11578,7 +11701,7 @@ function wr2Fill(k){
   const r = wrById(vehUi.wrId); if(!r) return; const a = wr2Auto(Object.assign({}, r, { department:(document.getElementById('wr2-dept') || {}).value || r.department }));
   const doText = (id, v) => { const el = document.getElementById(id); if(!el) return; if(el.value.trim() && !confirm('Replace what is typed with a draft from the app?')) return; el.value = wr2Lines(v).map(x => '• ' + x).join('\n'); };
   const doTbl = (key, rows) => { const tb = document.querySelector('#wr2-' + key + ' tbody'); if(!tb) return; const typed = [...tb.querySelectorAll('.wr2-in')].some(i => i.tagName !== 'SELECT' && i.value.trim()); if(typed && !confirm('Replace the rows with what the app has?')) return; tb.innerHTML = (rows.length ? rows : key === 'concerns' ? [] : [{}]).map(x => wr2Row(key, x)).join(''); wr2Renum(); };
-  if(k === 'activities' || k === 'all') doText('wr2-activities', a.activities);
+  if(k === 'activities' || k === 'all') doTbl('activities', a.activityRows);
   if(k === 'objectives' || k === 'all') doTbl('objectives', a.objectives);
   if(k === 'pending' || k === 'all') doTbl('pending', a.pending);
   if(k === 'priorities' || k === 'all') doText('wr2-priorities', a.priorities);
@@ -11589,7 +11712,7 @@ function wr2Collect(){
   const rows = key => [...document.querySelectorAll('#wr2-' + key + ' .wr2-row')].map(tr => { const o = {}; tr.querySelectorAll('.wr2-in').forEach(i => { o[i.dataset.f] = i.value.trim(); }); return o; }).filter(o => Object.entries(o).some(([k, v]) => v && k !== 'status'));
   const v = id => ((document.getElementById(id) || {}).value || '').trim();
   const concerns = rows('concerns'), nilBox = document.getElementById('wr2-nil');
-  return { format:'dept', department:v('wr2-dept'), submissionDate:v('wr2-subdate'), preparedBy:v('wr2-prepared'), approvedBy:v('wr2-approved'), activities:v('wr2-activities'), objectives:rows('objectives'), pending:rows('pending'),
+  return { format:'dept', department:v('wr2-dept'), submissionDate:v('wr2-subdate'), preparedBy:v('wr2-prepared'), approvedBy:v('wr2-approved'), activityRows:rows('activities'), activities:rows('activities').map(x => x.activity).join('\n'), objectives:rows('objectives'), pending:rows('pending'),
     concerns, concernsNil:!concerns.length && !!(nilBox && nilBox.checked), priorities:v('wr2-priorities'), submittedBy:v('wr2-subby'), designation:v('wr2-desig'), signDate:v('wr2-sdate') };
 }
 // the PDF, laid out like the template on the letterhead
@@ -11618,7 +11741,8 @@ async function buildWr2Pdf(r, blank){
   field('Reporting Period:', blank ? '' : wr2Period(r)); field('Division / Department:', blank ? (r.department || '') : r.department); field('Date of Submission:', blank ? '' : r.submissionDate ? pcOrdinalDate(r.submissionDate) : '');
   field('Prepared By:', blank ? '' : r.preparedBy); field('Approved By:', blank ? '' : r.approvedBy);
   pg.line(L, y - 2, R, y - 2, [0.6, 0.6, 0.6], 0.8); y += 10;
-  heading(1, 'Main Activities This Week'); para('Provide a summary of the main activities, tasks, and key achievements completed during the reporting period.', { justify:true }); y += 4; bullets(blank ? [] : wr2Lines(r.activities));
+  heading(1, 'Main Activities This Week'); para('Provide a summary of the main activities, tasks, and key achievements completed during the reporting period.', { justify:true }); y += 4;
+  table([['No.', 0.45], ['Area', 1.1], ['Activity', 2.1], ['Details', 3.2]], blank ? [1, 2, 3].map(n => [String(n), '', '', '']) : wr2ActRows(r).map((x, k) => [String(k + 1), x.area, x.activity, x.details]));
   heading(2, 'Progress Toward Key Objectives'); para('Outline the progress made toward departmental targets, ongoing projects, and key objectives.', { justify:true }); y += 4;
   table([['No.', 0.5], ['Key Objective / Activity', 2.2], ['Progress / Achievement', 2.2], ['Current Status', 2]], blank ? [1, 2, 3].map(n => [String(n), '', '', 'Not Started / Ongoing / Completed']) : (r.objectives || []).map((x, i) => [String(i + 1), x.activity, x.progress, x.status]));
   heading(3, 'Ongoing Activities / Pending Matters'); para('List activities that are still in progress, pending approvals, or awaiting action from other departments or external parties.', { justify:true }); y += 4;
@@ -11652,7 +11776,8 @@ async function buildWr2Docx(r, blank){
   field('Reporting Period:', blank ? '' : wr2Period(r)); field('Division / Department:', r.department || ''); field('Date of Submission:', blank ? '' : r.submissionDate ? pcOrdinalDate(r.submissionDate) : '');
   field('Prepared By:', blank ? '' : r.preparedBy); field('Approved By:', blank ? '' : r.approvedBy);
   out.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="A6A6A6"/></w:pBdr><w:spacing w:after="120"/></w:pPr></w:p>');
-  head(1, 'Main Activities This Week'); desc('Provide a summary of the main activities, tasks, and key achievements completed during the reporting period.'); (blank ? ['', ''] : wr2Lines(r.activities)).forEach(bullet);
+  head(1, 'Main Activities This Week'); desc('Provide a summary of the main activities, tasks, and key achievements completed during the reporting period.');
+  table([['No.', 0.45], ['Area', 1.1], ['Activity', 2.1], ['Details', 3.2]], blank ? [1, 2, 3].map(n => [String(n), '', '', '']) : (wr2ActRows(r).length ? wr2ActRows(r) : [{}]).map((x, k) => [String(k + 1), x.area, x.activity, x.details]));
   head(2, 'Progress Toward Key Objectives'); desc('Outline the progress made toward departmental targets, ongoing projects, and key objectives.');
   table([['No.', 0.5], ['Key Objective / Activity', 2.2], ['Progress / Achievement', 2.2], ['Current Status', 2]], blank ? [1, 2, 3].map(n => [String(n), '', '', 'Not Started / Ongoing / Completed']) : ((r.objectives || []).length ? r.objectives : [{}]).map((x, i) => [String(i + 1), x.activity, x.progress, x.status]));
   head(3, 'Ongoing Activities / Pending Matters'); desc('List activities that are still in progress, pending approvals, or awaiting action from other departments or external parties.');
@@ -11690,7 +11815,7 @@ async function saveWrNew(){
   const prev = state.weeklyReports.filter(r => String(r.department).toLowerCase() === o.department.toLowerCase() && r.weekEnd < end).sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)))[0];
   if(o.format !== 'detail'){
     const base = { format:'dept', department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '', approvedBy:(prev && prev.approvedBy) || '', submissionDate:vToday(), submittedBy:authUser ? authUser.name : '', designation:(prev && prev.designation) || ((sdAll().find(p => authUser && p.name === authUser.name) || {}).designation || ''), signDate:vToday(), concerns:[] };
-    const a = wr2Auto(base); Object.assign(base, { activities:wr2Lines(a.activities).map(x => '• ' + x).join('\n'), objectives:a.objectives, pending:a.pending, priorities:wr2Lines(a.priorities).map(x => '• ' + x).join('\n'), concerns:a.concerns, concernsNil:!a.concerns.length });
+    const a = wr2Auto(base); Object.assign(base, { activityRows:a.activityRows, activities:a.activities, objectives:a.objectives, pending:a.pending, priorities:wr2Lines(a.priorities).map(x => '• ' + x).join('\n'), concerns:a.concerns, concernsNil:!a.concerns.length });
     closeModal(); vehUi.wrId = await vehSave('weeklyReports', base); rerenderMain(); toast('Weekly departmental update started — drafted from the app; check and edit each section.'); return;
   }
   const rec = { department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '',
@@ -14504,7 +14629,9 @@ function keySiteStats(rows){
 function keyToggleSite(site){ vehUi.keySite = vehUi.keySite === site ? '' : site; rerenderMain(); }
 function keyToggleCollapse(site){ const c = new Set(vehUi.keyCollapsed || []); if(c.has(site)) c.delete(site); else c.add(site); vehUi.keyCollapsed = [...c]; rerenderMain(); }
 function viewKeyRegistry(){
-  const all = state.keyRegistry, admin = canManageInventory();
+  // Facilities → Key Registry holds the building keys and AC remotes; Fleet → Vehicle Keys holds the vehicle keys
+  const vk = ui.tab === 'vehicle-keys', all = state.keyRegistry.filter(r => (r.kind === 'Vehicle Key') === vk), admin = canManageInventory();
+  if(vk){ vehUi.keySite = ''; vehUi.keyKind = ''; } else if(vehUi.keySite === KEY_VEH_SITE || vehUi.keyKind === 'Vehicle Key'){ vehUi.keySite = ''; vehUi.keyKind = ''; }
   const sites = [...new Set(all.map(r => r.site).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric:true }));
   const list = all.filter(r => (!vehUi.keySite || r.site === vehUi.keySite) && (!vehUi.keyKind || r.kind === vehUi.keyKind) && vMatch(vehUi.keyQ, [r.site, r.kind, r.details, r.adminHolders, r.otherHolders, r.copiesHolders, r.notes, r.no, r.vehicleId && vehById(r.vehicleId) ? vehById(r.vehicleId).plate : '']))
     .sort((a, b) => KEY_KINDS.indexOf(a.kind) - KEY_KINDS.indexOf(b.kind) || vNum(a.no) - vNum(b.no) || String(a.details).localeCompare(String(b.details)));
@@ -14529,7 +14656,7 @@ function viewKeyRegistry(){
     </div>`;
   }).join('');
   // site overview: a card per site, click to show just that site
-  const overview = sites.length > 0 ? `<div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
+  const overview = sites.length > 0 && !vk ? `<div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
       <button type="button" onclick="vehUi.keySite=''; rerenderMain();" class="text-left rounded-xl border p-3.5 transition-colors ${!vehUi.keySite ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-slate-200 hover:border-brand-300'}">
         <div class="text-xs font-semibold ${!vehUi.keySite ? 'text-white/80' : 'text-slate-500'}">All sites</div><div class="text-xl font-extrabold num ${!vehUi.keySite ? 'text-white' : 'text-slate-900'}">${sites.length}</div><div class="text-[11px] ${!vehUi.keySite ? 'text-white/70' : 'text-slate-400'}">${all.length} items</div></button>
       ${sites.map(st => { const x = keySiteStats(all.filter(r => r.site === st)), on = vehUi.keySite === st; return `
@@ -14539,13 +14666,16 @@ function viewKeyRegistry(){
         <div class="text-[11px] text-slate-400">${x.box} in box · ${x.admin + x.other} with staff${x.remoteItems ? ' · ' + x.remotes + ' remotes' : ''}</div></button>`; }).join('')}
     </div>` : '';
   return `
-    ${vHead('Key Registry', 'Where every key and AC remote is, site by site: in the key box, with admin staff, with other departments, or as a copy.',
-      (admin ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">Import from Excel<input type="file" id="key-file" accept=".xlsx" class="hidden" onchange="keyImportFile(this)"></label>` : '') + (all.length ? vBtnPlain('Export CSV', 'keyExportCsv()') : '') + (admin && state.vehicles.length ? vBtnPlain('+ Vehicle keys', 'openAddVehicleKeys()') : '') + vBtnPrimary('+ Add', 'openKeyForm()'))}
+    ${vk ? vHead('Vehicle Keys', 'The keys of every vehicle: in the key box, with drivers and staff, or as a copy.',
+      (all.length ? vBtnPlain('Export CSV', 'keyExportCsv(true)') : '') + (admin && state.vehicles.length ? vBtnPlain('+ Keys for all vehicles', 'openAddVehicleKeys()') : '') + vBtnPrimary('+ Add', `vehUi.keyPreset={kind:'Vehicle Key',site:'${KEY_VEH_SITE}'}; openKeyForm()`))
+    : vHead('Key Registry', 'Where every key and AC remote is, site by site: in the key box, with admin staff, with other departments, or as a copy. Vehicle keys are under Fleet → Vehicle Keys.',
+      (admin ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">Import from Excel<input type="file" id="key-file" accept=".xlsx" class="hidden" onchange="keyImportFile(this)"></label>` : '') + (all.length ? vBtnPlain('Export CSV', 'keyExportCsv(false)') : '') + vBtnPrimary('+ Add', 'openKeyForm()'))}
     ${vKpis(statCard('Total keys', fmtNum(T.keys), (vehUi.keySite ? esc(vehUi.keySite) + ' · ' : '') + T.keyItems + ' key item' + (T.keyItems === 1 ? '' : 's') + ' · originals and copies', 'brand') + statCard('In the key box', fmtNum(T.box), 'Kept at the office', 'emerald') +
       statCard('With staff', fmtNum(T.admin + T.other), 'Admin ' + T.admin + ' · other departments ' + T.other, 'amber') + statCard('Copies with other staff', fmtNum(T.copies), 'Duplicates handed out', 'slate'))}
     ${overview}
-    <div class="flex flex-wrap gap-2.5 mb-5">${vSearch('key-q', 'keyQ', 'Search a door, a person, a note…')}${vSelect('keyKind', [['Key', 'Keys'], ['Vehicle Key', 'Vehicle keys'], ['AC Remote', 'AC remotes']], vehUi.keyKind, 'Keys and remotes')}${siteNames.length > 1 ? `<button onclick="vehUi.keyCollapsed = ${JSON.stringify(siteNames).replace(/"/g, '&quot;')}; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Fold all</button><button onclick="vehUi.keyCollapsed = []; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Unfold all</button>` : ''}</div>
-    ${!all.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No keys recorded yet.<div class="mt-4 flex flex-wrap justify-center gap-2.5">' + (admin ? vBtnPrimary('Import the UD T15 keys', 'keyImportSeed()') : '') + vBtnPlain('+ Add a key', 'openKeyForm()') + '</div>' + (admin ? '<div class="text-xs text-slate-400 mt-3">The UD T15 keys and AC remotes come from UD_T15_Keys.xlsx. You can also import any sheet in the same layout with "Import from Excel".</div>' : ''))}</div>`
+    <div class="flex flex-wrap gap-2.5 mb-5">${vSearch('key-q', 'keyQ', 'Search a door, a person, a note…')}${vk ? '' : vSelect('keyKind', [['Key', 'Keys'], ['AC Remote', 'AC remotes']], vehUi.keyKind, 'Keys and remotes')}${siteNames.length > 1 ? `<button onclick="vehUi.keyCollapsed = ${JSON.stringify(siteNames).replace(/"/g, '&quot;')}; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Fold all</button><button onclick="vehUi.keyCollapsed = []; rerenderMain();" class="text-xs font-semibold text-slate-500 hover:text-brand-600 px-2">Unfold all</button>` : ''}</div>
+    ${!all.length && vk ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No vehicle keys recorded yet.' + (admin && state.vehicles.length ? '<div class="mt-4">' + vBtnPrimary('+ Keys for all vehicles', 'openAddVehicleKeys()') + '</div>' : ''))}</div>`
+      : !all.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No keys recorded yet.<div class="mt-4 flex flex-wrap justify-center gap-2.5">' + (admin ? vBtnPrimary('Import the UD T15 keys', 'keyImportSeed()') : '') + vBtnPlain('+ Add a key', 'openKeyForm()') + '</div>' + (admin ? '<div class="text-xs text-slate-400 mt-3">The UD T15 keys and AC remotes come from UD_T15_Keys.xlsx. You can also import any sheet in the same layout with "Import from Excel".</div>' : ''))}</div>`
       : !list.length ? `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('Nothing matches these filters.')}</div>`
       : sitePanels}`;
 }
@@ -14646,7 +14776,7 @@ async function saveAddVehicleKeys(){
   const missing = state.vehicles.filter(v => !state.keyRegistry.some(k => k.kind === 'Vehicle Key' && k.vehicleId === v.id));
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   for(const v of missing) await vehSave('keyRegistry', { kind:'Vehicle Key', site:KEY_VEH_SITE, vehicleId:v.id, details:vLabel(v) + (vName(v) ? ' — ' + vName(v) : ''), no:keyNextNo(KEY_VEH_SITE, 'Vehicle Key'), qtyBox:n, adminQty:0, adminHolders:'', otherQty:0, otherHolders:'', copiesQty:0, copiesHolders:'', notes:'' });
-  closeModal(); vehUi.keySite = KEY_VEH_SITE; rerenderMain(); toast('Keys added for ' + missing.length + ' vehicle' + (missing.length === 1 ? '' : 's') + '.');
+  closeModal(); vehUi.keySite = ''; goTo('vehicle-keys'); toast('Keys added for ' + missing.length + ' vehicle' + (missing.length === 1 ? '' : 's') + '.');
 }
 // the keys of one vehicle, shown on its page
 function vehKeysPanel(v){
@@ -14655,7 +14785,7 @@ function vehKeysPanel(v){
       <div><div class="text-sm"><b class="num">${keyQty(k.qtyBox)}</b> in the key box${hs.length ? ' · with ' + hs.map(h => esc(h.name) + (h.qty > 1 ? ' (' + h.qty + ')' : '')).join(', ') : ''}</div><div class="text-[11.5px] text-slate-400">${keyTotal(k)} key${keyTotal(k) === 1 ? '' : 's'} in total</div></div>
       <div class="flex gap-3 text-xs font-semibold">${keyQty(k.qtyBox) || hs.length ? `<button onclick="openKeyHandOut('${k.id}')" class="text-brand-600 hover:underline">Hand out</button>` : ''}${hs.length ? `<button onclick="openKeyReturn('${k.id}')" class="text-emerald-600 hover:underline">Return</button>` : ''}<button onclick="openKeyHistory('${k.id}')" class="text-slate-500 hover:underline">History</button></div></div>`; }).join('')
     : vEmpty('No keys recorded for this vehicle.' + (canManageInventory() ? `<div class="mt-3"><button onclick="vehUi.keyPreset={kind:'Vehicle Key',site:'${KEY_VEH_SITE}',vehicleId:'${v.id}',details:'${esc(vLabel(v)).replace(/'/g, '&#39;')}',qtyBox:2}; openKeyForm()" class="text-xs font-semibold text-brand-600 hover:underline">+ Add its keys</button></div>` : ''));
-  return vPanel('Keys', `<button onclick="vehUi.keySite='${KEY_VEH_SITE}'; goTo('keys')" class="text-xs font-semibold text-brand-600 hover:underline">Key Registry →</button>`, body);
+  return vPanel('Keys', `<button onclick="goTo('vehicle-keys')" class="text-xs font-semibold text-brand-600 hover:underline">Vehicle Keys →</button>`, body);
 }
 
 function keyKindChanged(sel){
@@ -14718,9 +14848,9 @@ function deleteKey(id){
   const r = state.keyRegistry.find(x => x.id === id); if(!r || !canManageInventory()) return;
   closeModal(); confirmAction('Delete "' + r.details + '" (' + r.site + ') from the registry?', async () => { await vehDelete('keyRegistry', id); toast('Deleted.'); });
 }
-function keyExportCsv(){
-  downloadCSV('key-registry.csv', ['Site', 'Type', '#', 'Details', 'In key box', 'With admin staff', 'Admin holders', 'With other departments', 'Other holders', 'Copies with other staff', 'Copy holders', 'Total', 'Notes'],
-    state.keyRegistry.slice().sort((a, b) => String(a.site).localeCompare(String(b.site)) || KEY_KINDS.indexOf(a.kind) - KEY_KINDS.indexOf(b.kind) || vNum(a.no) - vNum(b.no)).map(r => [r.site, r.kind, r.no, r.details, r.kind === 'AC Remote' ? '' : keyQty(r.qtyBox), keyQty(r.adminQty), keyNames(r.adminHolders).join('; '), keyQty(r.otherQty), keyNames(r.otherHolders).join('; '), r.kind === 'AC Remote' ? '' : keyQty(r.copiesQty), keyNames(r.copiesHolders).join('; '), keyTotal(r), r.notes || '']));
+function keyExportCsv(veh){
+  downloadCSV(veh ? 'vehicle-keys.csv' : 'key-registry.csv', ['Site', 'Type', '#', 'Details', 'In key box', 'With admin staff', 'Admin holders', 'With other departments', 'Other holders', 'Copies with other staff', 'Copy holders', 'Total', 'Notes'],
+    state.keyRegistry.filter(r => veh == null || (r.kind === 'Vehicle Key') === !!veh).sort((a, b) => String(a.site).localeCompare(String(b.site)) || KEY_KINDS.indexOf(a.kind) - KEY_KINDS.indexOf(b.kind) || vNum(a.no) - vNum(b.no)).map(r => [r.site, r.kind, r.no, r.details, r.kind === 'AC Remote' ? '' : keyQty(r.qtyBox), keyQty(r.adminQty), keyNames(r.adminHolders).join('; '), keyQty(r.otherQty), keyNames(r.otherHolders).join('; '), r.kind === 'AC Remote' ? '' : keyQty(r.copiesQty), keyNames(r.copiesHolders).join('; '), keyTotal(r), r.notes || '']));
 }
 
 /* ---------- import: a sheet in the layout of UD_T15_Keys.xlsx ---------- */
@@ -14899,7 +15029,7 @@ function render(){
     else if(ui.tab==='handovers') el.innerHTML = viewHandovers();
     else if(ui.tab==='vehicles') el.innerHTML = viewVehicles();
     else if(ui.tab==='petty-cash') el.innerHTML = viewPettyCash();
-    else if(ui.tab==='keys') el.innerHTML = viewKeyRegistry();
+    else if(ui.tab==='keys' || ui.tab==='vehicle-keys') el.innerHTML = viewKeyRegistry();
     else if(ui.tab==='petty-statement') el.innerHTML = viewPettyCashStatement();
     else if(ui.tab==='petty-count') el.innerHTML = viewPettyCashCount();
     else if(ui.tab==='business-advance') el.innerHTML = viewBusinessAdvance();

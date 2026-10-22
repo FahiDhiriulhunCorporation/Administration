@@ -1959,7 +1959,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.293';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.294';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -12354,7 +12354,7 @@ function baDetail(r){
   return `<div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-5"><div><button onclick="vehUi.baId=''; rerenderMain()" class="text-xs font-semibold text-slate-500 hover:text-brand-600 mb-1">‹ All business advances</button>
       <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">${esc(r.title || 'Business Advance')} ${vPill(r.status === 'Settled' ? '' : 'acc', esc(r.status || 'Open'), 'align-middle')}</h1>
       <p class="text-sm text-slate-500 mt-0.5">${esc([r.no, r.holder && 'held by ' + r.holder + (r.department ? ' (' + r.department + ')' : ''), r.date && 'issued ' + vDate(r.date), r.ref && 'ref. ' + r.ref].filter(Boolean).join(' · '))}</p>${r.slip && r.slip.fileId ? `<p class="text-sm mt-1"><button onclick="openBaSlip('${r.id}')" class="font-semibold text-brand-600 hover:underline">📎 Balance slip</button> <span class="text-slate-500">${esc([r.slip.amount != null ? fmtMVR(r.slip.amount) + ' returned' : '', r.slip.date && baDate(r.slip.date), r.slip.ref].filter(Boolean).join(' · '))}</span></p>` : ''}${r.signedReport && r.signedReport.fileId ? `<p class="text-sm mt-1"><button onclick="openBaSigned('${r.id}')" class="font-semibold text-brand-600 hover:underline">📎 Signed expenditure report</button> <span class="text-slate-500">${esc([r.signedReport.by, r.signedReport.at ? fmtDT(r.signedReport.at) : ''].filter(Boolean).join(' · '))}</span></p>` : ''}${r.notes ? `<p class="text-sm text-slate-600 mt-1 whitespace-pre-line">${esc(r.notes)}</p>` : ''}</div>
-    <div class="flex gap-2.5 flex-wrap">${r.status === 'Settled' ? vBtnPrimary('Expenditure report', `baExpDownload('${r.id}', this)`) + (ed ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">${r.signedReport && r.signedReport.fileId ? 'Replace signed report' : '📎 Attach signed report'}<input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baSignedChosen(this, '${r.id}')"></label>` : '') : ''}${vBtnPlain('Excel', `baXlsxAsk('${r.id}')`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
+    <div class="flex gap-2.5 flex-wrap">${r.status === 'Settled' ? vBtnPrimary('Expenditure report', `openBaExp('${r.id}')`) : ''}${vBtnPlain('Excel', `baXlsxAsk('${r.id}')`)}${vBtnPlain('PDF', `baPdfAsk('${r.id}')`)}${ed ? vBtnPlain('Edit', `openBaForm('${r.id}')`) + vBtnPrimary('+ Entry', `openBaEntry('${r.id}')`) : ''}</div></div>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">${card('Current Balance', vMoney(t.balance), t.balance < 0 ? 'text-rose-600' : 'text-emerald-700')}${card('Total Spent', vMoney(t.spent))}${card('Total Received', vMoney(t.received))}${card('Pending Invoice', fmtNum(t.pending), t.pending ? 'text-amber-600' : 'text-slate-900')}</div>
     ${vPanel('Entries', ed ? `<button onclick="openBaEntry('${r.id}', '', 'Received')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">+ Money received</button><button onclick="openBaEntry('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">+ Payment (transferred)</button>` : '',
       es.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">${vTHead([{ t:'Date' }, { t:'Staff Name / Department' }, { t:'Type' }, { t:'Amount', n:1 }, { t:'Details' }, { t:'Invoice' }, { t:'Net', n:1 }, { t:'Remarks' }])}<tbody>${rows}</tbody></table></div>` : vEmpty('No entries yet. Add the money received, then each payment with its invoice.'))}
@@ -12415,7 +12415,7 @@ async function saveBaClose(id){
   await vehSave('businessAdvances', { id, entries, slip, status:'Settled', settledOn:o.date });
   if(old && slip.fileId && old !== slip.fileId) pcFileDelete(old);
   baSlipAtt = null; closeModal();
-  openModal('Advance settled', `<p class="text-sm text-slate-600 mb-4">${esc(r.no || 'The advance')} is settled${slip.fileId ? ' and the balance slip is attached' : ''}. Download the expenditure report now?</p><div class="flex justify-end gap-2.5">${vBtnPlain('Later', 'closeModal()')}${vBtnPrimary('Expenditure report', `baExpDownload('${id}', this)`)}</div>`);
+  openModal('Advance settled', `<p class="text-sm text-slate-600 mb-4">${esc(r.no || 'The advance')} is settled${slip.fileId ? ' and the balance slip is attached' : ''}. Download the expenditure report now?</p><div class="flex justify-end gap-2.5">${vBtnPlain('Later', 'closeModal()')}${vBtnPrimary('Expenditure report', `openBaExp('${id}')`)}</div>`);
 }
 /* ---------- the expenditure report: what the advance was spent on, by budget category, with every payment and the balance returned ---------- */
 async function baExpDownload(id, btn){
@@ -12434,12 +12434,13 @@ async function buildBaExpPdf(r){
   const heading = t => { y += 12; need(LH * 5); pg.text(L, y, t, { bold:true, size:10.5 }); y += LH + 2; };
   const table = (cols, rows, foot) => {   // cols: [label, share, align]
     const tot = cols.reduce((a, c) => a + c[1], 0), xs = [L]; cols.forEach(c => xs.push(xs[xs.length - 1] + (R - L) * c[1] / tot));
-    const cellX = (i, txt, bold) => cols[i][2] === 'r' ? xs[i + 1] - 5 - pdfTextWidth(txt, bold, FS) : xs[i] + 5;
-    const head = () => { const h = LH + 9; pg.fill(L, y, R - L, h, HEAD); cols.forEach((c, i) => pg.text(cellX(i, c[0], true), y + 13, c[0], { bold:true, size:FS })); xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.5)); pg.line(L, y, R, y, GRID, 0.5); y += h; pg.line(L, y, R, y, GRID, 0.5); };
+    const fit = (i, txt, bold) => { let z = FS; while(z > 6 && pdfTextWidth(txt, bold, z) > xs[i + 1] - xs[i] - 10) z -= 0.25; return z; };      // a figure never runs out of its cell
+    const cellX = (i, txt, bold) => cols[i][2] === 'r' ? xs[i + 1] - 5 - pdfTextWidth(txt, bold, fit(i, txt, bold)) : xs[i] + 5;
+    const head = () => { const h = LH + 9; pg.fill(L, y, R - L, h, HEAD); cols.forEach((c, i) => pg.text(cellX(i, c[0], true), y + 13, c[0], { bold:true, size:c[2] === 'r' ? fit(i, c[0], true) : FS })); xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.5)); pg.line(L, y, R, y, GRID, 0.5); y += h; pg.line(L, y, R, y, GRID, 0.5); };
     need(LH * 3 + 10); head();
     rows.concat(foot ? [foot] : []).forEach((row, ri) => { const bold = foot && ri === rows.length, wr = row.map((v, i) => cols[i][2] === 'r' ? [String(v)] : pdfWrap(String(v == null ? '' : v), bold, FS, xs[i + 1] - xs[i] - 10)), h = Math.max(...wr.map(w => w.length)) * LH + 8;
       if(y + h > BOT){ newPage(); head(); }
-      wr.forEach((w, i) => w.forEach((ln, k) => pg.text(cellX(i, ln, bold), y + 13 + k * LH, ln, { size:FS, bold })));
+      wr.forEach((w, i) => w.forEach((ln, k) => pg.text(cellX(i, ln, bold), y + 13 + k * LH, ln, { size:cols[i][2] === 'r' ? fit(i, ln, bold) : FS, bold })));
       xs.forEach(x => pg.line(x, y, x, y + h, GRID, 0.5)); y += h; pg.line(L, y, R, y, GRID, 0.5); });
     y += 6;
   };
@@ -12454,22 +12455,30 @@ async function buildBaExpPdf(r){
   const order = BA_CATS.filter(c => cats[c]).concat(Object.keys(cats).filter(c => !BA_CATS.includes(c)));
   table([['Budget category', 3.2], ['Payments', 1, 'r'], ['Amount', 1.8, 'r'], ['Share', 1, 'r']], order.map(c => [c, cats[c].n, money(cats[c].a), t.spent ? (cats[c].a / t.spent * 100).toFixed(1) + '%' : '—']), ['Total', pays.length, money(t.spent), t.spent ? '100%' : '—']);
   heading('3. Payments');
-  table([['No.', 0.45], ['Date', 1.3], ['Paid to', 1.55], ['Details', 2.5], ['Invoice no.', 1.35], ['Amount', 1.35, 'r']], pays.map((e, i) => [i + 1, isoToDmy(e.date), e.party || '', String(e.details || '').replace(/\n+/g, '; ') + (e.category ? ' (' + baCat(e.category) + ')' : ''), e.invoice === 'Pending' ? 'Pending' : (e.remarks || e.invoice || ''), money(e.amount)]), ['', '', '', 'Total spent', '', money(t.spent)]);
+  table([['No.', 0.4], ['Date', 1.5], ['Paid to', 1.4], ['Details', 2.1], ['Invoice no.', 1.3], ['Amount', 1.75, 'r']], pays.map((e, i) => [i + 1, isoToDmy(e.date), e.party || '', String(e.details || '').replace(/\n+/g, '; ') + (e.category ? ' (' + baCat(e.category) + ')' : ''), e.invoice === 'Pending' ? 'Pending' : (e.remarks || e.invoice || ''), money(e.amount)]), ['', '', '', 'Total spent', '', money(t.spent)]);
   if(t.pending){ need(LH + 4); pg.text(L, y, t.pending + ' payment' + (t.pending === 1 ? ' is' : 's are') + ' still without an invoice.', { italic:true, size:FS }); y += LH + 4; }
   y += 18; need(66);
   const half = (R - L) / 2, sig = (x, label, name) => { pg.text(x, y, label, { bold:true, size:FS }); pg.line(x, y + 30, x + half - 30, y + 30, K, 0.6); pg.text(x, y + 43, name || 'Name:', { size:FS }); pg.text(x, y + 56, 'Date:', { size:FS }); };
   sig(L, 'Prepared by', r.holder); sig(L + half, 'Verified by (Finance)', ''); y += 80;
   return lhPdfFinish(pages, 'Expenditure Report ' + (r.no || ''), R, {});
 }
+// one place for the report: download it to print and sign, then attach the signed copy
+function openBaExp(id){
+  const r = baById(id); if(!r) return; const sr = r.signedReport && r.signedReport.fileId ? r.signedReport : null, ed = baCanEdit(r);
+  const step = (n, title, body) => `<div class="flex gap-3.5 rounded-lg border border-slate-200 p-4 mb-3"><span class="w-7 h-7 rounded-full bg-brand-600 text-white text-sm font-bold inline-flex items-center justify-center shrink-0">${n}</span><div class="flex-1 min-w-0"><div class="text-sm font-bold text-slate-900 mb-1">${title}</div>${body}</div></div>`;
+  openModal('Expenditure report — ' + (r.no || ''),
+    step(1, 'Download the report', `<p class="text-xs text-slate-500 mb-2.5">A PDF on the letterhead: summary, spending by budget category and every payment, with space to sign.</p>${vBtnPrimary('⬇ Download report', `baExpDownload('${id}', this)`)}`) +
+    step(2, 'Submit the signed report', `<p class="text-xs text-slate-500 mb-2.5">${sr ? `Attached by ${esc(sr.by || '—')}${sr.at ? ' on ' + esc(fmtDT(sr.at)) : ''}.` : 'Print it, have it signed, then attach the scan or a photo.'}</p><div class="flex items-center gap-3 flex-wrap">${ed ? `<label class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">${sr ? 'Replace signed report' : '📎 Attach signed report'}<input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baSignedChosen(this, '${id}', true)"></label>` : ''}${sr ? `<button onclick="openBaSigned('${id}')" class="text-sm font-semibold text-brand-600 hover:underline">View signed report</button>` : ''}</div><div id="ba-signed-info" class="text-xs text-slate-500 mt-2"></div>`));
+}
 // the expenditure report, once printed and signed, is scanned and kept with the advance
-async function baSignedChosen(input, id){
+async function baSignedChosen(input, id, inPopup){
   const r = baById(id), files = [...(input.files || [])]; input.value = ''; if(!r || !files.length || !baCanEdit(r)) return;
-  toast('Reading the signed report…');
+  const info = document.getElementById('ba-signed-info'); if(info) info.textContent = 'Uploading…'; else toast('Reading the signed report…');
   try{
     const att = await pcPrepareAttachment(files), fid = uid(), old = r.signedReport && r.signedReport.fileId;
     await pcFileSave(fid, { id:fid, voucher:(r.no || '') + ' signed expenditure report', name:att.name, pages:att.pages, at:Date.now() });
     await vehSave('businessAdvances', { id, signedReport:{ fileId:fid, fileName:att.name, filePages:att.pages.length, at:Date.now(), by:authUser ? authUser.name : '' } });
-    if(old) pcFileDelete(old); rerenderMain(); toast('Signed expenditure report attached.');
+    if(old) pcFileDelete(old); rerenderMain(); toast('Signed expenditure report attached.'); if(inPopup) openBaExp(id);
   }catch(e){ toast('That file could not be attached — try a PDF or a photo.', true); }
 }
 async function openBaSigned(id){

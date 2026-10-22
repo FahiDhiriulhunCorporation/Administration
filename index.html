@@ -1916,7 +1916,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.278';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.280';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -11487,34 +11487,68 @@ function wr2Auto(r){
   const myTasks = tasks.filter(t => !dept || (t.assignees || []).some(a => { const d = deptOf(a); return !d || d.startsWith(dept.split(' ')[0]) || dept.startsWith(d.split(' ')[0]); }));
   const T = myTasks.length ? myTasks : tasks;
   const act = [];
-  T.filter(t => t.status === 'Completed' && inW(t.completedOn)).forEach(t => act.push('Completed ' + (t.no ? t.no + ' — ' : '') + t.title));
-  const cnt = (n, one, many) => { if(n) act.push(n + ' ' + (n === 1 ? one : many)); };
-  try{ cnt(state.pettyCash.filter(x => sameDept(x.department) && inW(x.processedDate || (x.processedAt && localDateStr(new Date(x.processedAt))))).length, 'petty cash request processed', 'petty cash requests processed'); }catch(e){}
-  try{ cnt(state.purchaseRequisitions.filter(p => inW(prRequisitionDate(p))).length, 'purchase requisition raised', 'purchase requisitions raised'); }catch(e){}
-  try{ cnt(state.travelRequests.filter(x => inW(x.formDate || (x.createdAt && localDateStr(new Date(x.createdAt))))).length, 'travel request handled', 'travel requests handled'); }catch(e){}
-  try{ cnt(state.documents.filter(d => sameDept(d.department) && inW(d.date)).length, 'document registered (letters, memos, agreements …)', 'documents registered (letters, memos, agreements …)'); }catch(e){}
-  try{ cnt(state.fuelRecords.filter(x => inW(x.date)).length, 'vehicle fill-up recorded', 'vehicle fill-ups recorded'); }catch(e){}
-  try{ cnt(state.complaints.filter(c => /resolved|closed/i.test(c.status || '') && inW(c.resolvedOn || c.updatedOn || c.date)).length, 'complaint resolved', 'complaints resolved'); }catch(e){}
+  // each line names the work done: what, how many, totals, and the records themselves
+  const money = n => 'MVR ' + pcMoneyPlain(pcRound(n)), list = (arr, n) => arr.slice(0, n || 4).join('; ') + (arr.length > (n || 4) ? `; and ${arr.length - (n || 4)} more` : '');
+  const dShort = d => d ? pcOrdinalDate(d).replace(/ \d{4}$/, '') : '';
+  const done = T.filter(t => t.status === 'Completed' && inW(t.completedOn));
+  if(done.length) act.push(`Completed ${done.length} task${done.length === 1 ? '' : 's'}: ${list(done.map(t => (t.no ? t.no + ' — ' : '') + t.title + (t.completedOn ? ' (' + dShort(t.completedOn) + ')' : '')), 5)}`);
+  const moved = T.filter(t => t.status !== 'Completed' && (t.updates || []).some(u => u.at && inW(localDateStr(new Date(u.at)))));
+  if(moved.length) act.push(`Progressed ${moved.length} ongoing task${moved.length === 1 ? '' : 's'}: ${list(moved.map(t => t.title + ' (' + tkProg(t) + '%)'))}`);
+  try{ const pc = state.pettyCash.filter(x => sameDept(x.department) && inW(x.processedDate || (x.processedAt && localDateStr(new Date(x.processedAt)))));
+    if(pc.length){ const tot = pc.reduce((t, x) => t + vNum(x.processedAmount != null ? x.processedAmount : pcTotal(x)), 0); act.push(`Processed ${pc.length} petty cash request${pc.length === 1 ? '' : 's'} totalling ${money(tot)}: ${list(pc.map(x => x.number + ' — ' + (x.purpose || pcItems(x).map(i => i.name).join(', ') || '—') + ' (' + money(x.processedAmount != null ? x.processedAmount : pcTotal(x)) + ')'))}`); }
+    const inv = state.pettyCash.filter(x => sameDept(x.department) && pcInvoices(x).some(i => inW(i.date)));
+    if(inv.length) act.push(`Settled ${inv.length} petty cash voucher${inv.length === 1 ? '' : 's'} with invoices: ${list(inv.map(x => x.number + ' — ' + pcInvoices(x).map(i => i.supplier).filter(Boolean).join(', ')))}`);
+    const stm = []; pcFundList().forEach(f => pcStatements(f.id).forEach(st => { const rec = pcStmtRec(st.no) || {}; if(inW(rec.closedOn || (rec.closedAt && localDateStr(new Date(rec.closedAt))))) stm.push(st.no + ' (' + f.name + ')'); }));
+    if(stm.length) act.push(`Closed petty cash statement${stm.length === 1 ? '' : 's'} ${list(stm)}`); }catch(e){}
+  try{ const pr = state.purchaseRequisitions.filter(p => inW(prRequisitionDate(p)));
+    if(pr.length) act.push(`Raised ${pr.length} purchase requisition${pr.length === 1 ? '' : 's'}: ${list(pr.map(p => (p.prNumber || 'PR') + ' — ' + (prFirstItem(p) || p.title || '') + (vNum(p.totalCost) ? ' (' + money(p.totalCost) + ')' : '')))}`); }catch(e){}
+  try{ const tr = state.travelRequests.filter(x => inW(x.formDate || (x.createdAt && localDateStr(new Date(x.createdAt)))));
+    if(tr.length) act.push(`Handled ${tr.length} travel request${tr.length === 1 ? '' : 's'}: ${list(tr.map(x => (x.destination || '—') + ' (' + [x.fromDate ? dShort(x.fromDate) + (x.toDate && x.toDate !== x.fromDate ? '–' + dShort(x.toDate) : '') : '', trParts(x).length ? trParts(x).length + ' staff' : '', trDsaOn(x) && x.dsa.memoNo ? 'DSA memo ' + x.dsa.memoNo : ''].filter(Boolean).join(', ') + ')'))}`); }catch(e){}
+  try{ const docs = state.documents.filter(d => sameDept(d.department) && inW(d.date));
+    if(docs.length){ const by = {}; docs.forEach(d => { const l = (docType(d.type) || {}).label || d.type; (by[l] = by[l] || []).push(d); });
+      act.push(`Registered ${docs.length} document${docs.length === 1 ? '' : 's'} — ${Object.entries(by).map(([l, ds]) => ds.length + ' ' + l.toLowerCase() + (ds.length === 1 ? '' : 's')).join(', ')}: ${list(docs.map(d => (d.refNo ? d.refNo + ' ' : '') + '“' + (d.title || '') + '”'))}`); } }catch(e){}
+  try{ const fr = state.fuelRecords.filter(x => inW(x.date));
+    if(fr.length){ const L = fr.reduce((t, x) => t + vNum(x.litres), 0), C = fr.reduce((t, x) => t + vNum(x.total), 0), byV = {}; fr.forEach(x => { const v = vehById(x.vehicleId), k = v ? v.plate : 'Other'; byV[k] = (byV[k] || 0) + 1; });
+      act.push(`Recorded ${fr.length} vehicle fill-up${fr.length === 1 ? '' : 's'} — ${fmtNum(Math.round(L))} litres, ${money(C)} across ${Object.keys(byV).length} vehicle${Object.keys(byV).length === 1 ? '' : 's'} (${list(Object.entries(byV).map(([k, n]) => k + (n > 1 ? ' ×' + n : '')), 6)})`); } }catch(e){}
+  try{ const sv = state.serviceRecords.filter(x => inW(x.date));
+    if(sv.length) act.push(`Vehicle servicing / issues: ${list(sv.map(x => ((vehById(x.vehicleId) || {}).plate || '') + ' — ' + (x.kind === 'incident' ? (x.issue || 'issue') + (x.status ? ' (' + x.status + ')' : '') : (x.serviceType || x.type || 'service'))))}`); }catch(e){}
+  try{ const vl = state.vehicleLogs.filter(l => inW(l.outDate)); if(vl.length) act.push(`Logged ${vl.length} vehicle trip${vl.length === 1 ? '' : 's'} in the vehicle log`); }catch(e){}
+  try{ const mv = (state.movements || []).filter(m => inW(m.date)), outs = mv.filter(m => m.type === 'out'), ins = mv.filter(m => m.type === 'in');
+    if(outs.length || ins.length) act.push(`Stock: ${[ins.length ? ins.length + ' receipt' + (ins.length === 1 ? '' : 's') : '', outs.length ? outs.length + ' issue' + (outs.length === 1 ? '' : 's') + ' to staff / departments' : ''].filter(Boolean).join(' and ')}`); }catch(e){}
+  try{ const cp = state.complaints.filter(c => /resolved|closed/i.test(c.status || '') && inW(c.resolvedOn || c.updatedOn || c.date)); if(cp.length) act.push(`Resolved ${cp.length} complaint${cp.length === 1 ? '' : 's'}: ${list(cp.map(c => String(c.title || c.complaint || '').split('\n')[0]))}`);
+    const cn = state.complaints.filter(c => inW(c.date) && !/resolved|closed/i.test(c.status || '')); if(cn.length) act.push(`Received ${cn.length} new complaint${cn.length === 1 ? '' : 's'}: ${list(cn.map(c => String(c.title || c.complaint || '').split('\n')[0]))}`); }catch(e){}
+  try{ const ho = state.handovers.filter(h => inW(h.date)); if(ho.length) act.push(`Completed ${ho.length} handover${ho.length === 1 ? '' : 's'}${ho.some(h => h.title) ? ': ' + list(ho.map(h => h.title).filter(Boolean)) : ''}`); }catch(e){}
+  try{ const ub = state.utilityBills.filter(b => inW(b.billDate || b.date)); if(ub.length) act.push(`Recorded ${ub.length} utility bill${ub.length === 1 ? '' : 's'} (${money(ub.reduce((t, b) => t + vNum(b.amount), 0))})`); }catch(e){}
   const stMap = s => s === 'Completed' ? 'Completed' : s === 'Not started' ? 'Not Started' : 'Ongoing';
   const active = T.filter(t => (t.start || '') <= end && (t.status !== 'Completed' || (t.completedOn || '') >= start));
   const objectives = active.map(t => ({ activity:(t.no ? t.no + ' — ' : '') + t.title, progress:tkProg(t) + '%' + (t.status === 'Completed' ? ' — completed ' + pcOrdinalDate(t.completedOn || t.due) : t.due ? ' — due ' + pcOrdinalDate(t.due) : ''), status:stMap(t.status) }));
   const pending = [];
   T.filter(t => t.status !== 'Completed' && (t.start || '') <= end).forEach(t => pending.push({ matter:(t.no ? t.no + ' — ' : '') + t.title, status:tkOverdue(t) ? 'Overdue' : t.status === 'On hold' ? 'On hold' : 'In progress', expected:t.due ? pcOrdinalDate(t.due) : '' }));
   try{ state.purchaseRequisitions.filter(p => (p.status || 'open') === 'pending_approval').forEach(p => pending.push({ matter:'PR ' + (p.prNumber || '') + ' — ' + (prFirstItem(p) || p.title || ''), status:'Pending approval', expected:'' })); }catch(e){}
-  try{ state.complaints.filter(c => !/resolved|closed/i.test(c.status || 'Open')).forEach(c => pending.push({ matter:'Complaint — ' + String(c.title || c.complaint || '').split('\n')[0], status:c.status || 'Open', expected:'' })); }catch(e){}
   try{ state.travelRequests.filter(x => x.status === 'Pending').forEach(x => pending.push({ matter:'Travel to ' + (x.destination || '—') + (x.formNumber ? ' (' + x.formNumber + ')' : ''), status:'Pending approval', expected:x.fromDate ? pcOrdinalDate(x.fromDate) : '' })); }catch(e){}
   const next = clIsoAdd(end, 7), priorities = T.filter(t => t.status !== 'Completed' && t.due && t.due <= next).sort((a, b) => String(a.due).localeCompare(String(b.due))).map(t => (t.due < clIsoAdd(end, 1) ? 'Clear overdue: ' : 'Complete ') + t.title + ' (due ' + pcOrdinalDate(t.due) + ')');
-  return { activities:act.join('\n'), objectives, pending:pending.slice(0, 15), priorities:priorities.join('\n') };
+  // 4: the Admin Complaints still open at the end of the week — the issue, its impact, and the support or action needed
+  let concerns = [];
+  try{ concerns = state.complaints.filter(c => (c.date || '') <= end && !cpDone(c.status)).sort((a, b) => String(a.date).localeCompare(String(b.date))).map(c => {
+    const days = c.date ? Math.max(0, Math.round((new Date(end + 'T00:00:00') - new Date(c.date + 'T00:00:00')) / 864e5)) : 0;
+    const sug = (c.processing || []).filter(x => x && x.text), last = sug[sug.length - 1];
+    return { issue:(c.no ? c.no + ' — ' : '') + (c.title || 'Complaint') + (c.location ? ' (' + c.location + ')' : ''),
+      impact:[String(c.description || '').trim().slice(0, 240), 'Open for ' + days + ' day' + (days === 1 ? '' : 's') + (c.raisedBy || c.department ? ' — raised by ' + [c.raisedBy, c.department].filter(Boolean).join(', ') : '') + (c.status && !/^open$/i.test(c.status) ? ' · ' + c.status : '')].filter(Boolean).join('\n'),
+      support:last ? last.text + (last.challenge ? '\nChallenge: ' + last.challenge : '') + (sug.length > 1 ? '\n(' + sug.length + ' solutions suggested)' : '') : 'Action needed — no solution suggested yet; assign and follow up.' };
+  }); }catch(e){}
+  return { activities:act.join('\n'), objectives, pending:pending.slice(0, 15), priorities:priorities.join('\n'), concerns };
 }
 // the editor
 function wr2Row(key, x){
-  const inp = `${VEH_FIELD} !px-2 !py-1.5 text-[13px]`, area = (f, v) => `<textarea data-f="${f}" rows="${Math.max(1, String(v || '').split('\n').length)}" oninput="this.rows = Math.max(1, this.value.split('\\n').length)" class="wr2-in ${inp}">${esc(v || '')}</textarea>`;
+  const inp = `${VEH_FIELD} !px-2 !py-1.5 text-[13px]`, area = (f, v) => `<textarea data-f="${f}" rows="${Math.max(1, String(v || '').split('\n').length)}" oninput="this.style.height = 'auto'; this.style.height = (this.scrollHeight + 2) + 'px'" class="wr2-in ${inp}" style="resize:vertical;overflow:hidden">${esc(v || '')}</textarea>`;
   const cells = key === 'objectives' ? [area('activity', x.activity), area('progress', x.progress), `<select data-f="status" class="wr2-in ${inp} bg-white">${WR2_STATUS.concat(x.status && !WR2_STATUS.includes(x.status) ? [x.status] : []).map(s => `<option ${s === (x.status || 'Ongoing') ? 'selected' : ''}>${s}</option>`).join('')}</select>`]
     : key === 'pending' ? [area('matter', x.matter), `<input data-f="status" value="${esc(x.status || '')}" class="wr2-in ${inp}" placeholder="e.g. Awaiting approval">`, `<input data-f="expected" value="${esc(x.expected || '')}" class="wr2-in ${inp}" placeholder="e.g. 30th October 2026">`]
     : [area('issue', x.issue), area('impact', x.impact), area('support', x.support)];
   return `<tr class="wr2-row align-top border-t border-slate-100"><td class="p-1 text-xs text-slate-400 pt-3 w-6 wr2-no"></td>${cells.map(c => `<td class="p-1">${c}</td>`).join('')}<td class="p-1 w-8 text-center"><button type="button" onclick="this.closest('tr').remove(); wr2Renum()" class="text-slate-400 hover:text-rose-600 text-lg leading-none" title="Remove">×</button></td></tr>`;
 }
-function wr2Renum(){ ['objectives', 'pending', 'concerns'].forEach(k => document.querySelectorAll('#wr2-' + k + ' .wr2-no').forEach((td, i) => { td.textContent = i + 1; })); }
+document.addEventListener('input', e => { try{ if(e.target.closest && e.target.closest('#wr2-concerns') && e.target.value.trim()){ const n = document.getElementById('wr2-nil'); if(n) n.checked = false; } }catch(x){} });
+function wr2Fit(){ document.querySelectorAll('#wr2-form textarea.wr2-in').forEach(t => { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }); }
+function wr2Renum(){ setTimeout(wr2Fit, 0); ['objectives', 'pending', 'concerns'].forEach(k => document.querySelectorAll('#wr2-' + k + ' .wr2-no').forEach((td, i) => { td.textContent = i + 1; })); }
 function wr2AddRow(key){ const tb = document.querySelector('#wr2-' + key + ' tbody'); tb.insertAdjacentHTML('beforeend', wr2Row(key, {})); wr2Renum(); const i = tb.lastElementChild.querySelector('.wr2-in'); if(i) i.focus(); }
 function wr2Editor(r){
   const head = (cols) => `<thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="w-6">No.</th>${cols.map(c => `<th class="px-2 py-2">${c}</th>`).join('')}<th></th></tr></thead>`;
@@ -11534,7 +11568,7 @@ function wr2Editor(r){
     ${sec(1, 'Main Activities This Week', fill('activities'), help('A summary of the main activities, tasks and key achievements completed during the reporting period — one per line (each becomes a bullet).') + ta('wr2-activities', r.activities, '• Processed …\n• Completed …', 5))}
     ${sec(2, 'Progress Toward Key Objectives', fill('objectives') + add('objectives'), help('Progress made toward departmental targets, ongoing projects and key objectives.') + tbl('objectives', ['Key objective / activity', 'Progress / achievement', 'Current status'], (r.objectives || []).length ? r.objectives : [{}, {}, {}]))}
     ${sec(3, 'Ongoing Activities / Pending Matters', fill('pending') + add('pending'), help('Activities still in progress, pending approvals, or awaiting action from other departments or external parties.') + tbl('pending', ['Activity / pending matter', 'Current status', 'Expected completion date'], (r.pending || []).length ? r.pending : [{}, {}, {}]))}
-    ${sec(4, 'Significant Concerns / Support Required', add('concerns'), help('Challenges, risks, delays, resource constraints, or decisions needing management attention or support from other divisions.') + `<label class="flex items-center gap-2 text-sm text-slate-700 mb-2"><input type="checkbox" id="wr2-nil" ${nil ? 'checked' : ''}> Nil — no significant concerns or support required</label>` + tbl('concerns', ['Concern / issue', 'Impact', 'Support / action required'], (r.concerns || []).length ? r.concerns : []))}
+    ${sec(4, 'Significant Concerns / Support Required', `<button onclick="wr2Fill('concerns')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">✨ Fill from Admin Complaints</button>` + add('concerns'), help('Challenges, risks, delays, resource constraints, or decisions needing management attention or support from other divisions.') + `<label class="flex items-center gap-2 text-sm text-slate-700 mb-2"><input type="checkbox" id="wr2-nil" ${nil ? 'checked' : ''}> Nil — no significant concerns or support required</label>` + tbl('concerns', ['Concern / issue', 'Impact', 'Support / action required'], (r.concerns || []).length ? r.concerns : []))}
     ${sec(5, 'Priorities for Next Week', fill('priorities'), help('Key activities, deliverables and targets planned for the next reporting period — one per line.') + ta('wr2-priorities', r.priorities, '• …', 4))}
     ${vPanel('Sign-off', '', `<div class="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3.5">${f('wr2-subby', 'Submitted by', r.submittedBy || r.preparedBy)}${f('wr2-desig', 'Designation', r.designation || ((sdAll().find(p => p.name === (r.submittedBy || r.preparedBy)) || {}).designation || ''))}${f('wr2-sdate', 'Date', r.signDate || vToday(), 'date')}</div>`)}
     </div>
@@ -11543,11 +11577,12 @@ function wr2Editor(r){
 function wr2Fill(k){
   const r = wrById(vehUi.wrId); if(!r) return; const a = wr2Auto(Object.assign({}, r, { department:(document.getElementById('wr2-dept') || {}).value || r.department }));
   const doText = (id, v) => { const el = document.getElementById(id); if(!el) return; if(el.value.trim() && !confirm('Replace what is typed with a draft from the app?')) return; el.value = wr2Lines(v).map(x => '• ' + x).join('\n'); };
-  const doTbl = (key, rows) => { const tb = document.querySelector('#wr2-' + key + ' tbody'); if(!tb) return; const typed = [...tb.querySelectorAll('.wr2-in')].some(i => i.tagName !== 'SELECT' && i.value.trim()); if(typed && !confirm('Replace the rows with what the app has?')) return; tb.innerHTML = (rows.length ? rows : [{}]).map(x => wr2Row(key, x)).join(''); wr2Renum(); };
+  const doTbl = (key, rows) => { const tb = document.querySelector('#wr2-' + key + ' tbody'); if(!tb) return; const typed = [...tb.querySelectorAll('.wr2-in')].some(i => i.tagName !== 'SELECT' && i.value.trim()); if(typed && !confirm('Replace the rows with what the app has?')) return; tb.innerHTML = (rows.length ? rows : key === 'concerns' ? [] : [{}]).map(x => wr2Row(key, x)).join(''); wr2Renum(); };
   if(k === 'activities' || k === 'all') doText('wr2-activities', a.activities);
   if(k === 'objectives' || k === 'all') doTbl('objectives', a.objectives);
   if(k === 'pending' || k === 'all') doTbl('pending', a.pending);
   if(k === 'priorities' || k === 'all') doText('wr2-priorities', a.priorities);
+  if(k === 'concerns' || k === 'all'){ doTbl('concerns', a.concerns); const nil = document.getElementById('wr2-nil'); if(nil) nil.checked = !a.concerns.length; if(k === 'concerns' && !a.concerns.length) toast('No open Admin Complaints for this week — Nil is ticked.'); }
   toast('Drafted from the app — check it and save.');
 }
 function wr2Collect(){
@@ -11655,7 +11690,7 @@ async function saveWrNew(){
   const prev = state.weeklyReports.filter(r => String(r.department).toLowerCase() === o.department.toLowerCase() && r.weekEnd < end).sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)))[0];
   if(o.format !== 'detail'){
     const base = { format:'dept', department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '', approvedBy:(prev && prev.approvedBy) || '', submissionDate:vToday(), submittedBy:authUser ? authUser.name : '', designation:(prev && prev.designation) || ((sdAll().find(p => authUser && p.name === authUser.name) || {}).designation || ''), signDate:vToday(), concerns:[] };
-    const a = wr2Auto(base); Object.assign(base, { activities:wr2Lines(a.activities).map(x => '• ' + x).join('\n'), objectives:a.objectives, pending:a.pending, priorities:wr2Lines(a.priorities).map(x => '• ' + x).join('\n') });
+    const a = wr2Auto(base); Object.assign(base, { activities:wr2Lines(a.activities).map(x => '• ' + x).join('\n'), objectives:a.objectives, pending:a.pending, priorities:wr2Lines(a.priorities).map(x => '• ' + x).join('\n'), concerns:a.concerns, concernsNil:!a.concerns.length });
     closeModal(); vehUi.wrId = await vehSave('weeklyReports', base); rerenderMain(); toast('Weekly departmental update started — drafted from the app; check and edit each section.'); return;
   }
   const rec = { department:o.department, weekStart:start, weekEnd:end, weekNo:wrIsoWeek(end), preparedBy:authUser ? authUser.name : '',

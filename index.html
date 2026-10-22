@@ -160,6 +160,9 @@ function setThemeMode(mode){
   applyTheme(mode);
   refreshAppearanceModal();
 }
+// the ✦ themes (Tron, Cyberpunk …) are hidden until someone types "tronxcyberpunk" (an easter egg); remembered per person
+const THEMES_KEY = 'fdc_inventory_themes_unlocked';
+function themesUnlocked(){ try{ if(localStorage.getItem(THEMES_KEY) === '1') return true; }catch(e){} try{ return !!(typeof authUser !== 'undefined' && authUser && typeof anyaML !== 'undefined' && anyaML.data().themes); }catch(e){ return false; } }
 function appearanceBodyHtml(){
   const mode = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   const current = getColorSchemeId();
@@ -167,7 +170,8 @@ function appearanceBodyHtml(){
     <button type="button" onclick="setThemeMode('${m}')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${mode===m ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}">${icon}${label}</button>`;
   const sun = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="3.2"/><path stroke-linecap="round" d="M10 2.5v1.8M10 15.7v1.8M17.5 10h-1.8M4.3 10H2.5M15.3 4.7l-1.27 1.27M5.97 14.03L4.7 15.3M15.3 15.3l-1.27-1.27M5.97 5.97L4.7 4.7"/></svg>';
   const moon = '<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 10.8A7.5 7.5 0 0 1 9.2 3 7.5 7.5 0 1 0 17 10.8z"/></svg>';
-  const cards = COLOR_SCHEMES.map(s => {
+  const unlocked = themesUnlocked();
+  const cards = COLOR_SCHEMES.filter(s => !s.theme || unlocked || s.id === current).map(s => {
     const sel = s.id === current;
     return `
     <button type="button" onclick="setColorScheme('${s.id}')" aria-pressed="${sel}" class="text-left rounded-lg border ${sel ? 'border-brand-600 ring-2 ring-brand-500' : 'border-slate-200 hover:border-brand-400'} p-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
@@ -183,7 +187,7 @@ function appearanceBodyHtml(){
     <div class="flex gap-1 border border-slate-200 rounded-lg p-1 bg-slate-50 mb-6">${modeBtn('light','Light',sun)}${modeBtn('dark','Dark',moon)}</div>
     <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Colour scheme</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${cards}</div>
-    <p class="text-xs text-slate-500 mt-4">Changes the accent colour (buttons, links, highlights) and the sidebar. The ✦ themes also change the look — neon glow, fonts and background — and switch to dark mode. Saved on this device only.</p>`;
+    <p class="text-xs text-slate-500 mt-4">Changes the accent colour (buttons, links, highlights) and the sidebar.${unlocked ? ' The ✦ themes also change the look — neon glow, fonts and background — and switch to dark mode.' : ''} Saved on this device only.</p>`;
 }
 function openAppearanceModal(){
   if(typeof toggleSidebar === 'function') toggleSidebar(false);
@@ -1910,7 +1914,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.271';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.272';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7281,6 +7285,7 @@ async function tkSaveUpdate(id){
   10. type 42 in a search box → the answer to everything
   11. type "niyaz" on the Dashboard → a quote
   12. type "awtgg" on the Dashboard → a question… and "waaawb" → the answer
+  13. type "tronxcyberpunk" anywhere → unlocks the hidden Tron and Cyberpunk themes in Appearance
 ===================================================================== */
 const EGG_CALM = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function eggCanvas(z){
@@ -7365,7 +7370,7 @@ document.addEventListener('keydown', e => {
   const k = String(e.key || '').toLowerCase();
   eggKeys = eggKeys.concat(k).slice(-10);
   if(eggKeys.join() === EGG_KONAMI.join()){ eggKeys = []; const on = document.documentElement.classList.toggle('egg-retro'); toast(on ? 'RETRO MODE ENGAGED. Enter the code again (or reload) to return.' : 'Back to normal.'); return; }
-  if(k.length === 1 && /[a-z]/.test(k)){ eggTyped = (eggTyped + k).slice(-12); if(ui.tab === 'dashboard'){ if(eggTyped.endsWith('monsoon')){ eggTyped = ''; eggMonsoon(); } else if(eggTyped.endsWith('niyaz')){ eggTyped = ''; eggQuote(); } else if(eggTyped.endsWith('waaawb')){ eggTyped = ''; eggCode('We.Are.And.Always.Will.Be', ''); } else if(eggTyped.endsWith('awtgg')){ eggTyped = ''; eggCode('Are.We.The.Good.Guys?', '(WAAAWB)'); } } }
+  if(k.length === 1 && /[a-z]/.test(k)){ eggTyped = (eggTyped + k).slice(-20); if(eggTyped.endsWith('tronxcyberpunk')){ eggTyped = ''; eggUnlockThemes(); return; } if(ui.tab === 'dashboard'){ if(eggTyped.endsWith('monsoon')){ eggTyped = ''; eggMonsoon(); } else if(eggTyped.endsWith('niyaz')){ eggTyped = ''; eggQuote(); } else if(eggTyped.endsWith('waaawb')){ eggTyped = ''; eggCode('We.Are.And.Always.Will.Be', ''); } else if(eggTyped.endsWith('awtgg')){ eggTyped = ''; eggCode('Are.We.The.Good.Guys?', '(WAAAWB)'); } } }
 });
 function eggMonsoon(){
   if(EGG_CALM() || document.getElementById('egg-rain')) return;
@@ -7506,6 +7511,13 @@ function eggQuote(){
 }
 
 /* type "awtgg" → the question, "waaawb" → the answer: typed out letter by letter, terminal style */
+// type "tronxcyberpunk" anywhere → the Tron and Cyberpunk themes appear in Appearance
+function eggUnlockThemes(){
+  const was = themesUnlocked();
+  try{ localStorage.setItem(THEMES_KEY, '1'); }catch(e){} try{ if(authUser){ anyaML.data().themes = true; anyaML.save(); } }catch(e){}
+  eggCode(was ? 'THEMES.ALREADY.UNLOCKED' : 'ACCESS.GRANTED', 'TRON ✦ · TRON HUD ✦ · CYBERPUNK ✦ · CYBERPUNK 2027 ✦');
+  setTimeout(() => { const q = document.getElementById('egg-quote'); if(q) q.click(); openAppearanceModal(); }, 4200);
+}
 function eggCode(line, sub){
   const old = document.getElementById('egg-quote'); if(old) old.remove();
   const d = document.createElement('div'); d.id = 'egg-quote';
@@ -7848,8 +7860,8 @@ const ANYA_GUIDES = [
   { id:'search', title:'Finding anything', page:null, keys:['search','find','where is','look for','look up'],
     steps:['Press the 🔍 icon at the top of the menu (or **Ctrl+K**) and type a name, plate, item, staff or request.', 'Or just ask me: "find Ahmed" or "find P1234".'],
     acts:[['Open search', 'gsOpen()']] },
-  { id:'theme', title:'Appearance & themes', page:null, keys:['theme','dark mode','light mode','colour','color','cyberpunk','tron','appearance'],
-    steps:['Press the 🎨 palette icon at the top of the menu.', 'Choose light or dark and a colour scheme — **Cyberpunk ✦** and **Tron ✦** are full neon themes.', 'Or ask me: "tron theme", "cyberpunk theme", "dark mode".'],
+  { id:'theme', title:'Appearance & colours', page:null, keys:['theme','dark mode','light mode','colour','color','colour scheme','appearance'],
+    steps:['Press the 🎨 palette icon at the top of the menu.', 'Choose light or dark mode and a colour scheme for the buttons and sidebar.', 'Or ask me: "dark mode" or "light mode".'],
     acts:[['Open appearance', 'openAppearanceModal()']] },
 ];
 const ANYA_PAGE_GUIDE = { 'docs-agreement':'agreement', 'docs-letter':'letter', 'docs-memo':'memo', 'petty-cash':'pc-new', 'petty-statement':'pc-stmt', 'petty-count':'pc-count', 'business-advance':'ba', 'purchase-requisitions':'pr', 'travel-local':'travel', 'travel-foreign':'travel', 'fueling':'fuel', 'vehicle-log':'vlog', 'servicing':'service', 'cleaning':'cleaning', 'leave-plan':'leave', 'movements':'stock', 'handovers':'handover', 'weekly-report':'weekly', 'tasks':'tasks', 'complaints':'complaint' };
@@ -7895,7 +7907,7 @@ function anyaIntentLabel(i){
   if(k === 'm') return (v === 'dark' ? 'Dark' : 'Light') + ' mode';
   return '';
 }
-const anyaIntentOk = i => { const k = i.slice(0, 1), v = i.slice(2); if(k === 'p') return anyaCanSee(v); if(k === 'a'){ const a = anyaActInfo(v); return !!a && anyaCanSee(a.page); } return !!anyaIntentLabel(i); };
+const anyaIntentOk = i => { const k = i.slice(0, 1), v = i.slice(2); if(k === 't' && !themesUnlocked()) return false; if(k === 'p') return anyaCanSee(v); if(k === 'a'){ const a = anyaActInfo(v); return !!a && anyaCanSee(a.page); } return !!anyaIntentLabel(i); };
 
 /* ---------- learning: a naive Bayes text classifier + personal phrase memory + usage habits, per user ---------- */
 const ANYA_STOP = new Set('a an the to of for and or i im me my we our you your it is are be do does can could would please pls want need like how what whats where wheres show me this that on in at with from new add create start make open go get some any'.split(' '));
@@ -9043,6 +9055,7 @@ function anyaRecordAnswer(t){
 }
 function anyaExec(i, q, chosen){
   const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
+  if(k === 't' && !themesUnlocked()){ anyaSay('I can switch between light and dark mode — or pick a colour scheme in Appearance.', [['Dark mode', () => anyaExec('m:dark', '')], ['Open appearance', 'openAppearanceModal()']]); anyaDraw(); return; }
   if(!anyaIntentOk(i)){ anyaSay('You don\'t have access to that with your role.'); anyaDraw(); return; }
   if(k !== 's' || !/^(help|learned|me)$/.test(v)) anyaML.used(i, ui.tab);
   if(k === 'g'){ anyaGuide(ANYA_GUIDES.find(x => x.id === v), o); }
@@ -9064,7 +9077,7 @@ function anyaExec(i, q, chosen){
     else if(v === 'trno'){ let no = ''; try{ no = trNextFormNo(); }catch(e){} anyaSay(no ? `The next travel request number is **${no}**.` : 'I could not work out the next number.', anyaCanSee('travel-foreign') ? [['+ New travel request', "goTo('travel-foreign'); openTravelForm('', 'foreign')"]] : [], '', o); }
     else if(v === 'me'){ anyaSay(`You're signed in as **${(authUser && (authUser.name || authUser.email)) || 'unknown'}** (${(authUser && authUser.role) || 'user'}).`); }
     else if(v === 'help'){
-      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — say \"change your voice\" (or hold 🔈) to pick my voice; tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Theme** — "tron hud theme", "cyberpunk 2027", "dark mode"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
+      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — say \"change your voice\" (or hold 🔈) to pick my voice; tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Look** — \"dark mode\", \"light mode\"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
     }
     else if(v === 'learned'){
       const d = anyaML.data(), taught = d.ex.filter(e => e.w >= 2 && anyaIntentOk(e.i)).sort((a, b) => b.w - a.w), mine = anyaML.top(ui.tab, 6);

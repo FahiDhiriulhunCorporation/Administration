@@ -665,6 +665,8 @@ function refreshAppearanceModal(){
   html[data-theme="dark"] .border-emerald-200, html[data-theme="dark"] .border-emerald-300{ border-color: rgba(16,185,129,.45); }
   html[data-theme="dark"] .border-blue-200{ border-color: rgba(59,130,246,.45); } html[data-theme="dark"] .border-amber-300{ border-color: rgba(245,158,11,.5); }
   /* the number beside the open page in the menu, and light text on accent buttons in themes whose accent is bright */
+  .tk-cl-txt{ background:transparent !important; border:0 !important; box-shadow:none !important; }
+  .tk-cl-row:has(.tk-cl-done:checked) .tk-cl-txt{ text-decoration:line-through; opacity:.6; }
   .nav-badge-on{ color: inherit; background: rgba(255,255,255,.22); }
   html[data-color-scheme="tron"][data-theme="dark"] .bg-brand-600 [class*="text-white"], html[data-color-scheme="tronhud"][data-theme="dark"] .bg-brand-600 [class*="text-white"], html[data-color-scheme="cp2027"][data-theme="dark"] .bg-brand-600 [class*="text-white"]{ color: inherit !important; opacity:.85; }
   html[data-color-scheme="tronhud"][data-theme="dark"] .nav-badge-on, html[data-color-scheme="cp2027"][data-theme="dark"] .nav-badge-on{ background: rgba(0,0,0,.2); }
@@ -1959,7 +1961,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.294';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.295';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7330,10 +7332,15 @@ function openTkEdit(id, presetLoc){
     `<input type="search" placeholder="Find staff…" oninput="tkFilterStaff(this.value)" class="${VEH_FIELD} mb-2">
      <div id="tk-staff" class="max-h-56 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">${staff.map(s => `<label class="tk-st flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer" data-s="${esc((s.name + ' ' + s.department + ' ' + s.designation).toLowerCase())}"><input type="checkbox" class="tk-as" value="${esc(s.key)}" data-name="${esc(s.name)}" ${on.has(s.key) ? 'checked' : ''}><span class="text-sm text-slate-800">${esc(s.name)}</span><span class="text-[11.5px] text-slate-400 truncate">${esc([s.designation, s.department].filter(Boolean).join(' · '))}</span></label>`).join('') || '<div class="px-3 py-4 text-sm text-slate-500">No staff yet — add them under Admin Staff.</div>'}</div>` +
     `<div class="mt-3.5">${vTa('Details', 'description', t ? t.description : '', { rows:3 })}</div>` +
-    `<div class="mt-3.5">${vTa('Checklist (one item per line)', 'checklist', t ? (t.checklist || []).map(c => c.text).join('\n') : '', { rows:4, attrs:' placeholder="e.g. Count stock in the main store\nCompare with the system\nReport the differences"' })}<div class="text-[11px] text-slate-400 mt-1">Items already ticked stay ticked. Staff tick them off in the task, and progress follows the checklist.</div></div>` +
+    `<div class="mt-3.5"><label class="${VEH_LBL}">Checklist</label><div id="tk-cl" class="rounded-lg border border-slate-200 divide-y divide-slate-100">${(t && (t.checklist || []).length ? t.checklist : [{}]).map(c => tkClRow(c)).join('')}</div>
+      <button type="button" onclick="tkClAdd()" class="mt-2 text-xs font-semibold text-brand-600 hover:underline">+ Add item</button><div class="text-[11px] text-slate-400 mt-1">Tick an item when it is done. Press Enter in an item to add the next one. Progress follows the checklist.</div></div>` +
     vFoot(t ? 'Save' : 'Add task', `saveTkEdit('${id || ''}')`, t ? `deleteTk('${id}')` : ''), true);
   tkLocCount();
 }
+// one checklist item in the task form: tick box on the left, the text, and a remove button
+function tkClRow(c){ c = c || {}; return `<div class="tk-cl-row flex items-center gap-2.5 px-2.5 py-1.5" data-id="${esc(c.id || '')}" data-by="${esc(c.by || '')}" data-at="${c.at || ''}"><input type="checkbox" class="tk-cl-done w-4 h-4 accent-emerald-600 shrink-0 cursor-pointer" ${c.done ? 'checked' : ''}><input type="text" class="tk-cl-txt flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-1 text-slate-800 placeholder:text-slate-400" value="${esc(c.text || '')}" placeholder="Checklist item" onkeydown="if(event.key==='Enter'){ event.preventDefault(); tkClAdd(this.closest('.tk-cl-row')); } else if(event.key==='Backspace' && !this.value && document.querySelectorAll('#tk-cl .tk-cl-row').length > 1){ event.preventDefault(); const p = this.closest('.tk-cl-row').previousElementSibling; this.closest('.tk-cl-row').remove(); if(p) p.querySelector('.tk-cl-txt').focus(); }"><button type="button" onclick="tkClDel(this)" title="Remove" class="text-slate-400 hover:text-rose-600 text-lg leading-none px-1">×</button></div>`; }
+function tkClAdd(after){ const box = document.getElementById('tk-cl'); if(!box) return; const tmp = document.createElement('div'); tmp.innerHTML = tkClRow({}); const row = tmp.firstElementChild; if(after && after.nextSibling) box.insertBefore(row, after.nextSibling); else box.appendChild(row); row.querySelector('.tk-cl-txt').focus(); }
+function tkClDel(btn){ const box = document.getElementById('tk-cl'), row = btn.closest('.tk-cl-row'); if(box.querySelectorAll('.tk-cl-row').length > 1) row.remove(); else { row.querySelector('.tk-cl-txt').value = ''; row.querySelector('.tk-cl-done').checked = false; } }
 function tkFilterStaff(q){ q = String(q || '').toLowerCase().trim(); document.querySelectorAll('#tk-staff .tk-st').forEach(el => { el.style.display = !q || el.dataset.s.includes(q) ? '' : 'none'; }); }
 async function saveTkEdit(id){
   const o = vehFormObj(document.getElementById('vform')), t = id ? tkById(id) : null;
@@ -7348,8 +7355,9 @@ async function saveTkEdit(id){
   rec.locationIds = [...document.querySelectorAll('#tk-locs .tk-li:checked')].map(x => x.value).filter(id => getLocation(id)); rec.locationId = rec.locationIds[0] || '';
   rec.completedOn = status === 'Completed' ? (t && t.completedOn) || vToday() : '';
   // the checklist: items kept by their text (ticks preserved), new ones added, removed ones dropped
-  const oldCl = (t && t.checklist) || [], texts = String(o.checklist || '').split('\n').map(x => x.replace(/^\s*[-•*\[\]x✓☐☑]+\s*/i, '').trim()).filter(Boolean);
-  rec.checklist = texts.map(tx => oldCl.find(c => c.text === tx) || { id:uid(), text:tx, done:false });
+  rec.checklist = [...document.querySelectorAll('#tk-cl .tk-cl-row')].map(row => { const text = row.querySelector('.tk-cl-txt').value.trim(), done = row.querySelector('.tk-cl-done').checked; if(!text) return null;
+    return { id:row.dataset.id || uid(), text, done, by:done ? (row.dataset.by || (authUser ? authUser.name : '')) : '', at:done ? (+row.dataset.at || Date.now()) : 0 }; }).filter(Boolean);
+  if(rec.checklist.length && status !== 'Completed' && status !== 'Cancelled'){ const dn = rec.checklist.filter(c => c.done).length; rec.progress = progress = Math.round(dn / rec.checklist.length * 100); if(status === 'Not started' && dn) rec.status = 'In progress'; }
   const log = [];
   if(!t){ rec.no = tkNextNo(); log.push({ at:Date.now(), by, text:'Task created and assigned to ' + assignees.map(a => a.name).join(', '), progress, status }); }
   else {

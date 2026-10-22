@@ -1961,7 +1961,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.295';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.297';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7037,6 +7037,11 @@ const tkProg = t => t.status === 'Completed' ? 100 : Math.max(0, Math.min(100, +
 const tkMine = t => !!authUser && (t.assignees || []).some(a => a.key === 'u:' + authUser.uid);
 const tkCanUpdate = t => !authUser || canManageInventory() || tkMine(t);
 const tkDays = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 864e5);
+// priority level as a coloured tag
+const TK_PRI_CLS = { Urgent:'bg-rose-100 text-rose-700', High:'bg-amber-100 text-amber-800', Normal:'bg-sky-100 text-sky-700', Low:'bg-slate-100 text-slate-600' };
+const TK_PRI_ICON = { Urgent:'⏫', High:'🔺', Normal:'▪', Low:'🔻' };
+const tkPri = t => TK_PRIORITY.includes(t.priority) ? t.priority : 'Normal';
+const tkPriPill = (t, sm) => `<span class="inline-flex items-center gap-1 ${sm ? 'px-2 py-0.5 text-[10.5px]' : 'px-2.5 py-0.5 text-xs'} rounded-full font-semibold whitespace-nowrap ${TK_PRI_CLS[tkPri(t)]}" title="${tkPri(t)} priority">${TK_PRI_ICON[tkPri(t)]} ${tkPri(t)}</span>`;
 function tkPill(t){
   const s = tkState(t), k = { 'Overdue':'crit', 'Completed':'good', 'In progress':'acc', 'On hold':'warn' }[s] || '';
   return vPill(k, esc(s));
@@ -7055,8 +7060,8 @@ function tkStaffList(){
   return out;
 }
 function tkFiltered(){
-  const q = String(vehUi.tkQ || '').toLowerCase().trim(), lf = vehUi.tkTab === 'board' ? '' : vehUi.tkLocF || '', who = vehUi.tkWho || '', st = vehUi.tkSt || '', cat = vehUi.tkCat || '';
-  return state.tasks.filter(t => (!who || (t.assignees || []).some(a => a.key === who)) && (!cat || t.category === cat) && (!lf || tkInLoc(t, lf)) &&
+  const pf = vehUi.tkPri || '', q = String(vehUi.tkQ || '').toLowerCase().trim(), lf = vehUi.tkTab === 'board' ? '' : vehUi.tkLocF || '', who = vehUi.tkWho || '', st = vehUi.tkSt || '', cat = vehUi.tkCat || '';
+  return state.tasks.filter(t => (!who || (t.assignees || []).some(a => a.key === who)) && (!cat || t.category === cat) && (!lf || tkInLoc(t, lf)) && (!pf || tkPri(t) === pf) &&
     (!st || (st === 'open' ? !tkDone(t) : st === 'Overdue' ? tkOverdue(t) : t.status === st)) &&
     (!q || [t.no, t.title, t.description, t.category, tkWho(t)].join(' ').toLowerCase().includes(q)));
 }
@@ -7073,7 +7078,7 @@ function viewTasks(){
     statCard('On time', comp.length ? Math.round(onTime.length / comp.length * 100) + '%' : '—', 'Completed tasks finished by the due date', comp.length && onTime.length / comp.length < 0.7 ? 'amber' : 'slate'));
   const staff = tkStaffList(), cats = [...new Set(all.map(t => t.category).filter(Boolean))].sort();
   const filters = `<div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['list', 'Tasks'], ['board', 'Board (by location)'], ['gantt', 'Gantt chart'], ['report', 'Staff report']], tab, 'tkSetTab')}
-    ${tab !== 'report' ? vSelect('tkWho', staff.map(s => [s.key, s.name]), vehUi.tkWho || '', 'All staff') + vSelect('tkSt', [['open', 'Open (not done)'], ['Overdue', 'Overdue']].concat(TK_STATUS.map(s => [s, s])), vehUi.tkSt || '', 'All statuses') + (cats.length ? vSelect('tkCat', cats, vehUi.tkCat || '', 'All categories') : '') + (tab !== 'board' ? vSelect('tkLocF', LOCATIONS.map(l => [l.id, l.name]).concat([[TK_NOLOC, 'General']]), vehUi.tkLocF || '', 'All locations') : '') +
+    ${tab !== 'report' ? vSelect('tkWho', staff.map(s => [s.key, s.name]), vehUi.tkWho || '', 'All staff') + vSelect('tkSt', [['open', 'Open (not done)'], ['Overdue', 'Overdue']].concat(TK_STATUS.map(s => [s, s])), vehUi.tkSt || '', 'All statuses') + vSelect('tkPri', TK_PRIORITY.slice().reverse(), vehUi.tkPri || '', 'All priorities') + (cats.length ? vSelect('tkCat', cats, vehUi.tkCat || '', 'All categories') : '') + (tab !== 'board' ? vSelect('tkLocF', LOCATIONS.map(l => [l.id, l.name]).concat([[TK_NOLOC, 'General']]), vehUi.tkLocF || '', 'All locations') : '') +
       `<input type="search" id="tk-q" value="${esc(vehUi.tkQ || '')}" oninput="vehUi.tkQ = this.value; clearTimeout(window._tkT); window._tkT = setTimeout(rerenderMain, 250)" placeholder="Search tasks…" class="${VEH_INPUT} flex-1 min-w-[12rem]">` : ''}</div>`;
   const head = vHead('Tasks', 'Tasks assigned to staff, with start and due dates. Staff update the progress of their own tasks.', admin ? vBtnPrimary('+ Task', "openTkEdit('')") : '');
   return head + kpis + filters + (tab === 'gantt' ? tkGantt() : tab === 'board' ? tkBoard() : tab === 'report' ? tkReport() : tkList());
@@ -7081,7 +7086,7 @@ function viewTasks(){
 function tkSetTab(t){ vehUi.tkTab = t; rerenderMain(); }
 
 function tkList(){
-  const list = tkFiltered().sort((a, b) => tkDone(a) - tkDone(b) || (tkDone(a) ? String(b.completedOn || b.due || '').localeCompare(String(a.completedOn || a.due || '')) : String(a.due || '9999').localeCompare(String(b.due || '9999'))));
+  const list = tkFiltered().sort((a, b) => tkDone(a) - tkDone(b) || (tkDone(a) ? String(b.completedOn || b.due || '').localeCompare(String(a.completedOn || a.due || '')) : (TK_WEIGHT[tkPri(b)] - TK_WEIGHT[tkPri(a)]) || String(a.due || '9999').localeCompare(String(b.due || '9999'))));
   if(!list.length) return `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(state.tasks.length ? 'No tasks match.' : 'No tasks yet.' + (canManageInventory() ? ' Use "+ Task" to add one and assign it to staff.' : ''))}</div>`;
   const t0 = vToday();
   const dueNote = t => { if(t.status === 'Completed') return t.completedOn ? `<div class="text-[11px] ${t.due && t.completedOn > t.due ? 'text-amber-600' : 'text-emerald-600'}">Done ${vDate(t.completedOn)}</div>` : ''; if(tkDone(t) || !t.due) return ''; const d = tkDays(t0, t.due); return `<div class="text-[11px] ${d < 0 ? 'text-rose-600 font-semibold' : d <= 3 ? 'text-amber-600' : 'text-slate-400'}">${d < 0 ? -d + ' day' + (d === -1 ? '' : 's') + ' late' : d === 0 ? 'Due today' : 'in ' + d + ' day' + (d === 1 ? '' : 's')}</div>`; };
@@ -7092,9 +7097,9 @@ function tkList(){
     const show = as.slice(0, 4), more = as.length - show.length;
     return `<div class="flex gap-1" title="${esc(as.map(a => a.name).join(', '))}">${show.map(a => `<span class="w-7 h-7 rounded-full bg-brand-600 text-white text-[10px] font-bold inline-flex items-center justify-center ring-2 ring-white" title="${esc(a.name)}">${esc(tkInitials(a.name))}</span>`).join('')}${more > 0 ? `<span class="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold inline-flex items-center justify-center">+${more}</span>` : ''}</div>`; };
   const prio = t => t.priority === 'Urgent' || t.priority === 'High' ? `<span class="ml-1.5 inline-block w-1.5 h-1.5 rounded-full align-middle ${t.priority === 'Urgent' ? 'bg-rose-500' : 'bg-amber-500'}" title="${t.priority} priority"></span>` : '';
-  return vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Task' }, { t:'Team' }, { t:'Dates' }, { t:'Progress' }, { t:'Status' }, { t:'' }])}<tbody>${list.map(t => `<tr class="${vTr} cursor-pointer" onclick="openTkView('${t.id}')" title="Open task details">
-    ${vTd(`<div class="font-semibold text-slate-900">${esc(t.title)}${prio(t)}</div><div class="text-[11px] text-slate-400">${esc([t.no, t.category].filter(Boolean).join(' · '))}</div>`, { first:1 })}
-    ${vTd(who(t))}${vTd(dates(t))}${vTd(bar(t))}${vTd(tkPill(t))}${vTd(`<span class="text-slate-300 text-lg leading-none">›</span>`, { last:1, cls:'w-6 text-right' })}</tr>`).join('')}</tbody></table>`);
+  return vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Task' }, { t:'Priority' }, { t:'Team' }, { t:'Dates' }, { t:'Progress' }, { t:'Status' }, { t:'' }])}<tbody>${list.map(t => `<tr class="${vTr} cursor-pointer" onclick="openTkView('${t.id}')" title="Open task details">
+    ${vTd(`<div class="font-semibold text-slate-900">${esc(t.title)}</div><div class="text-[11px] text-slate-400">${esc([t.no, t.category].filter(Boolean).join(' · '))}</div>`, { first:1 })}
+    ${vTd(tkPriPill(t))}${vTd(who(t))}${vTd(dates(t))}${vTd(bar(t))}${vTd(tkPill(t))}${vTd(`<span class="text-slate-300 text-lg leading-none">›</span>`, { last:1, cls:'w-6 text-right' })}</tr>`).join('')}</tbody></table>`);
 }
 
 /* ---------- Board: tasks in buckets by location (like Planner); drag a card to move it to another location ---------- */
@@ -7122,7 +7127,7 @@ function tkBoard(){
     const done = tkDone(t), can = tkCanUpdate(t), cl = t.checklist || [], cd = cl.filter(c => c.done).length;
     const pr = t.prId ? (state.purchaseRequisitions || []).find(x => x.id === t.prId) : null;
     const chips = [t.category ? `<span class="${chipCls} bg-sky-100 text-sky-800">${esc(t.category)}</span>` : '',
-      t.priority === 'Urgent' || t.priority === 'High' ? `<span class="${chipCls} ${t.priority === 'Urgent' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}">${esc(t.priority)}</span>` : '',
+      tkPriPill(t, true),
       pr ? `<span class="${chipCls} bg-violet-100 text-violet-800">${esc(pr.prNumber || 'PR')}</span>` : '',
       t.status === 'On hold' ? `<span class="${chipCls} bg-amber-100 text-amber-800">On hold</span>` : '',
       tkLocs(t).length > 1 ? `<span class="${chipCls} bg-slate-100 text-slate-600" title="${esc(tkLocNames(t))}">📍 ${esc(tkLocs(t).slice(0, 3).map(id => getLocation(id).code || getLocation(id).name).join(' · '))}${tkLocs(t).length > 3 ? ' +' + (tkLocs(t).length - 3) : ''}</span>` : ''].join('');
@@ -7140,7 +7145,7 @@ function tkBoard(){
       ${!done && p > 0 ? `<div class="h-1 rounded-full bg-slate-100 overflow-hidden mt-2.5"><div class="h-full rounded-full" style="width:${p}%;background:${TK_COL[tkState(t)]}"></div></div>` : ''}
       <div class="flex items-center justify-between gap-2 mt-2.5"><div class="flex items-center gap-1.5 flex-wrap">${due}${cl.length ? `<span class="${chipCls} ${cd === cl.length ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}" title="Checklist">☑ ${cd}/${cl.length}</span>` : ''}</div><div class="flex items-center">${av}</div></div></div>`;
   };
-  const sortOpen = (a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')) || (TK_WEIGHT[b.priority] || 1) - (TK_WEIGHT[a.priority] || 1);
+  const sortOpen = (a, b) => (TK_WEIGHT[tkPri(b)] - TK_WEIGHT[tkPri(a)]) || String(a.due || '9999').localeCompare(String(b.due || '9999'));
   const col = c => {
     const mine = list.filter(t => tkInLoc(t, c.id)), open = mine.filter(t => !tkDone(t)).sort(sortOpen), done = mine.filter(tkDone).sort((a, b) => String(b.completedOn || '').localeCompare(String(a.completedOn || '')));
     const over = open.filter(tkOverdue).length, showDone = !!openSet[c.id];
@@ -7321,7 +7326,7 @@ function openTkEdit(id, presetLoc){
   const cats = [...new Set(state.tasks.map(x => x.category).filter(Boolean))].sort();
   openModal(t ? 'Edit task' : 'New task', vFormOpen + `<datalist id="tk-cats">${cats.map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist>` +
     vGrid(2, vF('Task', 'title', t ? t.title : '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="e.g. Renew vehicle insurance for all fleet"' }) +
-      vF('Category / project', 'category', t ? t.category : '', 'text', { attrs:' list="tk-cats" placeholder="Optional — e.g. Office move, Fleet"' }) + vS('Priority', 'priority', TK_PRIORITY, t ? t.priority || 'Normal' : 'Normal') +
+      vF('Category / project', 'category', t ? t.category : '', 'text', { attrs:' list="tk-cats" placeholder="Optional — e.g. Office move, Fleet"' }) + vS('Priority level', 'priority', TK_PRIORITY, t ? t.priority || 'Normal' : 'Normal') +
       vF('Start date', 'start', t ? t.start : vToday(), 'date', { req:1 }) + vF('Due date', 'due', t ? t.due : '', 'date') +
       vS('Status', 'status', TK_STATUS, t ? t.status || 'Not started' : 'Not started') + vF('Progress (%)', 'progress', t ? tkProg(t) : 0, 'number', { attrs:' min="0" max="100" step="5"' }) + vS('Linked purchase requisition (optional)', 'prId', [['', '— None']].concat((state.purchaseRequisitions || []).map(p => [p.id, (p.prNumber || 'PR') + ' · ' + (prFirstItem(p) || p.title || '')])), t && t.prId ? t.prId : '')) +
     vSec('Locations') +
@@ -7383,7 +7388,7 @@ function openTkView(id){
   const t = tkById(id); if(!t) return;
   const can = tkCanUpdate(t), admin = canManageInventory(), p = tkProg(t), c = TK_COL[tkState(t)], ups = (t.updates || []).slice().reverse();
   const dur = t.start && t.due ? tkDays(t.start, t.due) + 1 : 0, gone = t.start && t.due ? Math.max(0, Math.min(dur, tkDays(t.start, vToday()) + 1)) : 0, timePct = dur ? Math.round(gone / dur * 100) : 0;
-  openModal((t.no ? t.no + ' · ' : '') + t.title, `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${tkPill(t)}${t.priority && t.priority !== 'Normal' ? vPill(t.priority === 'Urgent' || t.priority === 'High' ? 'warn' : '', esc(t.priority) + ' priority') : ''}${t.category ? `<span class="text-xs text-slate-500">${esc(t.category)}</span>` : ''}<span class="text-xs text-slate-500">📍 ${esc(tkLocNames(t))}</span></div>
+  openModal((t.no ? t.no + ' · ' : '') + t.title, `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${tkPill(t)}${tkPriPill(t)}${t.category ? `<span class="text-xs text-slate-500">${esc(t.category)}</span>` : ''}<span class="text-xs text-slate-500">📍 ${esc(tkLocNames(t))}</span></div>
       ${admin ? `<div class="flex gap-2">${vBtnPlain('Edit', `openTkEdit('${t.id}')`)}</div>` : ''}</div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">${[['Start', vDate(t.start)], ['Due', t.due ? vDate(t.due) : 'No due date'], ['Duration', dur ? dur + ' days' : '—'], ['Completed', t.completedOn ? vDate(t.completedOn) : '—']].map(([l, v]) => `<div class="rounded-lg bg-slate-50 px-3 py-2"><div class="text-[11px] text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800">${v}</div></div>`).join('')}</div>
     <div class="mb-1 flex justify-between text-xs text-slate-500"><span>Progress</span><span class="num font-semibold text-slate-800">${p}%</span></div>
@@ -13371,7 +13376,9 @@ const trAllowLabel = (k, scope) => k === 'pocket' ? (scope === 'foreign' ? 'Inci
 const TR_FDC_LOCAL = [['Haa Alifu Atoll', 800, 800], ['Haa Dhaalu Atoll', 1000, 1000], ['Shaviyani Atoll', 800, 800], ['Noonu Atoll', 1000, 1000], ['Raa Atoll', 1000, 1000], ['Baa Atoll', 1000, 900], ['Lhaviyani Atoll', 800, 800], ['Kaafu Atoll', 1200, 1000], ['Alif Alif Atoll', 1000, 900], ['Alif Dhaalu Atoll', 1200, 900],
   ['Faafu Atoll', 800, 800], ['Dhaalu Atoll', 900, 800], ['Thaa Atoll', 1000, 900], ['Laamu Atoll', 1000, 900], ['Gaafu Atoll', 1000, 900], ['Gaafu Dhaal Atoll', 1000, 1000], ['Fuvahmulah City', 1200, 1200], ['Addu City', 1200, 1200]];
 const TR_UNDP_NOTE = 'Food & accommodation: DSA by UNDP · stop-over over 12 hours: DSA by UNDP';
-const trFdcRates = () => TR_FDC_LOCAL.flatMap(([loc, a1, a2]) => TR_CATS.map((c, i) => ({ scope:'local', country:TR_HOME, location:loc, category:c, currency:'MVR', meal:400, accom:i ? a2 : a1, pocket:150, stop:0, note:'' })))
+// local DSA as used in the Administration DSA memos to Finance (e.g. (MEMO)FDC/FDC/2026/448, (MEMO)FDC-OP/FDC/2026/222): meal MVR 300 a day, accommodation MVR 800 a night, pocket money MVR 150 per trip — the same for every island
+const TR_MEMO_LOCAL = { meal:300, accom:800, pocket:150 };
+const trFdcRates = () => [{ scope:'local', country:TR_HOME, location:'', category:'', currency:'MVR', meal:TR_MEMO_LOCAL.meal, accom:TR_MEMO_LOCAL.accom, pocket:TR_MEMO_LOCAL.pocket, stop:0, note:'As in the DSA memos to Finance' }]
   .concat([['Category 1', 300], ['Category 2', 200]].map(([c, inc]) => ({ scope:'foreign', country:'', location:'', category:c, currency:'USD', meal:0, accom:0, pocket:inc, stop:100, note:TR_UNDP_NOTE })));
 // island codes in a destination ("K.Dhiffushi, ADh.Dhangethi") → the atoll / city of the rate
 const TR_ATOLL_CODES = { ha:'Haa Alifu Atoll', hdh:'Haa Dhaalu Atoll', sh:'Shaviyani Atoll', n:'Noonu Atoll', r:'Raa Atoll', b:'Baa Atoll', lh:'Lhaviyani Atoll', k:'Kaafu Atoll', aa:'Alif Alif Atoll', adh:'Alif Dhaalu Atoll', v:'Vaavu Atoll', m:'Meemu Atoll',
@@ -13394,8 +13401,13 @@ const TR_HOME = 'Maldives';
 const trNorm = x => String(x || '').trim().toLowerCase();
 function trRates(){
   const t = vehSettings.travel || {};
+  // the local rates follow the DSA memos: rates saved earlier (from DSA.xlsx) are replaced by the memo rates, once
+  if(Array.isArray(t.rates) && !t.memoRatesV1){ const fixed = t.rates.filter(r => (r.scope || 'local') !== 'local').concat(trFdcRates().filter(r => r.scope === 'local'));
+    vehSettings = Object.assign({}, vehSettings, { travel:Object.assign({}, t, { rates:fixed, memoRatesV1:1 }) });
+    if(canManageInventory() && authUser) try{ persistVehSettings(); }catch(e){}
+    return fixed; }
   if(Array.isArray(t.rates)) return t.rates;
-  const S = trSettings(), out = [{ scope:'local', country:TR_HOME, location:'', currency:S.local.currency, meal:S.local.meal, pocket:S.local.pocket, accom:S.local.accom }];   // first use: from the earlier single local / foreign amounts
+  const S = trSettings(), out = [{ scope:'local', country:TR_HOME, location:'', currency:'MVR', meal:TR_MEMO_LOCAL.meal, pocket:TR_MEMO_LOCAL.pocket, accom:TR_MEMO_LOCAL.accom }];   // first use: from the earlier single local / foreign amounts
   if(S.foreign.meal || S.foreign.pocket || S.foreign.accom) out.push({ scope:'foreign', country:'', location:'', currency:S.foreign.currency, meal:S.foreign.meal, pocket:S.foreign.pocket, accom:S.foreign.accom });
   return out;
 }
@@ -13890,7 +13902,7 @@ function openTravelSettings(){
   const countries = [...new Set(rates.map(r => r.country).filter(Boolean))].map(c => `<option value="${esc(c)}"></option>`).join('');
   openModal('DSA rates and memo', vFormOpen + `<datalist id="tr-set-countries">${countries}</datalist>
     <p class="text-sm text-slate-500 mb-3">Rates by country, location and staff category. A request uses the row for its country and location; if there is none, the country's row with no location; then the row with no country. At each step the row for the traveller's category is used, else the row for any category. A request keeps the amounts it was saved with.</p>
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3"><label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer">Import from Excel<input type="file" accept=".xlsx" class="hidden" onchange="trImportRates(this)"></label><button type="button" onclick="trMergeRates(trFdcRates(), 'the FDC rates (DSA.xlsx)')" class="text-xs font-semibold text-brand-600 hover:underline">Load the FDC rates (DSA.xlsx)</button><span id="tr-imp-msg" class="text-xs text-slate-500"></span></div>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3"><label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer">Import from Excel<input type="file" accept=".xlsx" class="hidden" onchange="trImportRates(this)"></label><button type="button" onclick="trMergeRates(trFdcRates(), 'the DSA memo rates')" class="text-xs font-semibold text-brand-600 hover:underline">Use the DSA memo rates (meal 300 · accommodation 800 · pocket money 150)</button><span id="tr-imp-msg" class="text-xs text-slate-500"></span></div>
     <div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="w-full text-sm min-w-[68rem]"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100"><th class="py-2 px-1.5 font-semibold">Travel</th><th class="py-2 px-1.5 font-semibold">Country</th><th class="py-2 px-1.5 font-semibold">Location</th><th class="py-2 px-1.5 font-semibold">Category</th><th class="py-2 px-1.5 font-semibold">Currency</th><th class="py-2 px-1.5 font-semibold">Meal / food per day</th><th class="py-2 px-1.5 font-semibold">Accommodation / night</th><th class="py-2 px-1.5 font-semibold">Pocket / incidental</th><th class="py-2 px-1.5 font-semibold">Stop-over</th><th class="py-2 px-1.5 font-semibold">Note</th><th></th></tr></thead>
       <tbody id="tr-rate-body" class="[&_td:first-child]:pl-1.5">${rates.map(trRateRow).join('')}</tbody></table></div>
     <div class="flex gap-4 mt-2"><button type="button" onclick="trAddRateRow('local')" class="text-xs font-semibold text-brand-600 hover:underline">+ Local rate</button><button type="button" onclick="trAddRateRow('foreign')" class="text-xs font-semibold text-brand-600 hover:underline">+ Foreign rate</button></div>

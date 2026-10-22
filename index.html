@@ -583,6 +583,8 @@ function refreshAppearanceModal(){
     .ho-line-row2{ grid-template-columns: 1fr; }
   }
 
+  /* muted text a touch darker so it stays readable on white and light grey */
+  html:not([data-theme="dark"]) .text-slate-400{ color:#76859b; }
   /* ---------- Dark mode ---------- */
   html[data-theme="dark"]{ color-scheme: dark; }
   html[data-theme="dark"] body.bg-slate-100{ background-color: rgb(var(--s-bg)); }
@@ -638,6 +640,41 @@ function refreshAppearanceModal(){
   html[data-theme="dark"] .hover\:bg-slate-200:hover{ background-color: rgb(var(--s-hover2)); }
   html[data-theme="dark"] .hover\:bg-rose-50:hover{ background-color: rgba(244,63,94,.15); }
   html[data-theme="dark"] .sticky-toolbar{ background-color: rgb(var(--s-bg)); }
+  /* Safety net for every theme in dark mode: light tints become dark translucent tints, dark text becomes light,
+     so nothing ends up light-on-light or dark-on-dark (board columns, chips, dropdown lists) */
+  html[data-theme="dark"] .bg-slate-100\/70, html[data-theme="dark"] .bg-slate-50\/70{ background-color: rgba(148,163,184,.08); }
+  html[data-theme="dark"] .bg-slate-300{ background-color: rgb(var(--s-line)); }
+  html[data-theme="dark"] .bg-emerald-50, html[data-theme="dark"] .bg-emerald-50\/50{ background-color: rgba(16,185,129,.12); }
+  html[data-theme="dark"] .bg-amber-50\/50{ background-color: rgba(245,158,11,.10); }
+  html[data-theme="dark"] .bg-rose-50\/50{ background-color: rgba(244,63,94,.10); }
+  html[data-theme="dark"] .bg-blue-50, html[data-theme="dark"] .bg-blue-50\/50{ background-color: rgba(59,130,246,.12); }
+  html[data-theme="dark"] .bg-blue-100{ background-color: rgba(59,130,246,.2); }
+  html[data-theme="dark"] .bg-sky-50, html[data-theme="dark"] .bg-sky-100{ background-color: rgba(14,165,233,.18); }
+  html[data-theme="dark"] .bg-violet-50, html[data-theme="dark"] .bg-violet-100{ background-color: rgba(139,92,246,.2); }
+  html[data-theme="dark"] .bg-brand-100{ background-color: rgb(var(--brand-500) / .22); }
+  html[data-theme="dark"] .hover\:bg-brand-50:hover{ background-color: rgb(var(--brand-500) / .15); }
+  html[data-theme="dark"] .hover\:bg-brand-100:hover{ background-color: rgb(var(--brand-500) / .25); }
+  html[data-theme="dark"] .hover\:bg-slate-800:hover{ background-color: rgb(var(--s-hover2)); }
+  html[data-theme="dark"] .hover\:text-slate-800:hover, html[data-theme="dark"] .hover\:text-slate-900:hover{ color: #f8fafc; }
+  html[data-theme="dark"] .hover\:text-brand-700:hover{ color: rgb(var(--brand-200)); }
+  html[data-theme="dark"] .text-emerald-800, html[data-theme="dark"] .text-emerald-900{ color: #a7f3d0; }
+  html[data-theme="dark"] .text-sky-700{ color: #7dd3fc; } html[data-theme="dark"] .text-sky-800{ color: #bae6fd; }
+  html[data-theme="dark"] .text-violet-700{ color: #c4b5fd; } html[data-theme="dark"] .text-violet-800{ color: #ddd6fe; }
+  html[data-theme="dark"] .text-blue-700{ color: #93c5fd; } html[data-theme="dark"] .text-red-600{ color: #f87171; }
+  html[data-theme="dark"] .border-rose-200, html[data-theme="dark"] .border-rose-300{ border-color: rgba(244,63,94,.45); }
+  html[data-theme="dark"] .border-emerald-200, html[data-theme="dark"] .border-emerald-300{ border-color: rgba(16,185,129,.45); }
+  html[data-theme="dark"] .border-blue-200{ border-color: rgba(59,130,246,.45); } html[data-theme="dark"] .border-amber-300{ border-color: rgba(245,158,11,.5); }
+  /* the number beside the open page in the menu, and light text on accent buttons in themes whose accent is bright */
+  .nav-badge-on{ color: inherit; background: rgba(255,255,255,.22); }
+  html[data-color-scheme="tron"][data-theme="dark"] .bg-brand-600 [class*="text-white"], html[data-color-scheme="tronhud"][data-theme="dark"] .bg-brand-600 [class*="text-white"], html[data-color-scheme="cp2027"][data-theme="dark"] .bg-brand-600 [class*="text-white"]{ color: inherit !important; opacity:.85; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] .nav-badge-on, html[data-color-scheme="cp2027"][data-theme="dark"] .nav-badge-on{ background: rgba(0,0,0,.2); }
+  /* the open list of a dropdown: browsers draw it with their own grey unless told otherwise */
+  html[data-theme="dark"] select option, html[data-theme="dark"] select optgroup{ background-color: rgb(var(--s-surface)) !important; color: #e2e8f0 !important; }
+  html[data-color-scheme="cyberpunk"][data-theme="dark"] select option{ background-color:#1a0834 !important; color:#f5e9ff !important; }
+  html[data-color-scheme="tron"][data-theme="dark"] select option{ background-color:#00131a !important; color:#c9fbff !important; }
+  html[data-color-scheme="tronhud"][data-theme="dark"] select option{ background-color:#0c1924 !important; color:#e8f7ff !important; }
+  html[data-color-scheme="cp2027"][data-theme="dark"] select option{ background-color:#1a0709 !important; color:#ffb3b3 !important; }
+  html[data-theme="dark"] select option:checked{ background-color: rgb(var(--brand-600)) !important; color:#fff !important; }
   html[data-theme="dark"] .sticky-toolbar.sticky-toolbar-card{ background-color: rgb(var(--s-surface)); }
   html[data-theme="dark"] .sticky-thead th{ background-color: rgb(var(--s-surface)); box-shadow: 0 1px 0 0 rgb(var(--s-raised)); }
   html[data-theme="dark"] .overflow-x-auto:has(> table > thead) > table > thead th{ background-color: rgb(var(--s-surface)); box-shadow: 0 1px 0 0 rgb(var(--s-raised)); }
@@ -1539,7 +1576,9 @@ function moveLocation(id, direction){
   if(!canManageInventory()){ toast('Only admins can reorder locations.', true); return; }
   const idx = LOCATIONS.findIndex(l=>l.id===id);
   if(idx===-1) return;
-  const swapWith = direction==='up' ? idx-1 : idx+1;
+  // on the Dashboard only stock-valuation locations show, so step over the hidden ones
+  const step = direction==='up' ? -1 : 1, sv = LOCATIONS[idx].stockValuation !== false;
+  let swapWith = idx + step; while(sv && swapWith >= 0 && swapWith < LOCATIONS.length && LOCATIONS[swapWith].stockValuation === false) swapWith += step;
   if(swapWith<0 || swapWith>=LOCATIONS.length) return;
   const tmp = LOCATIONS[idx];
   LOCATIONS[idx] = LOCATIONS[swapWith];
@@ -1920,7 +1959,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.284';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.285';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2264,7 +2303,7 @@ function renderNav(){
   const rail = hubs.map(h => { const on = h.key === hub.key, c = count(h);
     return `<button type="button" onclick="navPickHub('${h.key}')" title="${esc(h.label)}" style="position:relative" class="nav-rail-btn w-full flex flex-col items-center gap-1 py-2.5 rounded-xl text-[10.5px] font-semibold transition-colors ${on ? 'nav-rail-on' : 'text-slate-400 hover:text-white hover:bg-white/5'}">${ICONS[h.icon] || ICONS.folder}<span class="leading-tight">${esc(h.label)}</span>${c && !on ? `<span style="position:absolute;top:4px;right:6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:9.5px;line-height:16px;font-weight:800;color:#fff;background:${crit(h) ? '#ef4444' : '#d97706'}">${c > 99 ? '99+' : c}</span>` : ''}</button>`; }).join('');
   const item = n => { const on = navIsActive(n);
-    return `<a href="#" onclick="goTo('${n.id}');return false;" class="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] transition-colors ${on ? 'nav-item-on font-semibold' : 'text-slate-300 hover:text-white hover:bg-white/5'}">${ICONS[n.icon] || ICONS.folder}<span class="flex-1 truncate">${n.label}</span>${n.badge ? `<span ${n.hint ? `title="${esc(n.hint)}"` : ''} class="text-[11px] font-bold ${n.tone === 'crit' ? 'text-rose-400' : 'text-amber-400'}">${n.badge}</span>` : ''}</a>`; };
+    return `<a href="#" onclick="goTo('${n.id}');return false;" class="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] transition-colors ${on ? 'nav-item-on font-semibold' : 'text-slate-300 hover:text-white hover:bg-white/5'}">${ICONS[n.icon] || ICONS.folder}<span class="flex-1 truncate">${n.label}</span>${n.badge ? `<span ${n.hint ? `title="${esc(n.hint)}"` : ''} class="text-[11px] font-bold ${on ? 'nav-badge-on px-1.5 rounded-full' : n.tone === 'crit' ? 'text-rose-400' : 'text-amber-400'}">${n.badge}</span>` : ''}</a>`; };
   el.className = 'flex-1 flex min-h-0';
   el.innerHTML = `<div class="nav-rail w-[4.5rem] shrink-0 flex flex-col gap-1 px-1.5 py-3 overflow-y-auto border-r border-white/10">${rail}</div>
     <div class="nav-panel flex-1 min-w-0 px-2.5 py-3 overflow-y-auto"><div class="px-3 pt-1 pb-2 text-[15px] font-bold text-white">${esc(hub.key === 'home' ? 'Overview' : hub.label)}</div>${hub.groups.map(g => `${g.name && hub.groups.length > 1 ? `<div class="px-3 pt-4 pb-1.5 first:pt-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">${esc(g.name)}</div>` : ''}<div class="space-y-0.5">${g.items.map(item).join('')}</div>`).join('')}</div>`;
@@ -7015,7 +7054,7 @@ function tkStaffList(){
 }
 function tkFiltered(){
   const q = String(vehUi.tkQ || '').toLowerCase().trim(), lf = vehUi.tkTab === 'board' ? '' : vehUi.tkLocF || '', who = vehUi.tkWho || '', st = vehUi.tkSt || '', cat = vehUi.tkCat || '';
-  return state.tasks.filter(t => (!who || (t.assignees || []).some(a => a.key === who)) && (!cat || t.category === cat) && (!lf || tkLoc(t) === lf) &&
+  return state.tasks.filter(t => (!who || (t.assignees || []).some(a => a.key === who)) && (!cat || t.category === cat) && (!lf || tkInLoc(t, lf)) &&
     (!st || (st === 'open' ? !tkDone(t) : st === 'Overdue' ? tkOverdue(t) : t.status === st)) &&
     (!q || [t.no, t.title, t.description, t.category, tkWho(t)].join(' ').toLowerCase().includes(q)));
 }
@@ -7032,7 +7071,7 @@ function viewTasks(){
     statCard('On time', comp.length ? Math.round(onTime.length / comp.length * 100) + '%' : '—', 'Completed tasks finished by the due date', comp.length && onTime.length / comp.length < 0.7 ? 'amber' : 'slate'));
   const staff = tkStaffList(), cats = [...new Set(all.map(t => t.category).filter(Boolean))].sort();
   const filters = `<div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['list', 'Tasks'], ['board', 'Board (by location)'], ['gantt', 'Gantt chart'], ['report', 'Staff report']], tab, 'tkSetTab')}
-    ${tab !== 'report' ? vSelect('tkWho', staff.map(s => [s.key, s.name]), vehUi.tkWho || '', 'All staff') + vSelect('tkSt', [['open', 'Open (not done)'], ['Overdue', 'Overdue']].concat(TK_STATUS.map(s => [s, s])), vehUi.tkSt || '', 'All statuses') + (cats.length ? vSelect('tkCat', cats, vehUi.tkCat || '', 'All categories') : '') + (tab !== 'board' ? vSelect('tkLocF', LOCATIONS.map(l => [l.id, l.name]).concat([[TK_NOLOC, 'No location']]), vehUi.tkLocF || '', 'All locations') : '') +
+    ${tab !== 'report' ? vSelect('tkWho', staff.map(s => [s.key, s.name]), vehUi.tkWho || '', 'All staff') + vSelect('tkSt', [['open', 'Open (not done)'], ['Overdue', 'Overdue']].concat(TK_STATUS.map(s => [s, s])), vehUi.tkSt || '', 'All statuses') + (cats.length ? vSelect('tkCat', cats, vehUi.tkCat || '', 'All categories') : '') + (tab !== 'board' ? vSelect('tkLocF', LOCATIONS.map(l => [l.id, l.name]).concat([[TK_NOLOC, 'General']]), vehUi.tkLocF || '', 'All locations') : '') +
       `<input type="search" id="tk-q" value="${esc(vehUi.tkQ || '')}" oninput="vehUi.tkQ = this.value; clearTimeout(window._tkT); window._tkT = setTimeout(rerenderMain, 250)" placeholder="Search tasks…" class="${VEH_INPUT} flex-1 min-w-[12rem]">` : ''}</div>`;
   const head = vHead('Tasks', 'Tasks assigned to staff, with start and due dates. Staff update the progress of their own tasks.', admin ? vBtnPrimary('+ Task', "openTkEdit('')") : '');
   return head + kpis + filters + (tab === 'gantt' ? tkGantt() : tab === 'board' ? tkBoard() : tab === 'report' ? tkReport() : tkList());
@@ -7058,15 +7097,21 @@ function tkList(){
 
 /* ---------- Board: tasks in buckets by location (like Planner); drag a card to move it to another location ---------- */
 const TK_NOLOC = '_none';
-function tkLoc(t){
-  if(t.locationId && getLocation(t.locationId)) return t.locationId;
-  if(t.prId){ const pr = (state.purchaseRequisitions || []).find(x => x.id === t.prId); if(pr && pr.locationId && getLocation(pr.locationId)) return pr.locationId; }
-  return TK_NOLOC;
+// a task can belong to several locations; none means "General"
+function tkLocs(t){
+  const ids = (Array.isArray(t.locationIds) ? t.locationIds : t.locationId ? [t.locationId] : []).filter(id => getLocation(id));
+  if(ids.length) return [...new Set(ids)];
+  if(t.prId && !Array.isArray(t.locationIds)){ const pr = (state.purchaseRequisitions || []).find(x => x.id === t.prId); if(pr && pr.locationId && getLocation(pr.locationId)) return [pr.locationId]; }
+  return [];
 }
+const tkInLoc = (t, id) => id === TK_NOLOC ? !tkLocs(t).length : tkLocs(t).includes(id);
+const tkLocNames = t => tkLocs(t).map(id => getLocation(id).name).join(', ') || 'General';
+function tkLocPick(q){ q = String(q || '').toLowerCase().trim(); document.querySelectorAll('#tk-locs .tk-lc').forEach(el => { el.style.display = !q || el.dataset.s.includes(q) ? '' : 'none'; }); tkLocCount(); }
+function tkLocCount(){ const n = document.querySelectorAll('#tk-locs .tk-li:checked').length, el = document.getElementById('tk-loc-n'); if(el) el.textContent = n ? n + ' selected' : 'None selected — the task goes under General'; }
 function tkBoard(){
   const list = tkFiltered(), admin = canManageInventory(), t0 = vToday(), openSet = vehUi.tkBoardDone || {};
-  const cols = LOCATIONS.map(l => ({ id:l.id, name:l.name, color:l.color || '#6366f1' }));
-  if(list.some(t => tkLoc(t) === TK_NOLOC) || !cols.length) cols.push({ id:TK_NOLOC, name:'No location', color:'#94a3b8' });
+  // "General" holds the tasks that are not tied to one location; it always comes first
+  const cols = [{ id:TK_NOLOC, name:'General', color:'#94a3b8' }].concat(LOCATIONS.map(l => ({ id:l.id, name:l.name, color:l.color || '#6366f1' })));
   const chipCls = 'inline-block px-2 py-0.5 rounded text-[10.5px] font-semibold';
   const card = t => {
     const done = tkDone(t), can = tkCanUpdate(t), cl = t.checklist || [], cd = cl.filter(c => c.done).length;
@@ -7074,7 +7119,8 @@ function tkBoard(){
     const chips = [t.category ? `<span class="${chipCls} bg-sky-100 text-sky-800">${esc(t.category)}</span>` : '',
       t.priority === 'Urgent' || t.priority === 'High' ? `<span class="${chipCls} ${t.priority === 'Urgent' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}">${esc(t.priority)}</span>` : '',
       pr ? `<span class="${chipCls} bg-violet-100 text-violet-800">${esc(pr.prNumber || 'PR')}</span>` : '',
-      t.status === 'On hold' ? `<span class="${chipCls} bg-amber-100 text-amber-800">On hold</span>` : ''].join('');
+      t.status === 'On hold' ? `<span class="${chipCls} bg-amber-100 text-amber-800">On hold</span>` : '',
+      tkLocs(t).length > 1 ? `<span class="${chipCls} bg-slate-100 text-slate-600" title="${esc(tkLocNames(t))}">📍 ${tkLocs(t).length} locations</span>` : ''].join('');
     const late = tkOverdue(t), dd = t.due ? tkDays(t0, t.due) : null;
     const due = done ? (t.completedOn ? `<span class="${chipCls} bg-emerald-50 text-emerald-700">✓ ${isoToDmy(t.completedOn)}</span>` : '')
       : t.due ? `<span class="${chipCls} ${late ? 'bg-rose-600 text-white' : dd <= 3 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}" title="Due ${vDate(t.due)}">📅 ${isoToDmy(t.due)}</span>`
@@ -7091,7 +7137,7 @@ function tkBoard(){
   };
   const sortOpen = (a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')) || (TK_WEIGHT[b.priority] || 1) - (TK_WEIGHT[a.priority] || 1);
   const col = c => {
-    const mine = list.filter(t => tkLoc(t) === c.id), open = mine.filter(t => !tkDone(t)).sort(sortOpen), done = mine.filter(tkDone).sort((a, b) => String(b.completedOn || '').localeCompare(String(a.completedOn || '')));
+    const mine = list.filter(t => tkInLoc(t, c.id)), open = mine.filter(t => !tkDone(t)).sort(sortOpen), done = mine.filter(tkDone).sort((a, b) => String(b.completedOn || '').localeCompare(String(a.completedOn || '')));
     const over = open.filter(tkOverdue).length, showDone = !!openSet[c.id];
     return `<div class="tkb-col w-[290px] shrink-0 flex flex-col rounded-xl bg-slate-100/70 border border-slate-200" data-loc="${c.id}" ${admin ? `ondragover="tkDragOver(event, this)" ondragleave="this.classList.remove('tkb-over')" ondrop="tkDrop(event, '${c.id}')"` : ''}>
       <div class="px-3 pt-3 pb-2"><div class="h-1 rounded-full mb-2.5" style="background:${c.color}"></div>
@@ -7113,17 +7159,19 @@ async function tkQuickDone(id){
   await vehSave('tasks', rec); rerenderMain(); toast(was ? 'Task reopened.' : 'Task completed. ✓');
   if(!was) try{ eggTaskDone(tkById(id)); }catch(e){}
 }
-function tkDragStart(e, id){ window._tkDrag = id; try{ e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed = 'move'; }catch(x){} setTimeout(() => { const el = e.target; if(el && el.classList) el.classList.add('tkb-dragging'); }, 0); }
+function tkDragStart(e, id){ window._tkDrag = id; const col = e.target && e.target.closest ? e.target.closest('.tkb-col') : null; window._tkDragFrom = col ? col.dataset.loc : ''; try{ e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed = 'move'; }catch(x){} setTimeout(() => { const el = e.target; if(el && el.classList) el.classList.add('tkb-dragging'); }, 0); }
 function tkDragEnd(){ document.querySelectorAll('.tkb-dragging,.tkb-over').forEach(el => el.classList.remove('tkb-dragging', 'tkb-over')); }
 function tkDragOver(e, el){ e.preventDefault(); try{ e.dataTransfer.dropEffect = 'move'; }catch(x){} document.querySelectorAll('.tkb-over').forEach(x => x !== el && x.classList.remove('tkb-over')); el.classList.add('tkb-over'); }
 async function tkDrop(e, loc){
   e.preventDefault(); tkDragEnd();
   const id = (() => { try{ return e.dataTransfer.getData('text/plain'); }catch(x){ return ''; } })() || window._tkDrag; window._tkDrag = '';
-  const t = tkById(id); if(!t || !canManageInventory()) return;
-  if(tkLoc(t) === loc) return;
+  const t = tkById(id), from = window._tkDragFrom || ''; window._tkDragFrom = ''; if(!t || !canManageInventory()) return;
+  if(tkInLoc(t, loc)) return;
+  // moving takes the task out of the column it was dragged from and into this one; its other locations stay
+  const keep = tkLocs(t).filter(x => x !== from), ids = loc === TK_NOLOC ? [] : [...new Set(keep.concat([loc]))];
   const l = getLocation(loc), by = authUser ? authUser.name : '';
-  await vehSave('tasks', { id, locationId:loc === TK_NOLOC ? '' : loc, updates:(t.updates || []).concat([{ at:Date.now(), by, text:'Location: ' + (l ? l.name : 'none') }]) });
-  rerenderMain(); toast('Moved to ' + (l ? l.name : 'No location') + '.');
+  await vehSave('tasks', { id, locationIds:ids, locationId:ids[0] || '', updates:(t.updates || []).concat([{ at:Date.now(), by, text:'Location: ' + (ids.map(x => getLocation(x).name).join(', ') || 'General') }]) });
+  rerenderMain(); toast('Moved to ' + (l ? l.name : 'General') + '.');
 }
 
 /* ---------- Gantt chart ---------- */
@@ -7267,15 +7315,20 @@ function openTkEdit(id, presetLoc){
   const cats = [...new Set(state.tasks.map(x => x.category).filter(Boolean))].sort();
   openModal(t ? 'Edit task' : 'New task', vFormOpen + `<datalist id="tk-cats">${cats.map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist>` +
     vGrid(2, vF('Task', 'title', t ? t.title : '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="e.g. Renew vehicle insurance for all fleet"' }) +
-      vF('Category / project', 'category', t ? t.category : '', 'text', { attrs:' list="tk-cats" placeholder="Optional — e.g. Office move, Fleet"' }) + vS('Priority', 'priority', TK_PRIORITY, t ? t.priority || 'Normal' : 'Normal') + vS('Location (board bucket)', 'locationId', [['', '— None']].concat(LOCATIONS.map(l => [l.id, l.name])), t ? (tkLoc(t) === TK_NOLOC ? '' : tkLoc(t)) : (presetLoc || '')) + vF('Due date', 'due', t ? t.due : '', 'date') +
-      vF('Start date', 'start', t ? t.start : vToday(), 'date', { req:1 }) +
+      vF('Category / project', 'category', t ? t.category : '', 'text', { attrs:' list="tk-cats" placeholder="Optional — e.g. Office move, Fleet"' }) + vS('Priority', 'priority', TK_PRIORITY, t ? t.priority || 'Normal' : 'Normal') +
+      vF('Start date', 'start', t ? t.start : vToday(), 'date', { req:1 }) + vF('Due date', 'due', t ? t.due : '', 'date') +
       vS('Status', 'status', TK_STATUS, t ? t.status || 'Not started' : 'Not started') + vF('Progress (%)', 'progress', t ? tkProg(t) : 0, 'number', { attrs:' min="0" max="100" step="5"' }) + vS('Linked purchase requisition (optional)', 'prId', [['', '— None']].concat((state.purchaseRequisitions || []).map(p => [p.id, (p.prNumber || 'PR') + ' · ' + (prFirstItem(p) || p.title || '')])), t && t.prId ? t.prId : '')) +
+    vSec('Locations') +
+    `<div class="flex items-center justify-between gap-3 mb-2 flex-wrap"><input type="search" placeholder="Find a location…" oninput="tkLocPick(this.value)" class="${VEH_FIELD} flex-1 min-w-[10rem]"><span id="tk-loc-n" class="text-[11.5px] text-slate-500"></span></div>
+     <div id="tk-locs" class="max-h-44 overflow-y-auto rounded-lg border border-slate-200 grid sm:grid-cols-2 gap-x-2 p-1.5">${LOCATIONS.map(l => `<label class="tk-lc flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer" data-s="${esc((l.name + ' ' + (l.code || '')).toLowerCase())}"><input type="checkbox" class="tk-li" value="${l.id}" onchange="tkLocCount()" ${(t ? tkLocs(t) : (presetLoc ? [presetLoc] : [])).includes(l.id) ? 'checked' : ''}><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${esc(l.color || '#94a3b8')}"></span><span class="text-sm text-slate-800 truncate">${esc(l.name)}</span></label>`).join('')}</div>
+     <div class="text-[11px] text-slate-400 mt-1 mb-1">Tick every location the task covers — it shows in each of their columns on the board. Leave all unticked for General.</div>` +
     vSec('Assign to') +
     `<input type="search" placeholder="Find staff…" oninput="tkFilterStaff(this.value)" class="${VEH_FIELD} mb-2">
      <div id="tk-staff" class="max-h-56 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">${staff.map(s => `<label class="tk-st flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer" data-s="${esc((s.name + ' ' + s.department + ' ' + s.designation).toLowerCase())}"><input type="checkbox" class="tk-as" value="${esc(s.key)}" data-name="${esc(s.name)}" ${on.has(s.key) ? 'checked' : ''}><span class="text-sm text-slate-800">${esc(s.name)}</span><span class="text-[11.5px] text-slate-400 truncate">${esc([s.designation, s.department].filter(Boolean).join(' · '))}</span></label>`).join('') || '<div class="px-3 py-4 text-sm text-slate-500">No staff yet — add them under Admin Staff.</div>'}</div>` +
     `<div class="mt-3.5">${vTa('Details', 'description', t ? t.description : '', { rows:3 })}</div>` +
     `<div class="mt-3.5">${vTa('Checklist (one item per line)', 'checklist', t ? (t.checklist || []).map(c => c.text).join('\n') : '', { rows:4, attrs:' placeholder="e.g. Count stock in the main store\nCompare with the system\nReport the differences"' })}<div class="text-[11px] text-slate-400 mt-1">Items already ticked stay ticked. Staff tick them off in the task, and progress follows the checklist.</div></div>` +
     vFoot(t ? 'Save' : 'Add task', `saveTkEdit('${id || ''}')`, t ? `deleteTk('${id}')` : ''), true);
+  tkLocCount();
 }
 function tkFilterStaff(q){ q = String(q || '').toLowerCase().trim(); document.querySelectorAll('#tk-staff .tk-st').forEach(el => { el.style.display = !q || el.dataset.s.includes(q) ? '' : 'none'; }); }
 async function saveTkEdit(id){
@@ -7287,7 +7340,8 @@ async function saveTkEdit(id){
   if(!assignees.length) return vFail('Assign the task to at least one staff member.');
   const status = TK_STATUS.includes(o.status) ? o.status : 'Not started';
   let progress = Math.max(0, Math.min(100, Math.round(+o.progress || 0))); if(status === 'Completed') progress = 100;
-  const by = authUser ? authUser.name : '', rec = { id:id || undefined, title:o.title, category:o.category || '', priority:TK_PRIORITY.includes(o.priority) ? o.priority : 'Normal', start:o.start, due:o.due, status, progress, assignees, description:o.description || '', prId:o.prId || '', locationId:getLocation(o.locationId) ? o.locationId : '' };
+  const by = authUser ? authUser.name : '', rec = { id:id || undefined, title:o.title, category:o.category || '', priority:TK_PRIORITY.includes(o.priority) ? o.priority : 'Normal', start:o.start, due:o.due, status, progress, assignees, description:o.description || '', prId:o.prId || '' };
+  rec.locationIds = [...document.querySelectorAll('#tk-locs .tk-li:checked')].map(x => x.value).filter(id => getLocation(id)); rec.locationId = rec.locationIds[0] || '';
   rec.completedOn = status === 'Completed' ? (t && t.completedOn) || vToday() : '';
   // the checklist: items kept by their text (ticks preserved), new ones added, removed ones dropped
   const oldCl = (t && t.checklist) || [], texts = String(o.checklist || '').split('\n').map(x => x.replace(/^\s*[-•*\[\]x✓☐☑]+\s*/i, '').trim()).filter(Boolean);
@@ -7299,7 +7353,7 @@ async function saveTkEdit(id){
     else if(tkProg(t) !== progress) log.push({ at:Date.now(), by, text:'Progress set to ' + progress + '%', progress, status });
     const was = (t.assignees || []).map(a => a.key).sort().join(), now = assignees.map(a => a.key).sort().join();
     if(was !== now) log.push({ at:Date.now(), by, text:'Assigned to ' + assignees.map(a => a.name).join(', ') });
-    if(tkLoc(t) !== (rec.locationId || TK_NOLOC)) log.push({ at:Date.now(), by, text:'Location: ' + ((getLocation(rec.locationId) || {}).name || 'none') });
+    if(tkLocs(t).slice().sort().join() !== rec.locationIds.slice().sort().join()) log.push({ at:Date.now(), by, text:'Location: ' + (rec.locationIds.map(x => getLocation(x).name).join(', ') || 'General') });
     if((t.due || '') !== o.due) log.push({ at:Date.now(), by, text:o.due ? 'Due date ' + (t.due ? 'changed from ' + vDate(t.due) + ' to ' : 'set to ') + vDate(o.due) : 'Due date removed' });
   }
   rec.updates = (t ? t.updates || [] : []).concat(log);
@@ -7317,7 +7371,7 @@ function openTkView(id){
   const t = tkById(id); if(!t) return;
   const can = tkCanUpdate(t), admin = canManageInventory(), p = tkProg(t), c = TK_COL[tkState(t)], ups = (t.updates || []).slice().reverse();
   const dur = t.start && t.due ? tkDays(t.start, t.due) + 1 : 0, gone = t.start && t.due ? Math.max(0, Math.min(dur, tkDays(t.start, vToday()) + 1)) : 0, timePct = dur ? Math.round(gone / dur * 100) : 0;
-  openModal((t.no ? t.no + ' · ' : '') + t.title, `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${tkPill(t)}${t.priority && t.priority !== 'Normal' ? vPill(t.priority === 'Urgent' || t.priority === 'High' ? 'warn' : '', esc(t.priority) + ' priority') : ''}${t.category ? `<span class="text-xs text-slate-500">${esc(t.category)}</span>` : ''}${tkLoc(t) !== TK_NOLOC ? `<span class="text-xs text-slate-500">📍 ${esc(getLocation(tkLoc(t)).name)}</span>` : ''}</div>
+  openModal((t.no ? t.no + ' · ' : '') + t.title, `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${tkPill(t)}${t.priority && t.priority !== 'Normal' ? vPill(t.priority === 'Urgent' || t.priority === 'High' ? 'warn' : '', esc(t.priority) + ' priority') : ''}${t.category ? `<span class="text-xs text-slate-500">${esc(t.category)}</span>` : ''}<span class="text-xs text-slate-500">📍 ${esc(tkLocNames(t))}</span></div>
       ${admin ? `<div class="flex gap-2">${vBtnPlain('Edit', `openTkEdit('${t.id}')`)}</div>` : ''}</div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">${[['Start', vDate(t.start)], ['Due', t.due ? vDate(t.due) : 'No due date'], ['Duration', dur ? dur + ' days' : '—'], ['Completed', t.completedOn ? vDate(t.completedOn) : '—']].map(([l, v]) => `<div class="rounded-lg bg-slate-50 px-3 py-2"><div class="text-[11px] text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800">${v}</div></div>`).join('')}</div>
     <div class="mb-1 flex justify-between text-xs text-slate-500"><span>Progress</span><span class="num font-semibold text-slate-800">${p}%</span></div>
@@ -15481,7 +15535,7 @@ function dashboardModuleSummary(){
         [unsigned ? note(plural(unsigned, 'handover') + ' awaiting signature', 'warn') : '']);
     }),
     safe(() => {
-      const kr = state.keyRegistry, keys = kr.filter(r => r.kind !== 'AC Remote'), ac = kr.filter(r => r.kind === 'AC Remote');
+      const kr = state.keyRegistry.filter(r => r.kind !== 'Vehicle Key'), keys = kr.filter(r => r.kind !== 'AC Remote'), ac = kr.filter(r => r.kind === 'AC Remote');
       const sites = new Set(kr.map(r => r.site).filter(Boolean)).size;
       return card('keys', 'key', 'Key Registry',
         [metric(fmtNum(keys.reduce((a, r) => a + keyTotal(r), 0)), 'Keys'), metric(fmtNum(keys.reduce((a, r) => a + keyQty(r.qtyBox), 0)), 'In the key box'), metric(fmtNum(ac.reduce((a, r) => a + keyTotal(r), 0)), 'AC remotes')],
@@ -15534,6 +15588,46 @@ function dashboardModuleSummary(){
       return card('purchase-requisitions', 'pr', 'Purchase Requisitions',
         [metric(fmtNum(by('open')), 'Open'), metric(fmtNum(pend), 'Pending approval'), metric(fmtNum(by('released')), 'Released')],
         [note(fmtMVR(value).replace('.00', '') + ' not yet closed'), pend ? note(fmtNum(pend) + ' awaiting approval', 'warn') : '']);
+    }),
+    // the rest of the app, one short card each
+    safe(() => {
+      const ts = state.tasks || [], open = ts.filter(t => !tkDone(t)), over = ts.filter(tkOverdue).length, wk = clIsoAdd(vToday(), 7);
+      const soon = open.filter(t => t.due && t.due >= vToday() && t.due <= wk).length, done = ts.filter(t => t.status === 'Completed' && inMonth(t.completedOn)).length;
+      return card('tasks', 'tasks', 'Tasks',
+        [metric(fmtNum(open.length), 'Open'), metric(fmtNum(over), 'Overdue'), metric(fmtNum(done), 'Completed this month')],
+        [over ? note(plural(over, 'task') + ' past the due date', 'crit') : '', soon ? note(plural(soon, 'task') + ' due in the next 7 days', 'warn') : '']);
+    }),
+    safe(() => {
+      const ds = state.documents, pend = ds.filter(d => d.status === 'Pending approval').length, al = ds.filter(docAlert), crit = al.filter(d => (docAlert(d) || {}).k === 'crit').length;
+      return card('docs-memo', 'doc_memo', 'Documents',
+        [metric(fmtNum(ds.length), 'Documents'), metric(fmtNum(ds.filter(d => inMonth(d.date)).length), 'This month'), metric(fmtNum(pend), 'Pending approval')],
+        [pend ? note(plural(pend, 'document') + ' awaiting approval', 'warn') : '', crit ? note(plural(crit, 'document') + ' overdue / expired', 'crit') : '', al.length - crit ? note(fmtNum(al.length - crit) + ' expiring or due for review', 'warn') : '']);
+    }),
+    safe(() => {
+      const ba = state.businessAdvances || [], live = ba.filter(r => r.status !== 'Settled'), bal = live.reduce((t, r) => t + baTotals(r).balance, 0), pend = baPendingAll();
+      return card('business-advance', 'wallet', 'Business Advance',
+        [metric(fmtNum(live.length), 'Open advances'), metric(vMoney0(bal), 'Balance in hand'), metric(fmtNum(pend), 'Invoices pending')],
+        [pend ? note(plural(pend, 'payment') + ' without an invoice', 'warn') : '']);
+    }),
+    safe(() => {
+      const fs = pcFundList(), repl = fs.reduce((t, f) => t + pcStatements(f.id).filter(x => pcStmtPending(x) > 0).length, 0);
+      const unbal = fs.filter(f => { const rc = pcReconcile(f); return rc.counted && Math.abs(rc.diff) >= 0.005; }).length, notCounted = fs.filter(f => !pcReconcile(f).counted).length;
+      return card('petty-statement', 'statement', 'Statements & Cash Count',
+        [metric(fmtNum(fs.length), 'Petty cash funds'), metric(fmtNum(repl), 'Awaiting replenishment'), metric(fmtNum(unbal), 'Not balancing')],
+        [unbal ? note(plural(unbal, 'fund') + " cash count doesn't balance", 'crit') : '', repl ? note(plural(repl, 'statement') + ' to replenish', 'warn') : '', notCounted ? note(plural(notCounted, 'fund') + ' not counted yet') : '']);
+    }),
+    safe(() => {
+      const vk = state.keyRegistry.filter(r => r.kind === 'Vehicle Key'), out = vk.reduce((t, r) => t + keyQty(r.adminQty) + keyQty(r.otherQty), 0);
+      const missing = state.vehicles.filter(v => (v.status || 'Active') === 'Active' && !vk.some(k => k.vehicleId === v.id)).length;
+      return card('vehicle-keys', 'key', 'Vehicle Keys',
+        [metric(fmtNum(vk.reduce((t, r) => t + keyTotal(r), 0)), 'Keys'), metric(fmtNum(vk.reduce((t, r) => t + keyQty(r.qtyBox), 0)), 'In the key box'), metric(fmtNum(out), 'With staff')],
+        [missing ? note(plural(missing, 'vehicle') + ' without keys recorded', 'warn') : '']);
+    }),
+    safe(() => {
+      const wr = state.weeklyReports || [], end = wrWeekEnd(vToday()), thisWk = wr.filter(r => r.weekEnd === end).length, last = wr.slice().sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)))[0];
+      return card('weekly-report', 'vlog', 'Weekly Report',
+        [metric(fmtNum(wr.length), 'Reports'), metric(fmtNum(thisWk), 'This week'), metric(last ? isoToDmy(last.weekEnd) : '—', 'Latest week ending')],
+        [!thisWk ? note("This week's report not started", 'warn') : '']);
     }),
   ].filter(Boolean);
   return `<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">${cards.join('')}</div>`;
@@ -15675,11 +15769,11 @@ function viewDashboard(){
       ${statCard('Total items', fmtNum(state.products.length), state.products.length + ' active SKUs', 'brand')}
       ${statCard('Total units in stock', fmtNum(totalUnits()), 'Across ' + distinctCategories().length + ' categories', 'emerald')}
       ${statCard('Low-stock items', fmtNum(low.length), low.length ? 'At or below reorder level' : 'All items well stocked', low.length ? 'amber' : 'slate')}
-      ${statCard('Locations', fmtNum(LOCATIONS.length), 'Tracking stock across all sites', 'slate')}
+      ${(() => { const sv = LOCATIONS.filter(l => l.stockValuation !== false).length; return statCard('Stock locations', fmtNum(sv), sv < LOCATIONS.length ? 'Need stock valuation · ' + (LOCATIONS.length - sv) + ' other location' + (LOCATIONS.length - sv === 1 ? '' : 's') + ' not shown' : 'Tracking stock across all sites', 'slate'); })()}
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-      ${LOCATIONS.map((l,i)=>`
+      ${(() => { const SV = LOCATIONS.filter(l => l.stockValuation !== false); return SV.map((l,i)=>`
         <div class="bg-white rounded-xl border border-slate-200 p-5">
           <div class="flex items-start gap-2 mb-1">
             <span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style="background:${l.color}"></span>
@@ -15691,7 +15785,7 @@ function viewDashboard(){
             <button onclick="moveLocation('${l.id}','up')" ${i===0?'disabled':''} title="Move up" class="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none">
               <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12l5-5 5 5"/></svg>
             </button>
-            <button onclick="moveLocation('${l.id}','down')" ${i===LOCATIONS.length-1?'disabled':''} title="Move down" class="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none">
+            <button onclick="moveLocation('${l.id}','down')" ${i===SV.length-1?'disabled':''} title="Move down" class="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none">
               <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8l5 5 5-5"/></svg>
             </button>
           </div>` : `<div class="mb-3"></div>`}
@@ -15699,9 +15793,9 @@ function viewDashboard(){
           <div class="flex justify-between text-xs text-slate-500 py-0.5"><span>Total units</span><span class="num font-semibold text-slate-800">${fmtNum(locationTotalUnits(l.id))}</span></div>
           <div class="flex justify-between text-xs text-slate-500 py-0.5"><span>Assets</span><span class="num font-semibold text-slate-800">${fmtNum(assetLocationTotals(l.id))}</span></div>
         </div>
-      `).join('')}
+      `).join('') || `<div class="sm:col-span-2 xl:col-span-4 text-sm text-slate-500">No location is set to need stock valuation — turn it on for a location under Settings → Locations.</div>`; })()}
     </div>
-    ${canManageInventory() && LOCATIONS.length>1 ? `<div class="text-[11px] text-slate-400 -mt-4 mb-6">Use the arrows to reorder how locations appear here.</div>` : ''}
+    ${canManageInventory() && LOCATIONS.length>1 ? `<div class="text-[11px] text-slate-400 -mt-4 mb-6">Only locations that need stock valuation are shown (Settings → Locations). Use the arrows to reorder them.</div>` : ''}
 
       <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 mb-6">
         <div class="text-sm font-bold text-slate-900 mb-1">Low-stock alerts</div>

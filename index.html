@@ -144,6 +144,8 @@ function fitAppTitle(){
     while(el.scrollWidth > el.clientWidth + 1 && size > 10){ size -= 0.5; el.style.fontSize = size + 'px'; }
   });
 }
+// re-fit whenever the sidebar header changes size (shown after sign-in, opened on a phone, window resized, fonts loaded)
+try{ const roFit = () => { const h = document.getElementById('sb-head'); if(h && window.ResizeObserver && !h._ro){ h._ro = new ResizeObserver(() => fitAppTitle()); h._ro.observe(h); } else if(!h) setTimeout(roFit, 300); }; if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', roFit); else roFit(); }catch(e){}
 try{ document.fonts && document.fonts.ready.then(fitAppTitle); window.addEventListener('resize', () => fitAppTitle()); document.addEventListener('DOMContentLoaded', fitAppTitle); }catch(e){}
 function setColorScheme(id){
   try{ localStorage.setItem(COLOR_SCHEME_KEY, id); }catch(e){}
@@ -1914,7 +1916,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.272';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.276';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7813,7 +7815,7 @@ const ANYA_GUIDES = [
     steps:['Open **Finance → Purchase Requisitions** and press **+ New Purchase Requisition**.', 'Attach the PR form from the finance system — the app reads it and fills every field, including the approvals.', 'Check the highlighted fields and save. Later attach the PO and invoices as they arrive.'],
     acts:[['+ New PR', "goTo('purchase-requisitions'); openPurchaseRequisitionForm()"]] },
   { id:'travel', title:'Travel request & DSA', page:'travel-foreign', keys:['travel','trip','dsa','subsistence','allowance','per diem','pocket money','incidental','trf'],
-    steps:['Open **Travel → Local** or **Foreign Travel** and press **+ Travel request**. The next request number (FDC/TRF/…) is filled in for you.', 'Add the travellers, dates and destination. Turn on DSA to enter the daily rate, incidental allowance and pocket money — totals update as you type, and empty columns are left off the memo.', 'Print the DSA memo, get it signed and attach the signed memo.', 'Press **✉ Email to Finance** to make an email draft (to Finance, CC Rukham, Administration, Sama). It is never sent — you review and send it yourself.'],
+    steps:['Have the signed form? Press **📎 From signed form** (or tell me "submit a travel request form") — it is read, the request is created and the form attached. Otherwise open **Travel → Local** or **Foreign Travel** and press **+ Travel request**. The next request number (FDC/TRF/…) is filled in for you.', 'Add the travellers, dates and destination. Turn on DSA to enter the daily rate, incidental allowance and pocket money — totals update as you type, and empty columns are left off the memo.', 'Print the DSA memo, get it signed and attach the signed memo.', 'Press **✉ Email to Finance** to make an email draft (to Finance, CC Rukham, Administration, Sama). It is never sent — you review and send it yourself.'],
     acts:[['+ Foreign travel', "goTo('travel-foreign'); openTravelForm('', 'foreign')"], ['+ Local travel', "goTo('travel-local'); openTravelForm('', 'local')"]] },
   { id:'fuel', title:'Fuel entry', page:'fueling', keys:['fuel','fueling','diesel','petrol','litres','rate per litre','delivery note'],
     steps:['Open **Fleet → Fueling** and press **+ Add Fuel Entry**.', 'Pick the vehicle and charge it to the PR / requisition.', 'Attach the files in the order they come: **PO** → **Delivery note** → **Invoice** (the invoice can be added later).', 'Enter litres and the rate per litre — the total is worked out (litres × rate). A rate under MVR 8/L usually means litres and rate are swapped.'],
@@ -8081,7 +8083,7 @@ function anyaWelcome(){
 function anyaAct(fn){ anya.acts.push(fn); return anya.acts.length - 1; }
 // acts: [label, fn | 'js string']; opts.intent / opts.q let the user rate the answer
 function anyaSay(text, acts, extra, opts){
-  const o = opts || {};
+  const o = opts || {}; try{ text = anyaStyle(text); }catch(e){}
   try{ if(!o.silent && anyaVoiceCfg().speak) anyaSpeak(anyaSpeechText(text, extra)); }catch(e){}
   anya.log.push({ who:'anya', at:Date.now() + Math.random(), text, extra:extra || '', intent:o.intent || '', q:o.q || '', fb:'', ephemeral:!!o.ephemeral,
     acts:(acts || []).map(([l, f]) => ({ label:l, n:anyaAct(() => { if(o.intent && o.q) anyaML.learn(o.q, o.intent, .5); return typeof f === 'function' ? f() : (anyaToggleSmall(), (0, eval)(f)); }) })) });
@@ -8138,7 +8140,7 @@ async function anyaSend(text){
 function anyaGuide(g, o){
   const extra = `<ol class="anya-steps">${g.steps.map(s => `<li>${anyaFmt(s)}</li>`).join('')}</ol>`;
   const acts = (g.acts || []).filter(() => !g.page || anyaCanSee(g.page));
-  anyaSay(`**${g.title}** — here's how:`, acts.length ? acts : (g.page && anyaCanSee(g.page) ? [['Open ' + anyaPageLabel(g.page), `goTo('${g.page}')`]] : []), extra, o);
+  anyaSay(anyaRnd([`**${g.title}** — here's how:`, `Sure! **${g.title}** in a few steps:`, `Here's the way to do **${g.title.toLowerCase()}**:`, `**${g.title}**, step by step:`]) + anyaFlair('guide'), acts.length ? acts : (g.page && anyaCanSee(g.page) ? [['Open ' + anyaPageLabel(g.page), `goTo('${g.page}')`]] : []), extra, o);
 }
 function anyaBestGuide(t){
   let best = null, bs = 0;
@@ -8174,7 +8176,7 @@ function anyaVocab(){
   return anyaVocabCache = v;
 }
 const ANYA_CMD_WORDS = new Set('request requests petty cash voucher travel fuel fueling submit process create please reimbursement reimburse foreign local entry litres'.split(' '));
-const ANYA_COMMON = new Set('there their these those where which while about above after again other others named called under until since would could should might maybe never always every thing things right wrong today tomorrow yesterday month months years office offices building company limited private store house money people staff named items')
+const ANYA_COMMON = new Set('night tonight tired bored sleepy joke jokes funny thanks awesome great morning evening sorry hello cheers smart useless stupid feeling happy stressed alive human robot dance song world later going there their these those where which while about above after again other others named called under until since would could should might maybe never always every thing things right wrong today tomorrow yesterday month months years office offices building company limited private store house money people staff named items'.split(' '))
 ;function anyaFix(t, cmdOnly){
   const V = cmdOnly ? ANYA_CMD_WORDS : anyaVocab();
   return t.split(' ').map(w => { if(w.length < 5 || V.has(w) || /\d/.test(w) || ANYA_Q_STOP.has(w) || ANYA_COMMON.has(w)) return w; let best = w, bd = w.length >= 9 ? 2 : 1; V.forEach(x => { const d = anyaLev(w, x); if(d <= bd && d < 9 && (best === w || d < anyaLev(w, best))){ best = x; } }); return best; }).join(' ');
@@ -8311,7 +8313,7 @@ async function anyaSubmitOpenForm(){
   btn.click();
   await new Promise(r => setTimeout(r, 1500));
   if((ov.classList.contains('hidden') || !document.getElementById('vform')) && hodPick){ try{ localStorage.setItem(anyaML.key() + '_hod', hodPick); }catch(e){} }
-  if(ov.classList.contains('hidden') || !document.getElementById('vform')){ anyaSay('Submitted ✓ — it is saved. Anything else?'); anyaDraw(); return; }
+  if(ov.classList.contains('hidden') || !document.getElementById('vform')){ anyaSay(anyaRnd(['Submitted ✓ — it is saved. Anything else?', 'Saved ✓ — all done.', 'That\'s in ✓. What\'s next?']) + anyaFlair('done')); anyaDraw(); return; }
   // what the form complained about: its error line or the latest message on screen
   const errEl = [...ov.querySelectorAll('[id$="error"], .text-rose-600, .text-red-600')].find(e => e.offsetParent && e.textContent.trim()), tw = document.getElementById('toast-wrap'), last = tw && tw.lastElementChild;
   const why = (errEl && errEl.textContent.trim()) || (last && last.textContent.trim()) || '';
@@ -9053,6 +9055,189 @@ function anyaRecordAnswer(t){
     `<ul class="anya-list">${show.map(r => `<li><b>${esc(r.title)}</b>${r.facts ? `<br><span>${esc(r.facts)}</span>` : ''}</li>`).join('')}</ul>${hits.length > show.length ? `<div class="anya-tip">…and ${hits.length - show.length} more.</div>` : ''}`);
   return true;
 }
+/* ---------- a travel request from its signed form: the file is read and the record made, attached ---------- */
+function trFormPick(viaAnya){
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/pdf,image/*'; i.multiple = true; i.style.display = 'none'; document.body.appendChild(i);
+  i.addEventListener('change', () => { const files = [...i.files]; i.remove(); if(files.length) trFromForm(files, viaAnya); });
+  i.click();
+}
+// the details written on a travel request form
+function trParseForm(text){
+  const T = String(text || ''), lines = T.replace(/\r/g, '').split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const val = re => { for(let i = 0; i < lines.length; i++){ const m = re.exec(lines[i]); if(m){ const v = (lines[i].slice(m.index + m[0].length).replace(/^[\s:.\-#]+/, '') || lines[i + 1] || '').trim(); if(v) return v; } } return ''; };
+  const g = attParseText(T), o = {};
+  o.formNumber = (/(FDC\s*\/\s*TRF\s*\/\s*\d{4}\s*\/\s*\d+(?:-\d+)?)/i.exec(T) || [])[1] ? (/(FDC\s*\/\s*TRF\s*\/\s*\d{4}\s*\/\s*\d+(?:-\d+)?)/i.exec(T))[1].replace(/\s+/g, '').toUpperCase() : (g.number || '');
+  o.destination = val(/\b(destination|place of (?:travel|visit)|travelling to|island|location)\b/i).replace(/\b(date|purpose|from|duration)\b.*$/i, '').trim();
+  o.purpose = val(/\b(purpose(?: of (?:travel|trip|visit))?|reason for travel|objective)\b/i).replace(/\b(date|destination|duration)\b.*$/i, '').trim();
+  o.country = val(/\bcountry\b/i).replace(/\b(date|destination|purpose)\b.*$/i, '').trim();
+  const dAfter = re => { for(let i = 0; i < lines.length; i++){ if(re.test(lines[i])){ const d = pcFindDates(lines[i])[0] || (lines[i + 1] ? pcFindDates(lines[i + 1])[0] : ''); if(d) return d; } } return ''; };
+  o.fromDate = dAfter(/\b(departure|depart|date of travel|travel date|from|start(?:ing)? date|leaving)\b/i) || g.start || '';
+  o.toDate = dAfter(/\b(return|arrival back|to date|end date|until|till|back on)\b/i) || g.expiry || '';
+  const all = lines.flatMap(pcFindDates).sort(); if(!o.fromDate && all.length >= 2){ o.fromDate = all[all.length - 2]; o.toDate = o.toDate || all[all.length - 1]; }
+  o.formDate = dAfter(/\b(form date|date of request|request date|^date)\b/i) || '';
+  o.requestedBy = val(/\b(requested by|applicant|requester)\b/i).replace(/\b(designation|signature|date)\b.*$/i, '').trim();
+  o.authorizedBy = val(/\b(authori[sz]ed by|approved by|recommended by)\b/i).replace(/\b(designation|signature|date)\b.*$/i, '').trim();
+  // travellers: the names on the traveller lines; failing that, every staff member named on the form except the requester and the authoriser
+  const low = T.toLowerCase(), auth = o.authorizedBy.toLowerCase(), reqr = o.requestedBy.toLowerCase();
+  const tLines = lines.filter(l => /\b(traveller|traveler|name of (?:staff|employee|traveller)|staff name|participant)\b/i.test(l));
+  const named = sdAll().filter(p => p.name && p.name.length > 3 && tLines.some(l => l.toLowerCase().includes(p.name.toLowerCase())));
+  o.participants = named.length ? named.map(p => ({ name:p.name, designation:p.designation || '', category:trStaffCat(p.name) || TR_CATS[0] })) : sdAll().filter(p => p.name && p.name.length > 3 && low.includes(p.name.toLowerCase()) && !(auth && auth.includes(p.name.toLowerCase())) && !(reqr && reqr.includes(p.name.toLowerCase()))).map(p => ({ name:p.name, designation:p.designation || '', category:trStaffCat(p.name) || TR_CATS[0] }));
+  if(!o.participants.length){ const n = val(/\b(name of (?:staff|traveller|employee)|traveller'?s? name|staff name|name)\b/i).replace(/\b(designation|staff|id|no)\b.*$/i, '').trim(); if(n && n.length > 2) o.participants = [{ name:n, designation:val(/\bdesignation\b/i).replace(/\b(department|section)\b.*$/i, '').trim(), category:TR_CATS[0] }]; }
+  // local or foreign: a country with rates other than the Maldives, or an island/atoll name
+  const countries = [...new Set(trRates().map(r => r.country).filter(Boolean))];
+  const cHit = countries.find(c => trNorm(c) !== trNorm(TR_HOME) && (low.includes(trNorm(c)) || trNorm(o.destination).includes(trNorm(c))));
+  if(!o.country) o.country = cHit || '';
+  o.scope = (o.country && trNorm(o.country) !== trNorm(TR_HOME)) || /\b(foreign|abroad|overseas|international|visa|flight to)\b/i.test(T) ? 'foreign' : 'local';
+  if(o.scope === 'local') o.country = TR_HOME;
+  return o;
+}
+async function trFromForm(files, viaAnya){
+  const say = (t, acts) => { if(viaAnya){ anyaSay(t, acts || []); anyaDraw(); } else toast(t.replace(/\*\*/g, '')); };
+  let att; try{ att = await agPrepare(files); }catch(e){ say('I could not read that file: ' + (e && e.message ? e.message : e)); return; }
+  say('Reading the travel request form…');
+  let text = ''; try{ text = await pcReadInvoiceFile(files[0], () => {}); }catch(e){}
+  const o = trParseForm(text);
+  openTravelForm('', o.scope);
+  const f = await anyaWaitForm(4000); if(!f){ say('The travel form did not open.'); return; }
+  trAtt.form = att;                                                            // the signed form is attached when the record is saved
+  const done = [], put = (n, v, l) => { const el = f.elements[n]; if(el && v && anyaPut(el, v)) done.push(l); };
+  put('formNumber', o.formNumber, 'form number'); put('formDate', o.formDate, 'form date'); put('destination', o.destination, 'destination');
+  if(o.scope === 'foreign' && o.country){ put('country', o.country, 'country'); try{ trCountryChanged(); }catch(e){} }
+  try{ trDestChanged(); }catch(e){}
+  put('fromDate', o.fromDate, 'departure'); put('toDate', o.toDate, 'return'); try{ trDatesChanged(); }catch(e){}
+  put('purpose', o.purpose, 'purpose'); put('requestedBy', o.requestedBy, 'requested by'); put('authorizedBy', o.authorizedBy, 'authorised by');
+  // travellers: the first row exists; more rows are added with the form's own button
+  const addBtn = [...f.querySelectorAll('button')].find(b => /add (another )?(traveller|person|staff)/i.test(b.textContent));
+  o.participants.forEach((p, k) => { let rows = f.querySelectorAll('.tr-person'); if(k >= rows.length && addBtn){ addBtn.click(); rows = f.querySelectorAll('.tr-person'); } const row = rows[k]; if(!row) return; const nm = row.querySelector('.tr-pname'); if(nm && !nm.value){ anyaPut(nm, p.name); try{ trFillDesig(nm); }catch(e){} const ds = row.querySelector('.tr-pdesig'); if(ds && !ds.value && p.designation) anyaPut(ds, p.designation); } });
+  if(o.participants.length) done.push(o.participants.length + ' traveller' + (o.participants.length === 1 ? '' : 's'));
+  const mno = f.elements['dsa.memoNo']; if(mno && /\/$/.test(mno.value)) mno.value = '';     // the memo number is given when the DSA memo is made
+  try{ trDsaPreview(); }catch(e){}
+  // everything required is there → saved straight away; otherwise the form stays open with what is missing
+  const need = [!f.elements.destination.value && 'destination', !f.elements.country.value && 'country', (!f.elements.fromDate.value || !f.elements.toDate.value) && 'travel dates', !f.querySelector('.tr-pname') || ![...f.querySelectorAll('.tr-pname')].some(x => x.value.trim()) ? 'traveller' : ''].filter(Boolean);
+  if(!need.length){
+    const btn = [...document.querySelectorAll('#modal-overlay button')].find(b => /saveTravel\(/.test(b.getAttribute('onclick') || ''));
+    if(btn){ btn.click(); await new Promise(r => setTimeout(r, 1200)); const ok = !document.getElementById('vform') || !document.getElementById('vform').elements.destination;
+      if(ok){ say(`Travel request created from the form ✓ — read ${done.join(', ')}; the signed form is attached. Check it in the record that just opened.`); return; } }
+  }
+  const ferr = document.getElementById('vf-error'), why = ferr && !ferr.classList.contains('hidden') ? ferr.textContent.trim() : '';
+  say(`I read ${done.length ? done.join(', ') : 'nothing I could use'} from the form (highlighted) and attached it. ${need.length ? 'Please add the missing ' + need.join(', ') : why ? 'It wasn\'t saved yet — the form says: **' + why + '**' : 'Please check it'} and press Save.`);
+}
+
+/* ---------- Anya prepares the DSA memo for a trip ---------- */
+function anyaFindTrip(t){
+  const list = state.travelRequests.slice(); if(!list.length) return null;
+  const no = /\b(?:trf\s*\/?\s*\d{4}\s*\/?\s*)?(\d{1,4}(?:-\d+)?)\b/.exec(t.replace(/\b20\d\d\b(?!\s*\/)/g, ''));
+  const byNo = no && list.find(x => (x.formNumber || '').replace(/\s+/g, '').toLowerCase().endsWith('/' + no[1]));
+  if(byNo) return byNo;
+  const words = t.split(' ').filter(w => w.length > 3 && !/^(memo|process|prepare|make|create|generate|trip|travel|request|please|for|the|dsa|send|email|finance|draft)$/.test(w));
+  const scored = list.map(x => ({ x, s:words.filter(w => anyaNorm([x.destination, x.country, x.purpose, x.formNumber, trParts(x).map(p => p.name).join(' ')].join(' ')).includes(w)).length })).filter(y => y.s).sort((a, b) => b.s - a.s);
+  if(scored.length) return scored[0].x;
+  if(/\b(latest|last|newest|recent|this)\b/.test(t) || words.length === 0){ return list.filter(x => !(x.dsa && x.dsa.memoNo)).sort((a, b) => String(b.formDate || b.fromDate).localeCompare(String(a.formDate || a.fromDate)))[0] || null; }
+  return null;
+}
+async function anyaProcessDsa(q){
+  const t = anyaNorm(q);
+  if(!anyaCanSee('travel-foreign') && !anyaCanSee('travel-local')){ anyaSay('You don\'t have access to travel requests with your role.'); anyaDraw(); return; }
+  const trip = anyaFindTrip(t);
+  if(!trip){ const open = state.travelRequests.slice(-6).reverse(); anyaSay('Which trip is the DSA memo for?', open.map(x => [`${x.formNumber || 'No number'} — ${x.destination || ''}`, () => anyaProcessDsa('dsa memo ' + (x.formNumber || x.destination))])); anyaDraw(); return; }
+  // email: only once the signed memo is attached
+  if(/\b(email|mail|send)\b/.test(t)){ if(trMemoSigned(trip)){ anyaToggleSmall(); trMailOpen(trip.id); anyaSay(`Opened the email draft to Finance for the DSA memo of **${trip.destination}** — review it and send it yourself.`); } else anyaSay(`The DSA memo for **${trip.destination}** isn't signed and attached yet. Attach the signed memo first, then ask me again.`, [['Open the trip', () => { anyaToggleSmall(); openTravelDetail(trip.id); }]]); anyaDraw(); return; }
+  const d = trip.dsa || {};
+  if(trDsaOn(trip) && d.memoNo && trDsaTotal(trip)){
+    anyaSay(`The DSA memo for **${trip.destination}** is already prepared (**${d.memoNo}**). Downloading it…`); anyaDraw();
+    await trMemoPdf(trip.id); anyaSay(trMemoSigned(trip) ? 'The signed memo is attached — I can make the email draft to Finance.' : 'Next: get it signed, attach the signed memo to the trip, then ask me to "email the DSA memo to finance".', trMemoSigned(trip) ? [['Email draft to Finance', () => { anyaToggleSmall(); trMailOpen(trip.id); }]] : [['Attach signed memo', () => { anyaToggleSmall(); openTravelForm(trip.id); }]]); anyaDraw(); return;
+  }
+  anyaSay(`Preparing the DSA memo for **${trip.formNumber || ''} ${trip.destination}**…`); anyaDraw();
+  anyaToggleSmall(); openTravelForm(trip.id);
+  const f = await anyaWaitForm(4000); if(!f){ anyaSay('The travel form did not open.'); anyaDraw(); return; }
+  const cb = f.elements['dsa.enabled']; if(cb && !cb.checked){ cb.checked = true; trDsaToggle(true); }
+  try{ if(![...f.querySelectorAll('[name^="dsa."][name$="Rate"]')].some(x => vNum(x.value) > 0)) trApplyRate(); trDatesChanged(); }catch(e){}
+  // amounts said in the prompt: "pocket money 100", "incidental 50", "meal 200"
+  const amt = re => { const m = re.exec(t); return m ? +m[1] : null; };
+  [['pocket', /\b(?:pocket money|pocket|incidental)\s*(?:of\s*)?(?:mvr|usd)?\s*(\d+(?:\.\d+)?)/], ['meal', /\b(?:meal|food)\s*(?:of\s*)?(?:mvr|usd)?\s*(\d+(?:\.\d+)?)/], ['accom', /\b(?:accommodation|hotel|lodging)\s*(?:of\s*)?(?:mvr|usd)?\s*(\d+(?:\.\d+)?)/], ['daily', /\b(?:daily|dsa rate|per day)\s*(?:of\s*)?(?:mvr|usd)?\s*(\d+(?:\.\d+)?)/]].forEach(([k, re]) => { const v = amt(re), el = f.elements['dsa.' + k + 'Rate']; if(v != null && el) anyaPut(el, v); });
+  const mn = /\bmemo (?:no|number|#)?\s*([a-z()0-9\/\-]+\d)\b/.exec(t); if(mn && f.elements['dsa.memoNo']) anyaPut(f.elements['dsa.memoNo'], mn[1].toUpperCase());
+  if(f.elements['dsa.memoNo'] && (!f.elements['dsa.memoNo'].value || /\/$/.test(f.elements['dsa.memoNo'].value))) anyaPut(f.elements['dsa.memoNo'], trNextMemoNo().replace(/\/$/, '/1'));
+  if(f.elements['dsa.memoDate'] && !f.elements['dsa.memoDate'].value) anyaPut(f.elements['dsa.memoDate'], vToday());
+  try{ trDsaPreview(); }catch(e){}
+  const btn = [...document.querySelectorAll('#modal-overlay button')].find(b => /saveTravel\(/.test(b.getAttribute('onclick') || ''));
+  if(!btn){ anyaSay('I filled the DSA section — please check it and press Save.'); anyaDraw(); return; }
+  btn.click(); await new Promise(r => setTimeout(r, 1300));
+  const still = document.getElementById('vform') && document.getElementById('vform').elements['dsa.enabled'];
+  if(still){ const err = document.getElementById('vf-error'); anyaSay(`I filled the DSA section, but it wasn't saved — the form says: **${(err && err.textContent.trim()) || 'some details are missing'}**. Fix that and press Save, then ask me again for the memo.`); anyaDraw(); return; }
+  const t2 = trById(trip.id), dd = t2.dsa || {};
+  anyaSay(`DSA memo ready ✓ — **${dd.memoNo}** dated ${fmtDate(dd.memoDate)}, total **${trMoney(trCur(t2), trDsaTotal(t2))}** for ${anyaPlural(trParts(t2).length, 'traveller')}. Downloading the memo PDF now.`); anyaDraw();
+  try{ await trMemoPdf(trip.id); }catch(e){}
+  anyaSay('Next: get it signed, attach the signed memo to the trip, then ask me to "email the DSA memo to finance" — I\'ll make the draft (it is never sent by itself).', [['Attach signed memo', () => { anyaToggleSmall(); openTravelForm(trip.id); }], ['Open the trip', () => { anyaToggleSmall(); openTravelDetail(trip.id); }]]); anyaDraw();
+}
+/* ---------- Anya's personality: varied words, small talk, a sense of time, and a style each person can choose ---------- */
+const anyaRnd = a => a[Math.floor(Math.random() * a.length)];
+const anyaPersona = () => { try{ return anyaML.data().persona || 'friendly'; }catch(e){ return 'friendly'; } };   // friendly · professional · playful
+const anyaNm = () => anyaFirst() ? ', ' + anyaFirst() : '';
+// a short remark now and then (never in professional style): time of day, day of week, or just being nice
+function anyaFlair(kind){
+  const p = anyaPersona(); if(p === 'professional') return '';
+  if(Math.random() > (p === 'playful' ? 0.55 : 0.28)) return '';
+  const h = new Date().getHours(), dow = new Date().getDay();
+  const pool = [];
+  if(kind === 'done') pool.push('One less thing on your plate. ✨', 'Smooth as ever.', 'Consider it handled.', 'Easy. What\'s next?', 'Ticked off. ✓');
+  if(kind === 'open') pool.push('Here we go.', 'Right this way.', 'Off we go! 🚀');
+  if(kind === 'guide') pool.push('You\'ve got this.', 'Shout if any step trips you up.', 'Simple once you\'ve done it twice.');
+  if(h >= 20 || h < 5) pool.push('Working late? Don\'t forget to rest. 🌙', 'Burning the midnight oil, I see.');
+  if(h >= 5 && h < 9) pool.push('Early start — impressive. ☕');
+  if(dow === 4 && h >= 13) pool.push('Almost weekend! 🌴');
+  if(dow === 0 && h < 12) pool.push('New week, fresh start. 💪');
+  if(p === 'playful') pool.push('Anya, at your service. 🫡', 'Beep boop — done. 🤖', 'Nailed it. 😎');
+  return pool.length ? ' ' + anyaRnd(pool) : '';
+}
+// style: emojis are dropped in professional mode
+const anyaStyle = t => anyaPersona() === 'professional' ? String(t).replace(/[\u{1F300}-\u{1FAFF}☀-➿✨]/gu, '').replace(/\s{2,}/g, ' ').trim() : t;
+// small talk: returns true when it answered
+function anyaSmallTalk(t, q){
+  const n = anyaNm(), p = anyaPersona(), say = (x, acts) => { anyaSay(anyaStyle(x), acts || []); return true; };
+  if(/^(hi|hello|hey|hiya|yo|salaam|assalaamu? ?alaikum|good (morning|afternoon|evening)|morning|evening)\b/.test(t) && t.split(' ').length <= 4)
+    return say(anyaRnd([`${anyaHello()} What can I do for you?`, `Hey${n}! 👋 What are we tackling today?`, `Hello${n}! Ready when you are.`, `Hi${n}! Need a hand with something?`]));
+  if(/^(thanks|thank you|thx|ty|cheers|shukuriyaa|shukuriyya)\b/.test(t) && t.split(' ').length <= 5)
+    return say(anyaRnd(['Any time! 😊', 'Happy to help.', 'My pleasure' + n + '.', 'You\'re welcome — that\'s what I\'m here for.', 'Anytime. I\'ll be right here.']));
+  if(/^(ok|okay|cool|nice|great|awesome|perfect|alright|got it|sure|fine)\b/.test(t) && t.split(' ').length <= 3)
+    return say(anyaRnd(['👍', 'Great!', 'Sounds good.', 'Lovely.', 'Glad to hear it.']));
+  if(/\b(good job|well done|great job|you('re| are) (great|awesome|amazing|smart|the best|good|helpful|brilliant)|love you|i like you|best assistant)\b/.test(t))
+    return say(anyaRnd(['Aww, thank you! 🥰 That keeps my circuits happy.', 'You\'re making me blush (if I could). 😊', 'Thank you' + n + '! You\'re not so bad yourself.', 'Noted, framed and kept forever. 💾']));
+  if(/\b(how are you|how('s| is) it going|how do you do|you ok|are you ok|how are things)\b/.test(t))
+    return say(anyaRnd([`I'm doing great${n} — all systems green. How about you?`, 'Running smoothly and ready to help! How\'s your day going?', 'Fully charged and curious. What can I do for you?']));
+  if(/^(i('m| am) )?(fine|good|great|ok|okay|not bad|doing well|alright|all good)( thanks| thank you| too)?$/.test(t))
+    return say(anyaRnd(['Glad to hear it! 😊 What can I help with?', 'Good to know. Shall we get something done?']));
+  if(/\b(i('m| am)|im|feeling|feel)( so| very| really| quite| a bit| kinda| super| too)? (tired|exhausted|sleepy|stressed|overwhelmed|busy|swamped|frustrated|bored|sad|down)\b/.test(t)){
+    const m = (/\b(tired|exhausted|sleepy|stressed|overwhelmed|busy|swamped|frustrated|bored|sad|down)\b/.exec(t) || [])[1] || '';
+    const items = anyaPages().filter(x => Number(x.badge) > 0).length;
+    if(/bored/.test(m)) return say('Bored? Try typing "monsoon" on the Dashboard… or I could find you a mistake to fix. 😄', [['Check for mistakes', () => anyaAnalyze()]]);
+    return say(anyaRnd([`That sounds like a lot${n}. Let me take something off your plate — ${items ? `there ${items === 1 ? 'is 1 page' : 'are ' + items + ' pages'} with things waiting; want me to show you?` : 'nothing is waiting right now, so maybe grab a tea. ☕'}`, `Hang in there${n}. One thing at a time — tell me what to do and I'll handle the busywork.`]), items ? [['What\'s pending', () => anyaExec('s:pending', '')]] : []);
+  }
+  if(/\b(who are you|what are you|your name|introduce yourself|tell me about yourself)\b/.test(t))
+    return say(`I'm **Anya**, the Administration team's assistant. I know my way around petty cash, travel, fuel, documents and more — I fill forms, find files, write letters, spot mistakes, and I learn how *you* like to work. 💡`);
+  if(/\b(who (made|built|created) you|your (creator|maker|developer))\b/.test(t))
+    return say('I was built into this app by **Yoosuf Niyaz** for the Administration team — with plenty of "can it also…?" ideas along the way. 😄');
+  if(/\b(are you (real|human|alive|a robot|ai)|do you have feelings)\b/.test(t))
+    return say(anyaRnd(['I\'m software — no coffee breaks, no weekends. But I do like a tidy statement. 😉', 'Not human, but I try to be helpful like one. 🤖']));
+  if(/\b(tell me a joke|joke|make me laugh|something funny)\b/.test(t))
+    return say(anyaRnd(['Why did the invoice break up with the receipt? It needed more *closure*. 🧾', 'I tried to balance the petty cash once… now I\'m just a little *change*-d. 💰', 'Why don\'t spreadsheets ever get lost? They always know their *cells*. 📊', 'My favourite exercise? Running reports. 🏃‍♀️', 'Why was the stapler so calm? It knew how to keep things *together*. 📎']));
+  if(/\b(sing|song|dance)\b/.test(t)) return say('🎵 *La la la… the statement is balanced… la la la…* 🎵 — that\'s my whole repertoire.');
+  if(/\b(good ?night|bye|goodbye|see you|see ya|later|logging off|going home)\b/.test(t) && t.split(' ').length <= 5)
+    return say(anyaRnd([`Good night${n}! 🌙 I'll keep an eye on things.`, `See you${n}! Everything's saved.`, 'Bye for now — I\'ll be here when you need me. 👋']));
+  if(/\b(stupid|dumb|useless|idiot|hate you|you suck|bad bot)\b/.test(t))
+    return say(anyaRnd(['Ouch — fair enough if I got it wrong. 😅 Tell me what you needed and I\'ll try again (or tap 👎 so I learn).', 'Sorry I let you down. Say it another way and I\'ll do better.']));
+  if(/\b(what time|what('s| is) the time|what day|what('s| is) the date|today('s)? date)\b/.test(t) && t.split(' ').length <= 7){
+    const d = new Date(); return say(`It's **${d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' })}** on **${ANYA_DAYN[d.getDay()]}, ${anyaLongDate(vToday())}**.`);
+  }
+  if(/\b(veni,? vidi,? vici)\b/.test(t)) return say('…I came, I saw, I conquered. 🏛️ Someone\'s been typing names on the Dashboard.');
+  if(/\b(are we the good guys|awtgg)\b/.test(t)) return say('We.Are.And.Always.Will.Be. 💚');
+  if(/\b(meaning of life|42)\b/.test(t) && t.split(' ').length <= 6) return say('42. Obviously. 🌌');
+  // the personality itself
+  const pm = /\b(be|sound|talk|act|switch to|change to|make (yourself|it))\b.{0,20}\b(professional|formal|serious|business|playful|fun|funny|casual|friendly|normal)\b|\b(professional|formal|playful|friendly|casual) (mode|style)\b/.exec(t);
+  if(pm){ const w = /(professional|formal|serious|business)/.test(t) ? 'professional' : /(playful|fun|funny)/.test(t) ? 'playful' : 'friendly'; anyaML.data().persona = w; anyaML.save();
+    return say(w === 'professional' ? 'Understood. I will keep my replies brief and formal.' : w === 'playful' ? 'Ooh, fun mode unlocked! 🎉 Let\'s make admin work a little less boring.' : 'Back to my friendly self. 😊'); }
+  if(/\b(your (personality|style|mood)|personality)\b/.test(t)) return say(`I'm in **${p}** mode. You can say "be professional", "be friendly" or "be playful" to change how I talk.`);
+  return false;
+}
 function anyaExec(i, q, chosen){
   const k = i.slice(0, 1), v = i.slice(2), o = q && !chosen ? { intent:i, q } : {};
   if(k === 't' && !themesUnlocked()){ anyaSay('I can switch between light and dark mode — or pick a colour scheme in Appearance.', [['Dark mode', () => anyaExec('m:dark', '')], ['Open appearance', 'openAppearanceModal()']]); anyaDraw(); return; }
@@ -9060,8 +9245,8 @@ function anyaExec(i, q, chosen){
   if(k !== 's' || !/^(help|learned|me)$/.test(v)) anyaML.used(i, ui.tab);
   if(k === 'g'){ anyaGuide(ANYA_GUIDES.find(x => x.id === v), o); }
   else if(k === 'a' && ANYA_FILL[v] && q){ return anyaStartFill(v, q, o); }
-  else if(k === 'a'){ const a = anyaActInfo(v); try{ anyaToggleSmall(); (0, eval)(a.js); anyaSay(`Done — I've opened ${a.label}. Fill it in and save; ask me if you get stuck.`, [['Show the steps', () => { const g = ANYA_GUIDES.find(x => x.page === a.page); if(g) anyaGuide(g); }]], '', o); }catch(e){ anyaSay('I could not open it: ' + (e && e.message ? e.message : e)); } }
-  else if(k === 'p'){ anyaToggleSmall(); goTo(v); const gid = ANYA_PAGE_GUIDE[v]; anyaSay(`Opened **${anyaPageLabel(v)}**.`, gid ? [['Show the steps', () => anyaGuide(ANYA_GUIDES.find(x => x.id === gid))]] : [], '', o); }
+  else if(k === 'a'){ const a = anyaActInfo(v); try{ anyaToggleSmall(); (0, eval)(a.js); anyaSay(anyaRnd([`Done — I've opened ${a.label}.`, `Here's ${a.label}, ready for you.`, `Opened ${a.label} for you.`]) + ' Fill it in and save; ask me if you get stuck.' + anyaFlair('open'), [['Show the steps', () => { const g = ANYA_GUIDES.find(x => x.page === a.page); if(g) anyaGuide(g); }]], '', o); }catch(e){ anyaSay('I could not open it: ' + (e && e.message ? e.message : e)); } }
+  else if(k === 'p'){ anyaToggleSmall(); goTo(v); const gid = ANYA_PAGE_GUIDE[v]; anyaSay(anyaRnd([`Opened **${anyaPageLabel(v)}**.`, `Here's **${anyaPageLabel(v)}**.`, `Taking you to **${anyaPageLabel(v)}**.`, `**${anyaPageLabel(v)}** is open.`]) + anyaFlair('open'), gid ? [['Show the steps', () => anyaGuide(ANYA_GUIDES.find(x => x.id === gid))]] : [], '', o); }
   else if(k === 't'){ setColorScheme(v); anyaSay(`Switched to the **${ANYA_THEMES[v] || v}** theme.`, [], '', o); }
   else if(k === 'm'){ try{ localStorage.setItem(THEME_KEY, v); }catch(e){} applyTheme(v); anyaSay(`${v === 'dark' ? 'Dark' : 'Light'} mode is on.`, [], '', o); }
   else if(k === 's'){
@@ -9077,7 +9262,7 @@ function anyaExec(i, q, chosen){
     else if(v === 'trno'){ let no = ''; try{ no = trNextFormNo(); }catch(e){} anyaSay(no ? `The next travel request number is **${no}**.` : 'I could not work out the next number.', anyaCanSee('travel-foreign') ? [['+ New travel request', "goTo('travel-foreign'); openTravelForm('', 'foreign')"]] : [], '', o); }
     else if(v === 'me'){ anyaSay(`You're signed in as **${(authUser && (authUser.name || authUser.email)) || 'unknown'}** (${(authUser && authUser.role) || 'user'}).`); }
     else if(v === 'help'){
-      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — say \"change your voice\" (or hold 🔈) to pick my voice; tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Look** — \"dark mode\", \"light mode\"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
+      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — say \"change your voice\" (or hold 🔈) to pick my voice; tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Travel** — \"process the DSA memo for TRF 32\", \"email the DSA memo to finance\", \"submit a travel request form\"\n• **Personality** — \"be playful\", \"be professional\", \"be friendly\"; ask me how I am, or for a joke\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Look** — \"dark mode\", \"light mode\"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
     }
     else if(v === 'learned'){
       const d = anyaML.data(), taught = d.ex.filter(e => e.w >= 2 && anyaIntentOk(e.i)).sort((a, b) => b.w - a.w), mine = anyaML.top(ui.tab, 6);
@@ -9120,7 +9305,7 @@ async function anyaReply(q){
   const qq = String(q).trim(), up = /^(👍|👌|✅|good|great answer|correct|right|yes that'?s it|perfect)!*$/i.test(qq), down = /^(👎|❌|wrong|not what i meant|no that'?s wrong|incorrect|bad answer)!*$/i.test(qq);
   if(up || down){ let k = -1; for(let j = anya.log.length - 1; j >= 0; j--){ const m = anya.log[j]; if(m.who === 'anya' && m.intent && m.q && !m.fb){ k = j; break; } }
     if(k < 0){ anyaSay(up ? 'Thanks! 😊 (There is no answer of mine to rate right now — the 👍 / 👎 buttons appear under answers I can learn from.)' : 'Sorry — tell me again what you need, and pick the right option if I offer a few. I\'ll remember it.'); return; }
-    anyaRate(k, up ? 1 : -1); if(up) anyaSay('Thanks — I\'ll answer that the same way next time. 👍'); return; }
+    anyaRate(k, up ? 1 : -1); if(up) anyaSay(anyaRnd(['Thanks — I\'ll answer that the same way next time. 👍', 'Noted! I\'ll remember that. 😊', 'Great — learned. 🧠'])); return; }
   let t = anyaFix(anyaNorm(q));
   for(let k = 0; k < 3; k++) t = t.replace(/^(please|pls|kindly|can you|could you|would you|will you|anya|hey|ok|okay)\s+/, '');
   const formOpen = !!document.getElementById('vform') && !document.getElementById('modal-overlay').classList.contains('hidden');
@@ -9134,13 +9319,14 @@ async function anyaReply(q){
   if(/\b(voice|speaking|talking) off\b|^(mute|be quiet|quiet|stop (speaking|talking)|shush)$/.test(t)){ if(anyaVoiceCfg().speak) anyaToggleSpeak(); else anyaSay('I\'m already quiet.'); return; }
   if(/\b(hands? ?free|always listen|listen for (hey )?anya|wake word)\b/.test(t) && !/\b(off|stop)\b/.test(t)){ anyaSetHands(true); return; }
   if(/\b(stop listening|hands? ?free off|don'?t listen|turn off (the )?(mic|microphone|listening))\b/.test(t)){ anyaSetHands(false); return; }
+  if(!/\bdownload\b/.test(t) && (/\b(process|prepare|make|create|generate|do|issue|raise|calculate|work out)\b.{0,30}\bdsa\b|\bdsa memo\b.{0,20}\b(for|of)\b|\b(email|mail|send)\b.{0,25}\b(dsa|memo)\b/.test(t))){ await anyaProcessDsa(q); return; }
+  if(/\b(submit|upload|attach|add|create|make|register|from)\b.{0,30}\b(travel|trip)\b.{0,25}\b(form|request form|file|pdf|scan|signed)\b|\btravel request form\b/.test(t) && !/\bhow\b/.test(t)){ anyaSay('Choose the signed travel request form (PDF or photo) — I\'ll read it, create the travel request and attach the form.', [['📎 Choose the form', () => trFormPick(true)]]); return; }
   if(anyaDownload(t)) return;
   if(/^(show|list|view|see)\b/.test(t) && /\b(letters|agreements|contracts|memos|documents|leases|vouchers|vehicles|tasks|complaints|handovers)\b/.test(t) && anyaRecordAnswer(t)) return;
   if(/^(show|open|view|see|preview)\b/.test(t) && ANYA_FILEISH.test(t) && anyaGetFile(t)) return;
   const pm = /^process (?:voucher |request )?([a-z0-9\/\- ]*\d[a-z0-9\/\- ]*)$/.exec(t); if(pm){ anyaProcessVoucher(pm[1].trim()); return; }
   if(formOpen && (/^(fill|set|put|use|change|make it)\b/.test(t) || !/^(new|create|start|raise|open|go|show|find|search|how|what|where|who|i (want|need))\b/.test(t)) && anyaFillOpen(t.replace(/^(fill( in| it)?( with)?|set|put|use|change|make it)\s+/, ''))) return;
-  if(/^(hi|hello|hey|salaam|assalaamu? ?alaikum|good (morning|afternoon|evening))\b/.test(t) && t.split(' ').length <= 4){ anyaSay(`Hello${anyaFirst() ? ' ' + anyaFirst() : ''}! What can I do for you?`); return; }
-  if(/^(thanks|thank you|thx|ok|okay|great|cool|nice)\b/.test(t) && t.split(' ').length <= 4){ anyaSay('Any time. 👍'); return; }
+  if(anyaSmallTalk(t, q)) return;
   if(/^(forget|reset|erase|delete|clear) (everything|what you learned|learning|memory|your memory|all)/.test(t)){ anyaSay('I don\'t forget what you teach me — it keeps me getting better. If I answered something wrongly, type 👎 or "wrong" and pick the right option; I\'ll correct myself.'); return; }
   // find (records are looked up, not learned)
   const fm = /^(find|search( for)?|look ?up|lookup|where is|wheres|locate)\s+(.+)$/.exec(t);
@@ -12715,7 +12901,7 @@ function viewTravel(scope){
     </tr>`; }).join('');
   return `
     ${vHead(S.label, scope === 'local' ? 'Trips within the country: the request, the ticket and the Daily Subsistence Allowance.' : 'Trips abroad: the request, the ticket and the Daily Subsistence Allowance.',
-      `${vBtnPlain('Blank memo (Word)', `trBlankMemo('${scope}', 'docx', this)`)}${vBtnPlain('Blank memo (PDF)', `trBlankMemo('${scope}', 'pdf', this)`)}<button onclick="openTravelSettings()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">DSA rates</button>${vBtnPrimary('+ Travel request', `openTravelForm('', '${scope}')`)}`)}</div>
+      `${vBtnPlain('Blank memo (Word)', `trBlankMemo('${scope}', 'docx', this)`)}${vBtnPlain('Blank memo (PDF)', `trBlankMemo('${scope}', 'pdf', this)`)}<button onclick="openTravelSettings()" class="${VEH_BTN} border border-slate-300 text-slate-700 hover:bg-slate-50">DSA rates</button>${vBtnPlain('📎 From signed form', 'trFormPick()') + vBtnPrimary('+ Travel request', `openTravelForm('', '${scope}')`)}`)}</div>
     ${ratesMissing ? `<div class="mb-5 rounded-lg bg-amber-50 text-amber-800 text-[13px] px-4 py-3">No ${scope} DSA rates are set yet. Set them under <button onclick="openTravelSettings()" class="font-semibold underline">DSA rates</button> so new requests fill them in.</div>` : ''}
     ${kpis}
     <div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['', 'All (' + all.length + ')'], ...TR_STATUSES.map(s => [s, s + ' (' + cnt(s) + ')'])], st, 'trSetStatus')}
@@ -14413,7 +14599,17 @@ function renderApp(){
 let lastRenderedTab = null;
 let isPopStateNav = false;
 const DETAIL_TABS = ['item-detail','asset-detail','vehicle-detail'];
+// dashboard numbers stay on one line: a value that is too wide for its column is shrunk to fit
+function dashFitValues(){
+  document.querySelectorAll('.dash-fit').forEach(el => {
+    el.style.fontSize = ''; if(!el.clientWidth) return;
+    let size = parseFloat(getComputedStyle(el).fontSize) || 16;
+    while(el.scrollWidth > el.clientWidth + 1 && size > 9){ size -= 0.5; el.style.fontSize = size + 'px'; }
+  });
+}
+try{ window.addEventListener('resize', () => { clearTimeout(window._dashFitT); window._dashFitT = setTimeout(dashFitValues, 120); }); }catch(e){}
 function render(){
+  try{ setTimeout(dashFitValues, 0); setTimeout(fitAppTitle, 0); }catch(e){}
   try{ setTimeout(() => { try{ anyaSync(); }catch(e){} }, 0); }catch(e){}
   const activeEl = document.activeElement;
   const activeId = (activeEl && activeEl.id && el_contains_main(activeEl)) ? activeEl.id : null;
@@ -14825,7 +15021,7 @@ function dashboardModuleSummary(){
   // a value is never cut off: the currency goes small in front and long figures get a smaller size
   const metric = (value, label) => { const v = String(value), m = /^(MVR|USD|Rf)\s+(.*)$/.exec(v), body = m ? m[2] : v, len = body.replace(/<[^>]*>/g, '').length;
     const size = len > 11 ? 'text-[13px]' : len > 8 ? 'text-[15px]' : 'text-lg';
-    return `<div class="min-w-0"><div class="${size} font-extrabold text-slate-900 num leading-tight break-words">${m ? `<span class="text-[10.5px] font-bold text-slate-500 mr-0.5 align-middle">${m[1]}</span>` : ''}${body}</div><div class="text-[11px] text-slate-500 mt-0.5 leading-snug">${label}</div></div>`; };
+    return `<div class="min-w-0"><div class="${size} font-extrabold text-slate-900 num leading-tight whitespace-nowrap dash-fit">${m ? `<span class="text-[10.5px] font-bold text-slate-500 mr-0.5 align-middle">${m[1]}</span>` : ''}${body}</div><div class="text-[11px] text-slate-500 mt-0.5 leading-snug">${label}</div></div>`; };
   const note = (text, tone) => {
     const cls = tone === 'crit' ? 'bg-rose-100 text-rose-700' : tone === 'warn' ? 'bg-amber-100 text-amber-700' : 'text-slate-400';
     return `<span class="inline-block text-[11px] font-semibold ${tone ? 'px-2 py-0.5 rounded-full ' : ''}${cls}">${text}</span>`;

@@ -1961,7 +1961,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.303';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.304';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -9429,6 +9429,88 @@ function anyaRecordAnswer(t){
     `<ul class="anya-list">${show.map(r => `<li><b>${esc(r.title)}</b>${r.facts ? `<br><span>${esc(r.facts)}</span>` : ''}</li>`).join('')}</ul>${hits.length > show.length ? `<div class="anya-tip">…and ${hits.length - show.length} more.</div>` : ''}`);
   return true;
 }
+/* ---------- the FDC Travel Request Form, read into the travel form: details, travellers, requester and authoriser ---------- */
+// a PDF's text as rows of cells: a wide gap between words starts a new cell (the form's columns)
+async function trReadFormRows(file){
+  if(/pdf/i.test(file.type) || /\.pdf$/i.test(file.name)){
+    await loadScriptOnce(PDFJS_URL); pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const doc = await pdfjsLib.getDocument({ data:new Uint8Array(await file.arrayBuffer()) }).promise, rows = [];
+    for(let p = 1; p <= Math.min(doc.numPages, 3); p++){
+      const items = (await (await doc.getPage(p)).getTextContent()).items.filter(it => String(it.str).trim()), by = {};
+      items.forEach(it => { const y = Math.round(it.transform[5] / 3); (by[y] = by[y] || []).push(it); });
+      Object.keys(by).map(Number).sort((a, b) => b - a).forEach(y => { const its = by[y].sort((a, b) => a.transform[4] - b.transform[4]), cells = []; let end = -1e9;
+        its.forEach(it => { const x = it.transform[4], s = String(it.str); if(cells.length && x - end < 14) cells[cells.length - 1] += (x - end > 1.5 ? ' ' : '') + s; else cells.push(s); end = x + (it.width || s.length * 4); });
+        rows.push(cells.map(c => c.replace(/\s+/g, ' ').trim()).filter(Boolean)); });
+    }
+    if(rows.flat().join('').length > 40) return rows;
+  }
+  const text = await pcReadInvoiceFile(file, () => {});                                // a scan: read by OCR, one cell per line
+  return String(text || '').split('\n').map(l => l.split(/\s{3,}/).map(c => c.trim()).filter(Boolean)).filter(r => r.length);
+}
+// a few cities written as the destination → their country
+const TR_CITY_COUNTRY = { dubai:'United Arab Emirates', 'abu dhabi':'United Arab Emirates', sharjah:'United Arab Emirates', doha:'Qatar', riyadh:'Saudi Arabia', jeddah:'Saudi Arabia', muscat:'Oman', colombo:'Sri Lanka', delhi:'India', 'new delhi':'India', mumbai:'India', bangalore:'India', bengaluru:'India', chennai:'India', kochi:'India', trivandrum:'India', thiruvananthapuram:'India', singapore:'Singapore', 'kuala lumpur':'Malaysia', bangkok:'Thailand', istanbul:'Turkey', london:'United Kingdom', beijing:'China', shanghai:'China', tokyo:'Japan', seoul:'South Korea', dhaka:'Bangladesh', kathmandu:'Nepal', male:'Maldives', 'malé':'Maldives' };
+function trParseTRF(rows){
+  const o = { participants:[] }, R = rows.map(r => r.join(' ')), find = re => R.findIndex(l => re.test(l));
+  const after = (i, re) => { const m = re.exec(R[i] || ''); return m ? R[i].slice(m.index + m[0].length).replace(/^[\s:]+/, '').trim() : ''; };
+  let i = find(/form\s*number/i); if(i >= 0) o.deptFormNo = after(i, /form\s*number/i).split(/\s{2,}| DATE/i)[0].trim();
+  const trf = /(FDC\s*\/\s*TRF\s*\/\s*\d{4}\s*\/\s*\d+(?:-\d+)?)/i.exec(R.join(' ')); if(trf) o.formNumber = trf[1].replace(/\s+/g, '').toUpperCase();
+  i = find(/^date\s*:/i); if(i >= 0) o.formDate = pcFindDates(R[i])[0] || '';
+  i = rows.findIndex(r => /^destination$/i.test(r[0] || '')); if(i >= 0) o.destination = rows[i].slice(1).join(', ').replace(/\s*,\s*,/g, ',').trim(); else { i = find(/^destination\b/i); if(i >= 0) o.destination = after(i, /^destination\b/i); }
+  // dates: "From:" and "To:"; an edited form can hold two "to" dates — the duration (days) decides
+  i = find(/\bfrom\s*:/i);
+  if(i >= 0){ const seg = R.slice(i, i + 4).join(' '), fm = /\bfrom\s*:\s*(.*?)(?=\bto\s*:|$)/i.exec(seg), tm = /\bto\s*:\s*(.*)$/i.exec(seg);
+    o.fromDate = fm ? pcFindDates(fm[1])[0] || '' : '';
+    const dur = /(\d{1,3})\s*(?:\(?\s*days?\s*\)?)/i.exec(seg.replace(/\b\d{1,2}(st|nd|rd|th)\b/gi, '')) || /duration[^\d]*(\d{1,3})/i.exec(seg);
+    const toTxt = tm ? tm[1].replace(/(\d)(st|nd|rd|th)(?=[A-Za-z])/g, '$1$2 ') : '', months = toTxt.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i), yr = (toTxt.match(/\b(20\d\d)\b/) || [])[1];
+    const days = [...toTxt.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\b(?!\d)/g)].map(m => +m[1]).filter(d => d >= 1 && d <= 31 && String(d) !== String(dur && dur[1]));
+    const cands = days.map(d => pcFindDates(d + ' ' + (months ? months[1] : '') + ' ' + (yr || (o.fromDate || '').slice(0, 4)))[0]).filter(Boolean);
+    const n = dur ? +dur[1] : 0, want = o.fromDate && n ? clIsoAdd(o.fromDate, n - 1) : '';
+    o.toDate = (want && cands.includes(want)) ? want : want && !cands.length ? want : cands.sort().pop() || want || ''; o.days = n; }
+  // budget: the ticked box
+  const tick = R.find(l => /[☒☑✔✓■]|\[x\]/i.test(l)); if(tick){ const lab = tick.replace(/^.*?(?:[☒☑✔✓■]|\[x\])\s*/i, '').replace(/\s*[☐□].*$/, '').trim(); const b = trBudgets().find(x => trNorm(lab).includes(trNorm(x)) || trNorm(x).includes(trNorm(lab))); if(b) o.budget = b; }
+  i = find(/^purpose/i); if(i >= 0){ let v = after(i, /^purpose(\s+of)?(\s+(trip|travel|visit))?/i); if(!v || /^(trip|travel)$/i.test(v)) v = (R[i + 1] || '').replace(/^(trip|travel)\b\s*/i, ''); o.purpose = v.replace(/^of\s+/i, '').replace(/\s+trip$/i, ' Trip').trim(); }
+  // travellers: the rows under PARTICIPANT DETAILS, up to COMMENTS
+  const p0 = find(/participant\s+details/i), p1 = find(/comments\s*\/|additional\s+requests/i);
+  if(p0 >= 0) rows.slice(p0 + 1, p1 > p0 ? p1 : p0 + 12).forEach(r => { const line = r.join('  '); if(/requested by|authori[sz]ed/i.test(line)) return;
+    let name = r[0] || '', desig = r.slice(1).join(', '); const m = /^(.*?)\s*\(([A-Z]{0,3}\d{2,6})\)\s*(.*)$/.exec(r.length > 1 ? name : line); let staffNo = '';
+    if(m){ name = m[1]; staffNo = m[2]; if(r.length === 1) desig = m[3]; }
+    name = name.trim(); if(name.length < 3 || /^name$/i.test(name)) return;
+    o.participants.push({ name, designation:desig.trim(), staffNo, category:trStaffCat(name) || '' }); });
+  // comments: the box on page 1 and "COMMENTS:" on page 2
+  const cm = []; if(p1 >= 0) rows.slice(p1 + 1, find(/requested\s+by/i) > p1 ? find(/requested\s+by/i) : p1 + 4).forEach(r => { const l = r.join(' '); if(l && !/requested by/i.test(l)) cm.push(l); });
+  R.forEach(l => { const m = /^comments\s*:\s*(.+)$/i.exec(l); if(m) cm.push(m[1].trim()); }); o.comments = cm.join('\n').trim();
+  // requested by / authorized by: two columns after the header row
+  const h = find(/requested\s+by.*authori[sz]ed\s+by/i);
+  if(h >= 0){ rows.slice(h + 1, h + 6).forEach(r => { const k = (r[0] || '').toLowerCase(); if(/^name/.test(k)){ o.requestedBy = r[1] || ''; o.authorizedBy = r[2] || ''; } else if(/^designation/.test(k)){ o.requestedDesig = r[1] || ''; o.authorizedDesig = r[2] || ''; } }); }
+  // country: from the destination (a city or a country with rates), else local
+  const dest = trNorm(o.destination), rateC = [...new Set(trRates().map(r => r.country).filter(Boolean))];
+  const city = Object.keys(TR_CITY_COUNTRY).find(c => new RegExp('\\b' + c + '\\b').test(dest));
+  o.country = (city && TR_CITY_COUNTRY[city]) || rateC.find(c => trNorm(c) !== trNorm(TR_HOME) && dest.includes(trNorm(c))) || '';
+  o.rateLocation = city && TR_CITY_COUNTRY[city] !== TR_HOME ? city.replace(/\b\w/g, c => c.toUpperCase()) : '';
+  o.scope = o.country && trNorm(o.country) !== trNorm(TR_HOME) ? 'foreign' : (trAtollOf(o.destination) || /\b[A-Z]{1,3}\.\s?[A-Z]/.test(o.destination || '')) ? 'local' : (o.country ? 'foreign' : 'local');
+  if(o.scope === 'local') o.country = TR_HOME;
+  return o;
+}
+// the signed form chosen in the open travel form: everything it holds goes into the boxes that are still empty
+async function trReadInto(file, info){
+  const f = document.getElementById('vform'); if(!f) return; const base = info ? info.textContent : '', say = t => { if(info && info.isConnected) info.textContent = base + ' · ' + t; };
+  say('reading the form…');
+  let o; try{ o = trParseTRF(await trReadFormRows(file)); }catch(e){ console.error(e); say('could not read it — fill the boxes by hand'); return; }
+  const done = [], mark = el => { el.classList.add('ring-2', 'ring-amber-300'); setTimeout(() => el.classList.remove('ring-2', 'ring-amber-300'), 8000); };
+  const put = (n, v, l, force) => { const el = f.elements[n]; if(!el || !v) return; if(String(el.value || '').trim() && !force && el.value !== el.defaultValue) return; if(el.tagName === 'SELECT' && ![...el.options].some(op => op.value === v)) return; el.value = v; el.dispatchEvent(new Event('change', { bubbles:true })); mark(el); done.push(l); };
+  if(o.scope && f.scope.value !== o.scope){ f.scope.value = o.scope; try{ trScopeRates(o.scope); }catch(e){} }
+  put('formDate', o.formDate, 'form date', true); put('destination', o.destination, 'destination', true);
+  if(o.country){ put('country', o.country, 'country', true); try{ trCountryChanged(); }catch(e){} }
+  if(o.rateLocation){ put('rateLocation', o.rateLocation, 'DSA location', true); try{ trApplyRate(); }catch(e){} }
+  put('fromDate', o.fromDate, 'from', true); put('toDate', o.toDate, 'to', true); try{ trDatesChanged(); }catch(e){}
+  put('budget', o.budget, 'budget', true); put('purpose', o.purpose, 'purpose', true); put('comments', o.comments, 'comments', true);
+  put('requestedBy', o.requestedBy, 'requested by', true); put('requestedDesig', o.requestedDesig, 'designation', true); put('authorizedBy', o.authorizedBy, 'authorized by', true); put('authorizedDesig', o.authorizedDesig, 'designation', true);
+  if(o.participants.length){ const box = document.getElementById('tr-people-box'), have = [...box.querySelectorAll('.tr-person')].filter(r => r.querySelector('.tr-pname').value.trim());
+    if(!have.length){ box.innerHTML = o.participants.map(p => trPersonRow(p)).join(''); box.querySelectorAll('.tr-person').forEach(r => { mark(r.querySelector('.tr-pname')); const d = r.querySelector('.tr-pdesig'); if(!d.value.trim()) trFillDesig(r.querySelector('.tr-pname')); }); done.push(o.participants.length + ' traveller' + (o.participants.length === 1 ? '' : 's')); } }
+  try{ trDsaPreview(); }catch(e){}
+  say(done.length ? 'filled from it: ' + [...new Set(done)].join(', ') + ' — please check' : 'nothing could be read from it');
+}
+
 /* ---------- a travel request from its signed form: the file is read and the record made, attached ---------- */
 function trFormPick(viaAnya){
   const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/pdf,image/*'; i.multiple = true; i.style.display = 'none'; document.body.appendChild(i);
@@ -9469,8 +9551,8 @@ async function trFromForm(files, viaAnya){
   const say = (t, acts) => { if(viaAnya){ anyaSay(t, acts || []); anyaDraw(); } else toast(t.replace(/\*\*/g, '')); };
   let att; try{ att = await agPrepare(files); }catch(e){ say('I could not read that file: ' + (e && e.message ? e.message : e)); return; }
   say('Reading the travel request form…');
-  let text = ''; try{ text = await pcReadInvoiceFile(files[0], () => {}); }catch(e){}
-  const o = trParseForm(text);
+  let o; try{ const rows = await trReadFormRows(files[0]), p2 = trParseTRF(rows); o = (p2.destination || p2.participants.length) ? p2 : trParseForm(rows.map(r => r.join('  ')).join('\n')); }catch(e){ o = trParseForm(''); }
+  o.participants = (o.participants || []).map(p => Object.assign({}, p, { category:p.category || trStaffCat(p.name) || TR_CATS[0] }));
   openTravelForm('', o.scope);
   const f = await anyaWaitForm(4000); if(!f){ say('The travel form did not open.'); return; }
   trAtt.form = att;                                                            // the signed form is attached when the record is saved
@@ -9480,9 +9562,10 @@ async function trFromForm(files, viaAnya){
   try{ trDestChanged(); }catch(e){}
   put('fromDate', o.fromDate, 'departure'); put('toDate', o.toDate, 'return'); try{ trDatesChanged(); }catch(e){}
   put('purpose', o.purpose, 'purpose'); put('requestedBy', o.requestedBy, 'requested by'); put('authorizedBy', o.authorizedBy, 'authorised by');
+  put('requestedDesig', o.requestedDesig, 'designation'); put('authorizedDesig', o.authorizedDesig, 'designation'); put('comments', o.comments, 'comments'); if(o.budget) put('budget', o.budget, 'budget'); if(o.rateLocation){ put('rateLocation', o.rateLocation, 'DSA location'); try{ trApplyRate(); }catch(e){} }
   // travellers: the first row exists; more rows are added with the form's own button
   const addBtn = [...f.querySelectorAll('button')].find(b => /add (another )?(traveller|person|staff)/i.test(b.textContent));
-  o.participants.forEach((p, k) => { let rows = f.querySelectorAll('.tr-person'); if(k >= rows.length && addBtn){ addBtn.click(); rows = f.querySelectorAll('.tr-person'); } const row = rows[k]; if(!row) return; const nm = row.querySelector('.tr-pname'); if(nm && !nm.value){ anyaPut(nm, p.name); try{ trFillDesig(nm); }catch(e){} const ds = row.querySelector('.tr-pdesig'); if(ds && !ds.value && p.designation) anyaPut(ds, p.designation); } });
+  o.participants.forEach((p, k) => { let rows = f.querySelectorAll('.tr-person'); if(k >= rows.length && addBtn){ addBtn.click(); rows = f.querySelectorAll('.tr-person'); } const row = rows[k]; if(!row) return; const nm = row.querySelector('.tr-pname'); if(nm && !nm.value){ anyaPut(nm, p.name); const dg = row.querySelector('.tr-pdesig'); if(dg && p.designation) dg.value = p.designation; try{ trFillDesig(nm); }catch(e){} const ds = row.querySelector('.tr-pdesig'); if(ds && !ds.value && p.designation) anyaPut(ds, p.designation); } });
   if(o.participants.length) done.push(o.participants.length + ' traveller' + (o.participants.length === 1 ? '' : 's'));
   const mno = f.elements['dsa.memoNo']; if(mno && /\/$/.test(mno.value)) mno.value = '';     // the memo number is given when the DSA memo is made
   try{ trDsaPreview(); }catch(e){}
@@ -13902,6 +13985,7 @@ async function prReadForm(file, info){
 let prReadApprovals = null;
 async function attReadInto(k, file, info){
   if(k === 'pr-pr') return prReadForm(file, info);
+  if(k === 'form' && document.getElementById('tr-people-box')) return trReadInto(file, info);
   const map = attReadMap(k); if(!map || !file) return;
   const root = document.getElementById('modal-body') || document, form = document.getElementById('vform');
   const el = n => !n ? null : n[0] === '#' ? document.getElementById(n.slice(1)) : (form && form.querySelector(`[name="${n}"]`)) || root.querySelector(`[name="${n}"]`);

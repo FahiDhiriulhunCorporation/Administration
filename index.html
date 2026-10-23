@@ -1961,7 +1961,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.298';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.302';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -1993,7 +1993,7 @@ setInterval(() => updCheck(false), 30 * 60000);
    ASSETS — PDF fonts, letterhead images and Word/Excel templates live in assets.json (next to index.html),
    so the app itself opens faster. They load quietly in the background and, if needed sooner, on first use.
 ===================================================================== */
-const ASSETS_VER = '90b6fa1f7b';
+const ASSETS_VER = 'lh60-1';
 let __ASSETS = null, __assetsLoading = null;
 function assetsLoadSync(){
   if(__ASSETS) return __ASSETS;
@@ -2194,6 +2194,7 @@ const ICONS = {
   plane:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8.5 11.5 3 9.5l1.2-1.2 5.8.6 3.6-3.6c.8-.8 2-.9 2.4-.5s.3 1.6-.5 2.4L11.9 10.8l.6 5.8-1.2 1.2-2-5.5-2.6 2.4.2 1.8-1 1-1-2.6-2.6-1 1-1 1.8.2z"/></svg>',
   globe:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.2 2.3 3.2 4.8 3.2 7.5s-1 5.2-3.2 7.5c-2.2-2.3-3.2-4.8-3.2-7.5s1-5.2 3.2-7.5z"/></svg>',
   chart:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17V3"/><path d="M3 17h14"/><path d="M6 13l3-4 3 2 4-6"/></svg>',
+  incident:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M10 3 2.5 16.5h15z"/><path d="M10 8v4M10 14.4v.1"/></svg>',
   handover:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 7 7 3l2 2-4.5 4z"/><path d="M4 5.5 7.5 9"/><path d="M17.5 13 13 17l-2-2 4.5-4z"/><path d="M16 14.5 12.5 11"/></svg>',
 };
 function canManageInventory(){ return !authUser || authUser.role==='admin'; }
@@ -2226,6 +2227,7 @@ function currentNav(){
     { id:'weekly-report', label:'Weekly Report', icon:'vlog' },
     { section:'Documentation' },
     ...DOC_TYPES.map(t => ({ id:'docs-' + t.k, label:t.label, icon:'doc_' + t.k, badge:cntOf(() => state.documents.filter(d => d.type === t.k && (d.status === 'Pending approval' || docAlert(d))).length), tone:'warn', hint:'Pending approval, expiring or overdue' })),
+    { id:'incident-reports', label:'Incident Report', icon:'incident', badge:cntOf(() => irAll().filter(x => (x.r.status || 'Open') !== 'Resolved').length), tone:'warn', hint:'Incidents not resolved' },
     { id:'handovers', label:'Handovers', icon:'handover', badge:nHo, tone:'warn', hint:'Handovers not fully signed' },
     { section:'Stock' },
     { id:'products', label:'Items', icon:'products' },
@@ -2442,6 +2444,7 @@ const VEH_COLS = {
   complaints:       { collection:'fdc_inventory_complaints',            label:'complaints', one:'complaint' },
   tasks:            { collection:'fdc_inventory_tasks',                 label:'tasks', one:'task' },
   documents:        { collection:'fdc_inventory_documents',             label:'documents', one:'document' },
+  incidentReports:  { collection:'fdc_inventory_incident_reports',      label:'incident reports', one:'incident report' },
   evaluations:      { collection:'fdc_inventory_evaluations',           label:'performance evaluations', one:'performance evaluation' },
 };
 const vehRefs = {}, vehUnsubs = {};
@@ -2944,7 +2947,7 @@ function viewServicing(){
   else body = vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Date of issue' }, { t:'Vehicle' }, { t:'Issue' }, { t:'Status' }, { t:'Vendor' }, { t:'Cost', n:1 }, { t:'' }])}<tbody>${rows.map(r => {
     const v = vehById(r.vehicleId), k = r.status === 'Resolved' ? 'good' : r.status === 'In progress' ? 'warn' : 'crit';
     return `<tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(`<div class="max-w-xs">${esc(r.issue || '—')}</div>${attView(r.docFile, r.docUrl, 'Report / invoice') ? `<div class="text-xs">${attView(r.docFile, r.docUrl, 'Report / invoice')}</div>` : ''}`)}${vTd(vPill(k, esc(r.status || 'Open')) + (r.resolvedDate ? `<div class="text-[11.5px] text-slate-400 mt-1">${vDate(r.resolvedDate)}</div>` : ''))}${vTd(esc(r.vendor || '—'))}${vTd(r.cost ? vMoney(r.cost) : '—', { n:1 })}
-      ${vTd(`<button onclick="openIrReport('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3 whitespace-nowrap">📄 Incident report</button><button onclick="openVehServiceForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`);
+      ${vTd(`<button onclick="openVehServiceForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`);
   return `
     ${vHead('Servicing', 'Periodic maintenance and incidental repairs.', admin ? vBtnPlain('+ Report Issue', "openVehServiceForm(null,'incident')") + vBtnPrimary('+ Periodic Service', "openVehServiceForm(null,'periodic')") : '')}
     ${vKpis(
@@ -3528,97 +3531,98 @@ async function saveVehService(id, kind){
   if(!o.vehicleId || !o.date) return vFail('Vehicle and date are required.');
   if(kind === 'incident' && !o.issue) return vFail('Please describe the issue.');
   if(kind === 'incident' && o.status === 'Resolved' && !o.resolvedDate) o.resolvedDate = vToday();
-  if(kind === 'incident'){ const old = id ? state.serviceRecords.find(x => x.id === id) : null; o.irNo = (old && old.irNo) || irNextNo(); }
+  if(kind === 'incident'){ const old = id ? state.serviceRecords.find(x => x.id === id) : null; if(old && old.irNo) o.irNo = old.irNo; }
   if(id) o.id = id;
   if(vNum(o.odometer)){ const v = vehById(o.vehicleId); if(v && vNum(o.odometer) > vNum(v.mileage)) await vehSave('vehicles', { id:v.id, mileage:o.odometer }); }
   vehUi.svcTab = kind;
   const srId = await vehSave('serviceRecords', o); attSaveTo('serviceRecords', srId || id, 'docFile', 'vdoc', kind);
-  closeModal(); goTo('servicing'); toast('Record saved.');
+  closeModal(); if(ui.tab === 'incident-reports'){ rerenderMain(); toast('Saved.'); } else { goTo('servicing'); toast('Record saved.'); }
 }
 function vehConfirmDeleteService(id){ closeModal(); confirmAction('Delete this service record?', async () => { await vehDelete('serviceRecords', id); toast('Deleted.'); }); }
 
 /* =====================================================================
-   INCIDENT REPORT — a vehicle damage incident written up from the issue (Servicing → Issues), on the letterhead:
-   PDF and Word; headings in Segoe UI Black (Inter Black in the PDF), text in Poppins
+   INCIDENT REPORT (Docs) — any incident: vehicle damage, property, injury, security, fire, equipment…
+   A vehicle is optional. Reports written earlier from a vehicle issue (Fleet → Servicing) are listed too.
+   On the letterhead, PDF and Word; headings in Segoe UI Black (Inter Black in the PDF), text in Poppins
 ===================================================================== */
+const IR_TYPES = ['Vehicle damage', 'Property / building damage', 'Injury / medical', 'Security / theft', 'Fire / safety', 'Equipment / IT', 'Other'];
+const IR_STATUSES = ['Open', 'In progress', 'Resolved'];
 const irLines = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean);
 const irSub = l => /^[-–•*·]\s*/.test(l);                        // "- …" under an item is a detail point
 const irStrip = l => l.replace(/^[-–•*·]\s*|^\d+[.)]\s*/, '').trim();
-function irNextNo(){ const y = vToday().slice(0, 4), pre = 'INC-' + y + '-'; const n = state.serviceRecords.map(r => String(r.irNo || '')).filter(x => x.startsWith(pre)).map(x => +x.slice(pre.length) || 0); return pre + String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0'); }
-// the facts of the report, from the issue and its vehicle
-function irData(r){
-  const v = vehById(r.vehicleId) || {}, x = r.ir || {};
-  return { no:r.irNo || '', date:r.date ? pcOrdinalDate(r.date) : '', time:x.time || '', location:x.location || '', reportDate:x.reportDate ? pcOrdinalDate(x.reportDate) : (r.date ? pcOrdinalDate(r.date) : ''),
-    vType:x.vehicleType || v.type || '', vModel:vName(v) || '', vReg:v.plate || '', driver:x.driver || '', driverDesig:x.driverDesig || '',
-    desc:String(r.issue || '').trim(), damage:irLines(x.damage), injuries:irLines(x.injuries), cause:String(x.cause || '').trim(), actions:irLines(x.actions || r.notes), remarks:String(x.remarks || '').trim(),
-    subject:x.subject || ('Vehicle Damage Incident' + (v.plate ? ' — ' + v.plate + (vName(v) ? ' (' + vName(v) + ')' : '') : '')), by:x.reportedBy || r.reportedBy || '', byDesig:x.reportedDesig || '', byDept:x.reportedDept || '', status:r.status || 'Open' };
+const irAll = () => (state.incidentReports || []).map(r => ({ r, src:'doc' })).concat(state.serviceRecords.filter(r => r.kind === 'incident' && r.irNo).map(r => ({ r, src:'fleet' })));
+const irFind = id => irAll().find(x => x.r.id === id) || null;
+function irNextNo(){ const y = vToday().slice(0, 4), pre = 'INC-' + y + '-'; const n = irAll().map(x => String(x.r.irNo || x.r.no || '')).filter(x => x.startsWith(pre)).map(x => +x.slice(pre.length) || 0); return pre + String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0'); }
+// "Abdulla Saalim — Driver" per line → [name, role]
+const irPersons = s => irLines(s).map(l => { const m = /^(.*?)\s*[—–\-|,:]\s+(.*)$/.exec(l); return m ? [m[1].trim(), m[2].trim()] : [l, '']; });
+// the facts of a report, from a Docs report or from an older vehicle issue
+function irData(r, src){
+  const fleet = src === 'fleet' || r.kind === 'incident', x = fleet ? (r.ir || {}) : r, v = vehById(r.vehicleId);
+  const type = fleet ? 'Vehicle damage' : (r.type || 'Other'), vehicle = v ? { vType:(fleet ? x.vehicleType : '') || v.type || '', vModel:vName(v) || '', vReg:v.plate || '' } : null;
+  const persons = fleet ? (x.driver ? [[x.driver, x.driverDesig || 'Driver']] : []) : irPersons(r.persons);
+  const subj = x.subject || (type + (v ? ' — ' + v.plate + (vName(v) ? ' (' + vName(v) + ')' : '') : x.location ? ' — ' + x.location : ''));
+  return { no:(fleet ? r.irNo : r.no) || '', type, subject:subj, date:r.date ? pcOrdinalDate(r.date) : '', time:x.time || '', location:x.location || '', reportDate:x.reportDate ? pcOrdinalDate(x.reportDate) : (r.date ? pcOrdinalDate(r.date) : ''),
+    vehicle, persons, desc:String((fleet ? r.issue : r.description) || '').trim(), damage:irLines(x.damage), injuries:irLines(x.injuries), cause:String(x.cause || '').trim(), actions:irLines(fleet ? (x.actions || r.notes) : x.actions), remarks:String(x.remarks || '').trim(),
+    by:x.reportedBy || r.reportedBy || '', byDesig:x.reportedDesig || '', byDept:x.reportedDept || '', status:r.status || 'Open' };
 }
-// damage list: "1. Rear windshield" lines are items, "- …" lines under them are the points
 function irDamageItems(lines){ const out = []; lines.forEach(l => { if(irSub(l) && out.length) out[out.length - 1].pts.push(irStrip(l)); else out.push({ t:irStrip(l), pts:[] }); }); return out; }
 
-async function buildIrPdf(r){
-  const D = irData(r), K = [0, 0, 0], G = [0.42, 0.45, 0.5], LINE = [0.8, 0.82, 0.86], SOFT = [0.95, 0.96, 0.97];
+async function buildIrPdf(D){
+  const K = [0, 0, 0], G = [0.42, 0.45, 0.5], LINE = [0.8, 0.82, 0.86], SOFT = [0.95, 0.96, 0.97];
   const L = 72, R = 523.3, FS = 10, LH = 15, TOP = 112, BOT = 760;
   const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = 126;
   const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP + 8; }, need = h => { if(y + h > BOT) newPage(); };
   const H = (t, z) => pdfTextWidthK(t, 'apt_black', z);
-  const head = (t, n) => { y += 10; need(LH * 4); const s = (n ? n + '.  ' : '') + t; pg.text(L, y, s, { font:'F11', size:12 }); y += 7; pg.line(L, y, R, y, LINE, 0.8); y += LH + 2; };
-  const para = (t, o) => { o = o || {}; const ind = o.ind || 0; String(t || '').split('\n').forEach(seg => { const ls = pdfWrap(seg, false, FS, R - L - ind); need(Math.min(ls.length, 3) * LH); ls.forEach(ln => { need(LH); pg.text(L + ind, y, ln, { size:FS }); y += LH; }); y += 5; }); };
+  const head = (t, n) => { y += 10; need(LH * 4); pg.text(L, y, (n ? n + '.  ' : '') + t, { font:'F11', size:12 }); y += 7; pg.line(L, y, R, y, LINE, 0.8); y += LH + 2; };
+  const para = t => { String(t || '').split('\n').forEach(seg => { const ls = pdfWrap(seg, false, FS, R - L); need(Math.min(ls.length, 3) * LH); ls.forEach(ln => { need(LH); pg.text(L, y, ln, { size:FS }); y += LH; }); y += 5; }); };
   const bullet = (t, ind, mark, b) => { const ls = pdfWrap(t, !!b, FS, R - L - ind - 14); need(ls.length * LH); pg.text(L + ind, y, mark || '•', { size:FS, bold:!!mark }); ls.forEach(ln => { pg.text(L + ind + 14, y, ln, { size:FS, bold:!!b }); y += LH; }); y += 2; };
-  const kv = rows => {   // a light two-column box of facts
-    const cw = (R - L) / 2, lw = 96; let i = 0;
+  const kv = rows => { const cw = (R - L) / 2, lw = 96; let i = 0;
     while(i < rows.length){ const pair = rows.slice(i, i + 2), h = Math.max(...pair.map(([, v]) => pdfWrap(String(v || '—'), false, FS, cw - lw - 12).length)) * LH + 10; need(h);
-      pg.fill(L, y - 4, R - L, h, SOFT); pair.forEach(([k, v], j) => { const x = L + j * cw + 8; pg.text(x, y + 8, k, { bold:true, size:8.5, color:G }); pdfWrap(String(v || '—'), false, FS, cw - lw - 12).forEach((ln, q) => pg.text(x + lw, y + 8 + q * LH, ln, { size:FS })); });
+      pg.fill(L, y - 4, R - L, h, SOFT); pair.forEach(([k, v], j) => { if(!k) return; const x = L + j * cw + 8; pg.text(x, y + 8, k, { bold:true, size:8.5, color:G }); pdfWrap(String(v || '—'), false, FS, cw - lw - 12).forEach((ln, q) => pg.text(x + lw, y + 8 + q * LH, ln, { size:FS })); });
       pg.line(L, y - 4 + h, R, y - 4 + h, [1, 1, 1], 1.5); y += h; i += 2; }
-    y += 6;
-  };
-  // title
+    y += 6; };
   const T = 'INCIDENT REPORT'; pg.text(L + (R - L - H(T, 18)) / 2, y, T, { font:'F11', size:18 }); y += 15;
   const sub = [D.no && 'Report No. ' + D.no, 'Status: ' + D.status].filter(Boolean).join('   ·   '); pg.text(L + (R - L - pdfTextWidth(sub, false, 9)) / 2, y, sub, { size:9, color:G }); y += 22;
-  // the subject: what this report is about
   { const lab = 'Subject: ', lw = pdfTextWidth(lab, true, 10.5), ls = pdfWrap(D.subject, true, 10.5, R - L - lw - 16), h = ls.length * LH + 10; pg.fill(L, y - 4, R - L, h, [0.9, 0.93, 0.97]); pg.fill(L, y - 4, 3, h, [0.2, 0.25, 0.33]);
     pg.text(L + 10, y + 8, lab, { bold:true, size:10.5 }); ls.forEach((ln, i) => pg.text(L + 10 + lw, y + 8 + i * LH, ln, { bold:true, size:10.5 })); y += h + 10; }
-  kv([['Date of incident', D.date], ['Time of incident', D.time], ['Location', D.location], ['Date of report', D.reportDate]]);
-  head('Vehicle Details'); kv([['Vehicle type', D.vType], ['Make / model', D.vModel], ['Registration no.', D.vReg], ['', '']].filter(([k]) => k));
-  head('Driver Details'); kv([['Name', D.driver], ['Designation', D.driverDesig]]);
+  kv([['Type of incident', D.type], ['Date of report', D.reportDate], ['Date of incident', D.date], ['Time of incident', D.time], ['Location', D.location], ['', '']]);
+  if(D.vehicle){ head('Vehicle Details'); kv([['Vehicle type', D.vehicle.vType], ['Make / model', D.vehicle.vModel], ['Registration no.', D.vehicle.vReg], ['', '']]); }
+  if(D.persons.length){ head(D.vehicle && D.persons.length === 1 ? 'Driver Details' : 'Persons Involved'); kv(D.persons.flatMap(([n, role]) => [['Name', n], ['Designation / role', role]])); }
   let n = 0;
   head('Incident Description', ++n); para(D.desc || '—');
   const dm = irDamageItems(D.damage);
-  head('Damage Assessment', ++n); if(dm.length){ para('The following damages were observed:'); dm.forEach((it, i) => { need(LH * 2); bullet(it.t, 6, (i + 1) + '.', true); it.pts.forEach(pt => bullet(pt, 26, '–')); y += 2; }); } else para('No damage recorded.');
+  head('Damage / Loss Assessment', ++n); if(dm.length){ para('The following damages were observed:'); dm.forEach((it, i) => { need(LH * 2); bullet(it.t, 6, (i + 1) + '.', true); it.pts.forEach(pt => bullet(pt, 26, '–')); y += 2; }); } else para('No damage or loss recorded.');
   head('Injuries & Third-Party Damage', ++n); (D.injuries.length ? D.injuries : ['No injuries were reported.']).forEach(t => bullet(irStrip(t), 6));
   head('Cause of Incident', ++n); para(D.cause || '—');
   head('Immediate Action Taken', ++n); (D.actions.length ? D.actions : ['—']).forEach(t => bullet(irStrip(t), 6));
   if(D.remarks){ head('Remarks', ++n); para(D.remarks); }
-  // sign-off
   y += 18; need(110); const half = (R - L) / 2;
   [[L, 'Reported by', [D.by, D.byDesig, D.byDept, D.reportDate]], [L + half + 10, 'Reviewed by', ['Name:', 'Designation:', 'Date:']]].forEach(([x, lab, ls]) => {
     pg.text(x, y, lab, { font:'F11', size:10 }); pg.line(x, y + 38, x + half - 30, y + 38, K, 0.6); ls.filter(Boolean).forEach((l, i) => pg.text(x, y + 54 + i * 13, l, { size:9.5, bold:i === 0 && lab === 'Reported by' })); });
-  y += 110;
-  return lhPdfFinish(pages, 'Incident Report ' + (D.no || D.vReg), R, { black:true });
+  return lhPdfFinish(pages, 'Incident Report ' + (D.no || ''), R, { black:true });
 }
-
-async function buildIrDocx(r){
-  const D = irData(r), PF = 'Poppins', HF = 'Segoe UI Black', TW = 9026;
+async function buildIrDocx(D){
+  const PF = 'Poppins', HF = 'Segoe UI Black', TW = 9026;
   const T = (t, o) => wR(String(t == null ? '' : t), Object.assign({ font:PF, sz:20 }, o || {})), Hd = (t, o) => wR(t, Object.assign({ font:HF, sz:24 }, o || {}));
   const P = (inner, o) => wP(inner, Object.assign({ after:80, line:264 }, o || {})), keep = x => x.replace('<w:pPr>', '<w:pPr><w:keepNext/>');
   const out = [];
   const head = (t, n) => out.push(keep(`<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="CBD5E1"/></w:pBdr><w:spacing w:before="280" w:after="140"/></w:pPr>${Hd((n ? n + '.  ' : '') + t)}</w:p>`));
   const para = t => String(t || '—').split('\n').forEach(s => out.push(P(T(s), { jc:'both' })));
   const bullet = (t, lvl, mark, b) => out.push(P(T(mark || '•', { b:!!b }) + '<w:r><w:tab/></w:r>' + T(t, { b:!!b }), { after:40, ind:`<w:ind w:left="${lvl ? 1080 : 540}" w:hanging="300"/>` }).replace('<w:pPr>', '<w:pPr><w:keepLines/>'));
-  const kv = rows => { const cw = TW / 4, cell = (inner, w, shade) => `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${shade ? '<w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>' : ''}<w:tcMar><w:top w:w="70" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tcMar></w:tcPr>${wP(inner, { line:264 })}</w:tc>`;
+  const kv = rows => { const cw = TW / 4, cell = (inner, w, shade) => `<w:tc><w:tcPr><w:tcW w:w="${Math.round(w)}" w:type="dxa"/>${shade ? '<w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>' : ''}<w:tcMar><w:top w:w="70" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tcMar></w:tcPr>${wP(inner, { line:264 })}</w:tc>`;
     const B = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(k => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>`).join('') + '</w:tblBorders>';
-    const trs = []; for(let i = 0; i < rows.length; i += 2){ const pr = rows.slice(i, i + 2); while(pr.length < 2) pr.push(['', '']); trs.push(`<w:tr><w:trPr><w:cantSplit/></w:trPr>${pr.map(([k, v]) => cell(T(k, { b:true, sz:17, color:'475569' }), cw * 0.9, true) + cell(T(v || (k ? '—' : '')), cw * 1.1)).join('')}</w:tr>`); }
+    const trs = []; for(let i = 0; i < rows.length; i += 2){ const pr = rows.slice(i, i + 2); while(pr.length < 2) pr.push(['', '']); trs.push(`<w:tr><w:trPr><w:cantSplit/></w:trPr>${pr.map(([k, v]) => cell(T(k, { b:true, sz:17, color:'475569' }), cw * 0.9, !!k) + cell(T(v || (k ? '—' : '')), cw * 1.1)).join('')}</w:tr>`); }
     out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${B}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${[0.9, 1.1, 0.9, 1.1].map(f => `<w:gridCol w:w="${Math.round(cw * f)}"/>`).join('')}</w:tblGrid>${trs.join('')}</w:tbl>`, P('', { after:60 })); };
   out.push(P(wR('INCIDENT REPORT', { font:HF, sz:36 }), { jc:'center', after:40 }));
   out.push(P(T([D.no && 'Report No. ' + D.no, 'Status: ' + D.status].filter(Boolean).join('   ·   '), { sz:17, color:'64748B' }), { jc:'center', after:200 }));
   out.push(`<w:p><w:pPr><w:pBdr><w:left w:val="single" w:sz="24" w:space="6" w:color="334155"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="E6EDF7"/><w:spacing w:before="60" w:after="240"/><w:ind w:left="120"/></w:pPr>${T('Subject: ', { b:true, sz:21 })}${T(D.subject, { b:true, sz:21 })}</w:p>`);
-  kv([['Date of incident', D.date], ['Time of incident', D.time], ['Location', D.location], ['Date of report', D.reportDate]]);
-  head('Vehicle Details'); kv([['Vehicle type', D.vType], ['Make / model', D.vModel], ['Registration no.', D.vReg]]);
-  head('Driver Details'); kv([['Name', D.driver], ['Designation', D.driverDesig]]);
+  kv([['Type of incident', D.type], ['Date of report', D.reportDate], ['Date of incident', D.date], ['Time of incident', D.time], ['Location', D.location]]);
+  if(D.vehicle){ head('Vehicle Details'); kv([['Vehicle type', D.vehicle.vType], ['Make / model', D.vehicle.vModel], ['Registration no.', D.vehicle.vReg]]); }
+  if(D.persons.length){ head(D.vehicle && D.persons.length === 1 ? 'Driver Details' : 'Persons Involved'); kv(D.persons.flatMap(([nm, role]) => [['Name', nm], ['Designation / role', role]])); }
   let n = 0;
   head('Incident Description', ++n); para(D.desc);
   const dm = irDamageItems(D.damage);
-  head('Damage Assessment', ++n); if(dm.length){ para('The following damages were observed:'); dm.forEach((it, i) => { bullet(it.t, 0, (i + 1) + '.', true); it.pts.forEach(pt => bullet(pt, 1, '–')); }); } else para('No damage recorded.');
+  head('Damage / Loss Assessment', ++n); if(dm.length){ para('The following damages were observed:'); dm.forEach((it, i) => { bullet(it.t, 0, (i + 1) + '.', true); it.pts.forEach(pt => bullet(pt, 1, '–')); }); } else para('No damage or loss recorded.');
   head('Injuries & Third-Party Damage', ++n); (D.injuries.length ? D.injuries : ['No injuries were reported.']).forEach(t => bullet(irStrip(t), 0));
   head('Cause of Incident', ++n); para(D.cause);
   head('Immediate Action Taken', ++n); (D.actions.length ? D.actions : ['—']).forEach(t => bullet(irStrip(t), 0));
@@ -3628,37 +3632,81 @@ async function buildIrDocx(r){
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
   return lhDocx(doc, LH_NS);
 }
+
+/* ---------- the page ---------- */
+function viewIncidentReports(){
+  const admin = canManageInventory(), q = String(vehUi.irQ || '').toLowerCase().trim(), st = vehUi.irSt || '', ty = vehUi.irTy || '';
+  const all = irAll().map(x => Object.assign(x, { D:irData(x.r, x.src) })).sort((a, b) => String(b.r.date || '').localeCompare(String(a.r.date || '')) || String(b.D.no).localeCompare(String(a.D.no)));
+  const list = all.filter(x => (!st || x.D.status === st) && (!ty || x.D.type === ty) && (!q || [x.D.no, x.D.subject, x.D.desc, x.D.location, x.D.type, x.D.vehicle && x.D.vehicle.vReg, ...x.D.persons.map(p => p[0])].join(' ').toLowerCase().includes(q)));
+  const yr = vToday().slice(0, 4), open = all.filter(x => x.D.status !== 'Resolved').length;
+  const rows = list.map(({ r, src, D }) => { const k = D.status === 'Resolved' ? 'good' : D.status === 'In progress' ? 'warn' : 'crit';
+    return `<tr class="${vTr} cursor-pointer" onclick="openIrReport('${r.id}')">${vTd(`<div class="font-semibold text-slate-900 whitespace-nowrap">${esc(D.no || '—')}</div><div class="text-[11px] text-slate-400">${esc(vDate(r.date))}${D.time ? ' · ' + esc(D.time) : ''}</div>`, { first:1 })}
+      ${vTd(`<div class="text-slate-800">${esc(D.subject)}</div><div class="text-[11.5px] text-slate-400">${esc([D.type, D.location].filter(Boolean).join(' · '))}</div>`)}
+      ${vTd(D.vehicle ? `<div class="font-semibold text-slate-800">${esc(D.vehicle.vReg)}</div><div class="text-[11px] text-slate-400">${esc(D.vehicle.vModel)}</div>` : '<span class="text-slate-300">—</span>')}
+      ${vTd(vPill(k, esc(D.status)))}
+      ${vTd(`<button onclick="event.stopPropagation(); openIrReport('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">📄 Report</button>${admin ? `<button onclick="event.stopPropagation(); ${src === 'fleet' ? `openVehServiceForm('${r.id}')` : `openIrForm('${r.id}')`}" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('');
+  return vHead('Incident Report', 'Reports of any incident — vehicle damage, property, injury, security, fire, equipment — on the letterhead (PDF and Word). A vehicle can be added when one is involved.', admin ? vBtnPrimary('+ Incident report', "openIrForm('')") : '') +
+    vKpis(statCard('Reports', fmtNum(all.length), 'All time', 'brand') + statCard('This year', fmtNum(all.filter(x => String(x.r.date || '').slice(0, 4) === yr).length), yr, 'slate') + statCard('Not resolved', fmtNum(open), 'Open or in progress', open ? 'amber' : 'slate') + statCard('With a vehicle', fmtNum(all.filter(x => x.D.vehicle).length), 'Vehicle involved', 'slate')) +
+    `<div class="flex flex-wrap items-center gap-2.5 mb-4">${vSelect('irTy', IR_TYPES, ty, 'All types')}${vSelect('irSt', IR_STATUSES, st, 'All statuses')}${vSearch('ir-q', 'irQ', 'Search report no., subject, location, person, vehicle…')}</div>` +
+    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Report' }, { t:'Subject' }, { t:'Vehicle' }, { t:'Status' }, { t:'' }])}<tbody>${rows}</tbody></table>`) : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(all.length ? 'No reports match.' : 'No incident reports yet.' + (admin ? ' Use "+ Incident report" to write one.' : ''))}</div>`);
+}
+/* ---------- the form ---------- */
+function openIrForm(id){
+  if(!vehRequireAdmin('write incident reports')) return;
+  const r = id ? (state.incidentReports || []).find(x => x.id === id) : null; if(id && !r) return;
+  const d = r || { date:vToday(), type:'', status:'Open', reportedBy:authUser ? authUser.name : '', reportedDesig:(authUser && authUser.designation) || '', reportedDept:(authUser && authUser.department) || 'Administration', reportDate:vToday() };
+  const staff = sdAll().map(p => `<option value="${esc(p.name)} — ${esc(p.designation || '')}"></option>`).join(''), names = sdAll().map(p => `<option value="${esc(p.name)}">${esc(p.designation || '')}</option>`).join('');
+  const ta = (lab, k, ph, rows) => vTa(lab, k, d[k] || '', { span:'sm:col-span-2', rows:rows || 3, ph });
+  openModal(r ? 'Edit incident report ' + (r.no || '') : 'New incident report', vFormOpen + `<datalist id="ir-people">${staff}</datalist><datalist id="ir-staff">${names}</datalist>` + vGrid(2,
+      vS('Type of incident', 'type', IR_TYPES, d.type || '', 'Choose…', { req:1 }) + vS('Status', 'status', IR_STATUSES, d.status || 'Open') +
+      vF('Subject', 'subject', d.subject, 'text', { span:'sm:col-span-2', attrs:' placeholder="Filled in from the type, vehicle or location if left empty"' }) +
+      vF('Date of incident', 'date', d.date, 'date', { req:1 }) + vF('Time of incident', 'time', d.time, 'text', { attrs:' placeholder="e.g. Around 14:00"' }) +
+      vF('Location', 'location', d.location, 'text', { span:'sm:col-span-2', attrs:' placeholder="e.g. National Art Gallery"' }) +
+      vS('Vehicle involved (optional)', 'vehicleId', vSorted().map(v => [v.id, v.plate + (vName(v) ? ' — ' + vName(v) : '')]), d.vehicleId || '', 'No vehicle', { span:'sm:col-span-2' }) +
+      ta('Persons involved (optional)', 'persons', 'One per line: name — designation / role, e.g.\nAbdulla Saalim — Driver', 2) +
+      vTa('Incident description', 'description', d.description || '', { span:'sm:col-span-2', rows:4, req:1, ph:'What happened, when and how' }) +
+      ta('Damage / loss assessment', 'damage', 'One item per line, with its points underneath starting with "-", e.g.\nRear windshield glass\n- Completely shattered', 4) +
+      ta('Injuries & third-party damage', 'injuries', 'One point per line, e.g. No injuries were reported.', 2) +
+      ta('Cause of incident', 'cause', 'What led to the incident', 2) +
+      ta('Immediate action taken', 'actions', 'One action per line', 3) +
+      ta('Remarks', 'remarks', 'Recommendation / next steps', 2) +
+      vF('Report prepared by', 'reportedBy', d.reportedBy, 'text', { attrs:' list="ir-staff" oninput="irFillDesig(this, \'reportedDesig\')"' }) + vF('Designation', 'reportedDesig', d.reportedDesig) +
+      vF('Department', 'reportedDept', d.reportedDept) + vF('Date of report', 'reportDate', d.reportDate || vToday(), 'date')) +
+    vFoot(r ? 'Save' : 'Save report', `saveIrForm('${id || ''}')`, r ? `deleteIr('${id}')` : ''), true);
+  setTimeout(() => { const p = document.querySelector('#vform [name=persons]'); if(p) p.setAttribute('list', 'ir-people'); }, 0);
+}
+async function saveIrForm(id){
+  const o = vehFormObj(document.getElementById('vform')), old = id ? (state.incidentReports || []).find(x => x.id === id) : null;
+  if(!o.type) return vFail('Choose the type of incident.'); if(!o.date) return vFail('Enter the date of the incident.'); if(!o.description) return vFail('Describe the incident.');
+  const rec = Object.assign({ id:id || undefined }, o, { no:(old && old.no) || irNextNo(), vehicleId:o.vehicleId && vehById(o.vehicleId) ? o.vehicleId : '' });
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  const nid = await vehSave('incidentReports', rec); closeModal(); rerenderMain(); toast('Incident report ' + rec.no + ' saved.'); if(!id) setTimeout(() => openIrReport(nid), 200);
+}
+function deleteIr(id){ const r = (state.incidentReports || []).find(x => x.id === id); if(!r) return; closeModal(); confirmAction('Delete incident report ' + (r.no || '') + '?', async () => { await vehDelete('incidentReports', id); toast('Deleted.'); }); }
 function openIrReport(id){
-  const r = state.serviceRecords.find(x => x.id === id); if(!r) return; const v = vehById(r.vehicleId), x = r.ir || {};
-  const missing = [!x.time && 'time', !x.location && 'location', !x.driver && 'driver', !(x.damage || '').trim() && 'damage assessment', !(x.cause || '').trim() && 'cause'].filter(Boolean);
-  openModal('Incident report' + (r.irNo ? ' — ' + r.irNo : ''), `<div class="text-sm text-slate-600 mb-3">${esc(vLabel(v))}${vName(v) ? ' · ' + esc(vName(v)) : ''} · ${esc(vDate(r.date))}</div>
-    ${missing.length ? `<div class="rounded-lg bg-amber-50 text-amber-800 text-sm px-4 py-2.5 mb-4">Not filled in yet: ${esc(missing.join(', '))}. ${canManageInventory() ? `<button onclick="openVehServiceForm('${id}')" class="font-semibold underline">Complete the details</button>` : ''}</div>` : ''}
-    <div class="flex justify-end gap-2.5 flex-wrap">${canManageInventory() ? vBtnPlain('Edit details', `openVehServiceForm('${id}')`) : ''}${vBtnPlain('Download Word', `irDownload('${id}', 'word', this)`)}${vBtnPrimary('Download PDF', `irDownload('${id}', 'pdf', this)`)}</div>`);
+  const x = irFind(id); if(!x) return; const D = irData(x.r, x.src), edit = x.src === 'fleet' ? `openVehServiceForm('${id}')` : `openIrForm('${id}')`;
+  const missing = [!D.location && 'location', !D.damage.length && 'damage / loss', !D.cause && 'cause'].filter(Boolean);
+  openModal('Incident report' + (D.no ? ' — ' + D.no : ''), `<div class="text-sm font-semibold text-slate-800">${esc(D.subject)}</div><div class="text-xs text-slate-500 mb-3">${esc([D.type, D.date, D.location].filter(Boolean).join(' · '))}</div>
+    ${missing.length ? `<div class="rounded-lg bg-amber-50 text-amber-800 text-sm px-4 py-2.5 mb-4">Not filled in yet: ${esc(missing.join(', '))}.</div>` : ''}
+    <div class="flex justify-end gap-2.5 flex-wrap">${canManageInventory() ? vBtnPlain('Edit', 'closeModal(); ' + edit) : ''}${vBtnPlain('Download Word', `irDownload('${id}', 'word', this)`)}${vBtnPrimary('Download PDF', `irDownload('${id}', 'pdf', this)`)}</div>`);
 }
 async function irDownload(id, kind, btn){
-  const r = state.serviceRecords.find(x => x.id === id); if(!r) return; const lbl = btn ? btn.textContent : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
-  const name = 'Incident Report - ' + [r.irNo, (vehById(r.vehicleId) || {}).plate].filter(Boolean).join(' ') ;
-  try{ if(kind === 'word') downloadBlob(await buildIrDocx(r), name + '.docx'); else downloadBlob(await buildIrPdf(r), name + '.pdf'); }
+  const x = irFind(id); if(!x) return; const D = irData(x.r, x.src), lbl = btn ? btn.textContent : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  const name = 'Incident Report - ' + [D.no, D.vehicle && D.vehicle.vReg].filter(Boolean).join(' ');
+  try{ if(kind === 'word') downloadBlob(await buildIrDocx(D), name + '.docx'); else downloadBlob(await buildIrPdf(D), name + '.pdf'); }
   catch(e){ console.error(e); toast('Could not create the report: ' + (e && e.message ? e.message : e), true); }
   if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = lbl; }
 }
-// the extra fields of the incident form
+// older vehicle issues that already have report details keep them in the issue form
 function irFormFields(r){
-  const x = (r && r.ir) || {}, staff = sdAll().map(p => `<option value="${esc(p.name)}">${esc(p.designation || '')}</option>`).join('');
+  const x = (r && r.ir) || {}; if(!r || !(r.irNo || r.ir)) return '';
+  const staff = sdAll().map(p => `<option value="${esc(p.name)}">${esc(p.designation || '')}</option>`).join('');
   const f = (lab, k, v, o) => vF(lab, 'ir.' + k, v, (o && o.type) || 'text', o), ta = (lab, k, v, ph, rows) => vTa(lab, 'ir.' + k, v, { span:'sm:col-span-2', rows:rows || 3, ph });
-  return `<details class="mt-4 rounded-lg border border-slate-200" ${x.time || x.driver || x.damage ? 'open' : ''}><summary class="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-800">Incident report details <span class="font-normal text-slate-400">— for the printed Incident Report</span></summary>
+  return `<details class="mt-4 rounded-lg border border-slate-200"><summary class="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-800">Incident report details <span class="font-normal text-slate-400">— the report is under Docs → Incident Report</span></summary>
     <div class="px-4 pb-4"><datalist id="ir-staff">${staff}</datalist>${vGrid(2,
-      f('Subject', 'subject', x.subject, { span:'sm:col-span-2', attrs:' placeholder="Vehicle Damage Incident — the vehicle (filled in if left empty)"' }) +
-      f('Time of incident', 'time', x.time, { attrs:' placeholder="e.g. Around 14:00"' }) + f('Location', 'location', x.location, { attrs:' placeholder="e.g. National Art Gallery"' }) +
-      f('Driver', 'driver', x.driver, { attrs:' list="ir-staff" oninput="irFillDesig(this, \'ir.driverDesig\')"' }) + f('Driver designation', 'driverDesig', x.driverDesig) +
-      ta('Damage assessment', 'damage', x.damage, 'One damage per line, e.g.\nRear windshield glass\n- Completely shattered and dislodged\nRear window frame\n- Visible tearing and deformation', 5) +
-      ta('Injuries & third-party damage', 'injuries', x.injuries, 'One point per line, e.g. No injuries were reported.', 2) +
-      ta('Cause of incident', 'cause', x.cause, 'What led to the incident', 2) +
-      ta('Immediate action taken', 'actions', x.actions, 'One action per line, e.g. Vehicle secured; Incident reported to management', 3) +
-      ta('Remarks', 'remarks', x.remarks, 'Recommendation / next steps', 2) +
-      f('Report prepared by', 'reportedBy', x.reportedBy || (authUser ? authUser.name : ''), { attrs:' list="ir-staff" oninput="irFillDesig(this, \'ir.reportedDesig\')"' }) + f('Designation', 'reportedDesig', x.reportedDesig || (authUser && authUser.designation) || '') +
-      f('Department', 'reportedDept', x.reportedDept || (authUser && authUser.department) || 'Administration') + f('Date of report', 'reportDate', x.reportDate || vToday(), { type:'date' }))}
-    <div class="text-[11px] text-slate-400 mt-2">The "Issue" above is the incident description. Vehicle type, make / model and registration come from the vehicle.</div></div></details>`;
+      f('Subject', 'subject', x.subject, { span:'sm:col-span-2' }) + f('Time of incident', 'time', x.time) + f('Location', 'location', x.location) + f('Driver', 'driver', x.driver, { attrs:' list="ir-staff"' }) + f('Driver designation', 'driverDesig', x.driverDesig) +
+      ta('Damage assessment', 'damage', x.damage, '', 5) + ta('Injuries & third-party damage', 'injuries', x.injuries, '', 2) + ta('Cause of incident', 'cause', x.cause, '', 2) + ta('Immediate action taken', 'actions', x.actions, '', 3) + ta('Remarks', 'remarks', x.remarks, '', 2) +
+      f('Report prepared by', 'reportedBy', x.reportedBy) + f('Designation', 'reportedDesig', x.reportedDesig) + f('Department', 'reportedDept', x.reportedDept) + f('Date of report', 'reportDate', x.reportDate, { type:'date' }))}</div></details>`;
 }
 function irFillDesig(inp, name){ const p = sdAll().find(x => trNorm(x.name) === trNorm(inp.value)), el = inp.form && inp.form.elements[name]; if(p && el && !el.value) el.value = p.designation || ''; }
 
@@ -5078,10 +5126,10 @@ async function pcPdfFinish(pages, o){
     const frame = new PdfPage(PCA4_H);
     if(uni){
       if(exh) frame.image('ExH', LH_HDR.x, LH_HDR.y, LH_HDR.w, LH_HDR.h);
-      if(o.number && !p.title) frame.text(553.5 - pdfTextWidth(o.number, false, 9), 88, o.number, { size: 9 });
-      const pageTitle = p.title || o.title; if(pageTitle) frame.text(553.5 - pdfTextWidth(pageTitle, true, 15), o.number && !p.title ? 101 : 96, pageTitle, { bold: true, size: 15 });
+      const pageTitle = p.title || o.title; if(pageTitle) frame.text(553.5 - pdfTextWidth(pageTitle, true, 14), 106, pageTitle, { bold: true, size: 14 });     // under the letterhead logos
+      if(o.number && !p.title) frame.text(553.5 - pdfTextWidth(o.number, false, 9), 118, o.number, { size: 9 });
       if(o.pageNumbers && total > 0){ const pn = [['Page ', 0], [String(i + 1), 1], [' of ', 0], [String(total), 1]], pw = pn.reduce((a, r) => a + pdfTextWidthK(r[0], r[1] ? 'apt_bold' : 'apt_regular', 8), 0); let px = 553.6 - pw; pn.forEach(([t, b]) => { frame.text(px, 799, t, { size:8, font:b ? 'F7' : 'F6' }); px += pdfTextWidthK(t, b ? 'apt_bold' : 'apt_regular', 8); }); }
-      EXCO_FOOT.forEach((l, k) => frame.text((PCA4_W - pdfTextWidthK(l, 'apt_regular', 9)) / 2, 811 + k * 11.5, l, { size:9, color:[0.5, 0.5, 0.5], font:'F6' }));
+      EXCO_FOOT.forEach((l, k) => lhFootLine(frame, l, 811 + k * 11.5, 9, 'F6', 'apt_regular', [0.46, 0.44, 0.44]));
     } else {
     frame.image('Hdr', 41.4, 36.9, 134.6, 57.4); frame.image('Ftr', 133.7, 793.9, 327.9, 36.2);
     if(o.number && !p.title) frame.text(553.5 - pdfTextWidth(o.number, false, 9), 71.4, o.number, { size: 9 });
@@ -7465,7 +7513,7 @@ function openTkEdit(id, presetLoc){
     vGrid(2, vF('Task', 'title', t ? t.title : '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="e.g. Renew vehicle insurance for all fleet"' }) +
       vF('Category / project', 'category', t ? t.category : '', 'text', { attrs:' list="tk-cats" placeholder="Optional — e.g. Office move, Fleet"' }) + vS('Priority level', 'priority', TK_PRIORITY, t ? t.priority || 'Normal' : 'Normal') +
       vF('Start date', 'start', t ? t.start : vToday(), 'date', { req:1 }) + vF('Due date', 'due', t ? t.due : '', 'date') +
-      vS('Status', 'status', TK_STATUS, t ? t.status || 'Not started' : 'Not started') + vF('Progress (%)', 'progress', t ? tkProg(t) : 0, 'number', { attrs:' min="0" max="100" step="5"' }) + vS('Linked purchase requisition (optional)', 'prId', [['', '— None']].concat((state.purchaseRequisitions || []).map(p => [p.id, (p.prNumber || 'PR') + ' · ' + (prFirstItem(p) || p.title || '')])), t && t.prId ? t.prId : '')) +
+      vS('Status', 'status', TK_STATUS, t ? t.status || 'Not started' : 'Not started') + vF('Progress (%)', 'progress', t ? tkProg(t) : 0, 'number', { attrs:' min="0" max="100" step="5"' }) + vS('Linked purchase requisition (optional)', 'prId', [['', '— None']].concat(vehReqPRs().map(p => [p.id, (p.prNumber || 'PR') + ' · ' + (prFirstItem(p) || p.title || '')])), t && t.prId ? t.prId : '')) +
     vSec('Locations') +
     `<div class="flex items-center justify-between gap-3 mb-2 flex-wrap"><input type="search" placeholder="Find a location…" oninput="tkLocPick(this.value)" class="${VEH_FIELD} flex-1 min-w-[10rem]"><span id="tk-loc-n" class="text-[11.5px] text-slate-500"></span></div>
      <div id="tk-locs" class="max-h-44 overflow-y-auto rounded-lg border border-slate-200 grid sm:grid-cols-2 gap-x-2 p-1.5">${LOCATIONS.map(l => `<label class="tk-lc flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer" data-s="${esc((l.name + ' ' + (l.code || '')).toLowerCase())}"><input type="checkbox" class="tk-li" value="${l.id}" onchange="tkLocCount()" ${(t ? tkLocs(t) : (presetLoc ? [presetLoc] : [])).includes(l.id) ? 'checked' : ''}><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${esc(l.color || '#94a3b8')}"></span><span class="text-sm text-slate-800 truncate">${esc(l.name)}</span></label>`).join('')}</div>
@@ -10517,8 +10565,8 @@ async function buildAgreementPdf(d){
   const hdr = await pdfSignatureImage('data:image/png;base64,' + EXCO_HDR_PNG, true), hh = hdr ? PCA4_W * hdr.h / hdr.w : 0, total = pages.length - 1, G = [0.35, 0.35, 0.35];
   const clip = (f, x, yy, w, h, draw) => { f.ops.push(`q ${pdfN(x)} ${pdfN(PCA4_H - yy - h)} ${pdfN(w)} ${pdfN(h)} re W n`); draw(); f.ops.push('Q'); };
   pages.forEach((p, i) => { const f = new PdfPage(PCA4_H);
-    if(hdr){ if(i === 0) f.image('ExH', 0, 0, PCA4_W, hh); else clip(f, PCA4_W - 70, 0, 70, hh, () => f.image('ExH', 0, 0, PCA4_W, hh));
-      clip(f, 28, 786, 118, 50, () => f.image('ExH', -9, 752, PCA4_W, hh)); }
+    if(hdr){ if(i === 0) f.image('ExH', LH_HDR.x, LH_HDR.y, LH_HDR.w, LH_HDR.h); else clip(f, PCA4_W - 30, 0, 30, hh + 10, () => f.image('ExH', LH_HDR.x, LH_HDR.y, LH_HDR.w, LH_HDR.h));
+      clip(f, 28, 784, 118, 48, () => f.image('ExH', -9, 748, PCA4_W, hh)); }
     if(i > 0){ const pt = 'Page ' + i + ' of ' + total, w = pdfTextWidthK(pt, 'cal_regular', 10); f.text((PCA4_W - w) / 2, 786, 'Page ', { size:10, font:'F9' }); let px = (PCA4_W - w) / 2 + pdfTextWidthK('Page ', 'cal_regular', 10);
       [[String(i), 1], [' of ', 0], [String(total), 1]].forEach(([t, bb]) => { f.text(px, 786, t, { size:10, font:bb ? 'F12' : 'F9' }); px += pdfTextWidthK(t, bb ? 'cal_bold' : 'cal_regular', 10); }); }
     AG_FOOT.forEach((l, k) => f.text((PCA4_W - pdfTextWidthK(l, 'cal_regular', 8.5)) / 2 + 30, 802 + k * 11, l, { size:8.5, color:G, font:'F9' }));
@@ -10877,7 +10925,13 @@ function agNewAmendment(id){
 
 /* ---------- EXCO paper: the form of the Administration's EXCO paper, as a Word file and a PDF (blank or filled) ---------- */
 /* EXCO_HDR_PNG is in assets.json */
-const EXCO_FOOT = ['+960 3313244  |  Info@fdc.mv  |  www.fdc.mv', '2nd Floor, H.Fathangumaage, 20026, Sosun Magu, Male’, Republic of Maldives'];
+const EXCO_FOOT = ['+960 3313244  |  Info@fdc.mv  |  www.fdc.mv', '2nd Floor, H.Fathangumaage, 20037, Sosun Magu, Male’, Republic of Maldives'];
+// a footer line centred on the page, with "2nd" written as 2 and a raised "nd" as in the letterhead template
+function lhFootLine(f, l, y, z, font, key, color){
+  const m = /^(\d+)(st|nd|rd|th)(\b.*)$/.exec(l), parts = m ? [[m[1], z, 0], [m[2], z * 0.62, z * 0.35], [m[3], z, 0]] : [[l, z, 0]];
+  let x = (PCA4_W - parts.reduce((a, [t, sz]) => a + pdfTextWidthK(t, key, sz), 0)) / 2;
+  parts.forEach(([t, sz, up]) => { f.text(x, y - up, t, { size:sz, color, font }); x += pdfTextWidthK(t, key, sz); });
+}
 // **bold** inside the text becomes bold in the Word file and the PDF
 const exRuns = s => String(s || '').split(/(\*\*[^*]+\*\*)/).filter(x => x !== '').map(x => /^\*\*[^*]+\*\*$/.test(x) ? { t:x.slice(2, -2), bold:true } : { t:x, bold:false });
 // recommendations: one numbered item per line; a line starting with a space or a tab continues the item above
@@ -10924,10 +10978,10 @@ async function buildExcoDocx(d){ const X = exDocxXml(exData(d)); return lhDocx(X
 const LH_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
 // a Word file on the FDC letterhead (the logo strip in the header, the address footer with page numbers)
 // where the letterhead picture sits on the page, in points — the same place and size as in the company's Word template
-const LH_HDR = { x:14.4, y:12, w:566.3, h:69 };
+const LH_HDR = { x:0, y:6.5, w:595.3, h:101.7 };        // full page width, as in the letterhead template (FAHI logo, the 60 years logo, the stripes)
 async function lhDocx(docXml, NS){
   await loadScriptOnce(JSZIP_URL); if(typeof JSZip === 'undefined') throw new Error('The Word builder could not be loaded. Check your internet connection.');
-  const zip = new JSZip(), EW = 7192010, EH = 876300, X = { NS };
+  const zip = new JSZip(), EW = 7559675, EH = 1291590, X = { NS };
   zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>');
   zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
   zip.file('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdFT" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/><Relationship Id="rIdH" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rIdF" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
@@ -10936,9 +10990,9 @@ async function lhDocx(docXml, NS){
   // the font table of the FDC templates, so a font missing on a PC is replaced the same way as in the templates (e.g. SF UI Display → Calibri)
   zip.file('word/fontTable.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:font w:name="Aptos"><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/><w:sig w:usb0="20000287" w:usb1="00000003" w:usb2="00000000" w:usb3="00000000" w:csb0="0000019F" w:csb1="00000000"/></w:font><w:font w:name="Poppins"><w:altName w:val="Nirmala UI"/><w:panose1 w:val="00000500000000000000"/><w:charset w:val="00"/><w:family w:val="auto"/><w:pitch w:val="variable"/><w:sig w:usb0="00008007" w:usb1="00000000" w:usb2="00000000" w:usb3="00000000" w:csb0="00000093" w:csb1="00000000"/></w:font><w:font w:name="SF UI Display"><w:altName w:val="Calibri"/><w:panose1 w:val="00000A00000000000000"/><w:charset w:val="00"/><w:family w:val="modern"/><w:notTrueType/><w:pitch w:val="variable"/><w:sig w:usb0="2000028F" w:usb1="00000003" w:usb2="00000000" w:usb3="00000000" w:csb0="0000019F" w:csb1="00000000"/></w:font><w:font w:name="Lato"><w:altName w:val="Segoe UI"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/><w:sig w:usb0="E10002FF" w:usb1="5000ECFF" w:usb2="00000021" w:usb3="00000000" w:csb0="0000019F" w:csb1="00000000"/></w:font><w:font w:name="Calibri Light"><w:panose1 w:val="020F0302020204030204"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/><w:sig w:usb0="E4002EFF" w:usb1="C200247B" w:usb2="00000009" w:usb3="00000000" w:csb0="000001FF" w:csb1="00000000"/></w:font><w:font w:name="Segoe UI Black"><w:panose1 w:val="020B0A02040204020203"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/><w:sig w:usb0="E00002FF" w:usb1="4000E47F" w:usb2="00000021" w:usb3="00000000" w:csb0="0000019F" w:csb1="00000000"/></w:font><w:font w:name="Franklin Gothic Book"><w:panose1 w:val="020B0503020102020204"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/></w:font><w:font w:name="Franklin Gothic Medium"><w:panose1 w:val="020B0603020102020204"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/></w:font><w:font w:name="Franklin Gothic Heavy"><w:panose1 w:val="020B0903020102020204"/><w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/></w:font></w:fonts>');
   zip.file('word/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="Aptos" w:cs="Aptos"/><w:sz w:val="18"/><w:szCs w:val="18"/><w:lang w:val="en-US"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="264" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style></w:styles>');
-  zip.file('word/header1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ${X.NS}><w:p><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="1" locked="1" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>182880</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>152400</wp:posOffset></wp:positionV><wp:extent cx="${EW}" cy="${EH}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="1" name="Letterhead"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="letterhead.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${EW}" cy="${EH}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p></w:hdr>`);
+  zip.file('word/header1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ${X.NS}><w:p><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="1" locked="1" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>82550</wp:posOffset></wp:positionV><wp:extent cx="${EW}" cy="${EH}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="1" name="Letterhead"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="letterhead.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${EW}" cy="${EH}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p></w:hdr>`);
   const fld = c => `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${c} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${wR('1', { b:true, font:'Aptos', sz:16 })}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
-  zip.file('word/footer1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${X.NS}>${wP(wR('Page ', { font:'Aptos', sz:16 }) + fld('PAGE') + wR(' of ', { font:'Aptos', sz:16 }) + fld('NUMPAGES'), { jc:'right', after:80 })}${EXCO_FOOT.map(l => wP(wR(l, { font:'Aptos', color:'808080', sz:18 }), { jc:'center', line:240 })).join('')}</w:ftr>`);
+  zip.file('word/footer1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${X.NS}>${wP(wR('Page ', { font:'Aptos', sz:16 }) + fld('PAGE') + wR(' of ', { font:'Aptos', sz:16 }) + fld('NUMPAGES'), { jc:'right', after:80 })}${EXCO_FOOT.map(l => { const m = /^(\d+)(st|nd|rd|th)(\b.*)$/.exec(l), o = { font:'Aptos', color:'767171', sz:18 }; return wP(m ? wR(m[1], o) + wR(m[2], Object.assign({ sup:true }, o)) + wR(m[3], o) : wR(l, o), { jc:'center', line:240 }); }).join('')}</w:ftr>`);
   zip.file('word/document.xml', docXml);
   return zip.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression:'DEFLATE' });
 }
@@ -10994,10 +11048,10 @@ async function lhPdfFinish(pages, docTitle, right, o){
   pages.forEach((p, i) => {
     const f = new PdfPage(PCA4_H); if(hdr) f.image('ExH', LH_HDR.x, LH_HDR.y, LH_HDR.w, LH_HDR.h);       // placed and sized as in the Word letterhead template
     if(o.calFoot){ const pt = 'Page ' + (i + 1) + ' of ' + total; f.text((right || 553.6) - pdfTextWidth(pt, false, 8), 799, pt, { size:8, italic:true });
-      EXCO_FOOT.forEach((l, k) => f.text((PCA4_W - pdfTextWidthK(l, 'cal_regular', 10)) / 2, 801 + k * 12.5, l, { size:10, color:[0.25, 0.25, 0.25], font:'F9' })); p.ops = f.ops.concat(p.ops); return; }
+      EXCO_FOOT.forEach((l, k) => lhFootLine(f, l, 801 + k * 12.5, 10, 'F9', 'cal_regular', [0.25, 0.25, 0.25])); p.ops = f.ops.concat(p.ops); return; }
     const pn = [['Page ', 0], [String(i + 1), 1], [' of ', 0], [String(total), 1]], pw = pn.reduce((a, r) => a + pdfTextWidthK(r[0], r[1] ? 'apt_bold' : 'apt_regular', 8), 0);   // footer in the template's Aptos (Inter in the PDF)
     let px = (right || 553.6) - pw; pn.forEach(([t, b]) => { f.text(px, 790, t, { size:8, font:b ? 'F7' : 'F6' }); px += pdfTextWidthK(t, b ? 'apt_bold' : 'apt_regular', 8); });
-    EXCO_FOOT.forEach((l, k) => f.text((PCA4_W - pdfTextWidthK(l, 'apt_regular', 9)) / 2, 805 + k * 11.5, l, { size:9, color:G, font:'F6' }));
+    EXCO_FOOT.forEach((l, k) => lhFootLine(f, l, 805 + k * 11.5, 9, 'F6', 'apt_regular', [0.46, 0.44, 0.44]));
     p.ops = f.ops.concat(p.ops);
   });
   return pcPdfFinish(pages.map(p => ({ ops:p.ops, bare:true })), { title:'', number:'', docTitle, images:hdr ? { ExH:hdr } : {}, family:o.family || '', italic:!!o.italic, apt:!o.calFoot, heavy:!!o.heavy, cal:!!(o.calFoot || o.cal), light:!!o.light, black:!!o.black, calB:!!o.calB });
@@ -13453,8 +13507,8 @@ async function buildVehicleLogPdf(v, logs){
     const pg = new PdfPage(H);
     const center = (x0, x1, b, t, o) => { o = Object.assign({ size:9 }, o || {}); pg.text(x0 + (x1 - x0 - pdfTextWidth(t, !!o.bold, o.size)) / 2, b, t, o); };
     // the company letterhead: the logo on the left and the stripes on the right (the picture is clipped in two)
-    const LW = 480, LHh = LW * 346 / 2481, clip = (x, w, dx) => { pg.ops.push(`q ${pdfN(x)} ${pdfN(H - 90)} ${pdfN(w)} 90 re W n`); pg.image('Hdr', dx, -11, LW, LHh); pg.ops.push('Q'); };
-    clip(0, 200, 0); clip(W - 70, 70, W - 36 - LW + 20);
+    const LW = 560, LHh = LW * 424 / 2481, clip = (x, w, dx) => { pg.ops.push(`q ${pdfN(x)} ${pdfN(H - 90)} ${pdfN(w)} 90 re W n`); pg.image('Hdr', dx, -18, LW, LHh); pg.ops.push('Q'); };
+    clip(0, 220, 0); clip(W - 92, 92, W - LW);
     center(0, W, 64, 'VEHICLE REQUEST LOG', { size:13 });
     let y = 92; const h1 = 22, h2 = 24, RH = 28.5, top = y;
     pg.fill(X[0], y, X[6] - X[0], h1, GREEN); pg.fill(X[6], y, X[9] - X[6], h1, GREEN);
@@ -15373,6 +15427,7 @@ function render(){
     else if(ui.tab==='asset-report') el.innerHTML = viewAssetReport();
     else if(ui.tab==='purchase-requisitions') el.innerHTML = viewPurchaseRequisitions();
     else if(ui.tab==='handovers') el.innerHTML = viewHandovers();
+    else if(ui.tab==='incident-reports') el.innerHTML = viewIncidentReports();
     else if(ui.tab==='vehicles') el.innerHTML = viewVehicles();
     else if(ui.tab==='petty-cash') el.innerHTML = viewPettyCash();
     else if(ui.tab==='keys' || ui.tab==='vehicle-keys') el.innerHTML = viewKeyRegistry();
@@ -15910,6 +15965,12 @@ function dashboardModuleSummary(){
         [metric(fmtNum(ls.length), 'Locations'), metric(fmtNum(sv), 'Need stock valuation'), metric(fmtNum(ls.filter(l => l.pettyCashCustodianUid).length), 'With a petty cash custodian')],
         [noCust ? note(plural(noCust, 'location') + ' without a stock custodian') : '']);
     }) : '',
+    safe(() => {
+      const inc = irAll().map(x => x.r), open = inc.filter(r => (r.status || 'Open') !== 'Resolved').length;
+      return card('incident-reports', 'incident', 'Incident Report',
+        [metric(fmtNum(inc.length), 'Reports'), metric(fmtNum(inc.filter(r => inMonth(r.date)).length), 'This month'), metric(fmtNum(open), 'Not resolved')],
+        [open ? note(plural(open, 'incident') + ' not resolved', 'warn') : '']);
+    }),
     // the rest of the app, one short card each
     safe(() => {
       const ts = state.tasks || [], open = ts.filter(t => !tkDone(t)), over = ts.filter(tkOverdue).length, wk = clIsoAdd(vToday(), 7);

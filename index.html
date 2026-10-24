@@ -1961,7 +1961,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.307';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.308';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -4338,15 +4338,16 @@ function pcInvoiceRowHtml(inv){
     ${pcInvFuelVehs ? `<div class="sm:col-span-5 grid gap-x-2 gap-y-1" style="grid-template-columns:minmax(0,1fr) 7.5rem 6.5rem"><div class="text-[11px] font-semibold text-slate-500">Vehicle</div><div class="text-[11px] font-semibold text-slate-500">Rate / L (MVR)</div><div class="text-[11px] font-semibold text-slate-500">Litres</div><select data-f="vehicleId" class="${VEH_FIELD} bg-white"><option value="">Vehicle fueled…</option>${pcInvFuelVehs.map(([id, lab]) => `<option value="${esc(id)}" ${(inv.vehicleId || (pcInvFuelVehs.length === 1 ? pcInvFuelVehs[0][0] : '')) === id ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select><input type="number" data-f="rate" value="${esc(inv.rate ? inv.rate : '')}" min="0" step="any" placeholder="Rate / L (MVR)" title="Price of 1 litre in MVR" oninput="pcFuelCalc(this, 'rate')" class="${VEH_FIELD}"><input type="number" data-f="litres" value="${esc(inv.litres == null ? '' : inv.litres)}" min="0" step="any" placeholder="Litres" oninput="pcFuelCalc(this, 'litres')" class="${VEH_FIELD}"><div class="pc-fuel-calc text-xs text-slate-500 -mt-0.5" style="grid-column:1 / -1"></div></div>` : ''}
     <textarea data-f="description" rows="${Math.max(1, String(inv.description || '').split('\n').length)}" placeholder="Description for the statement — press Enter for another line, e.g. PETROL 3.577 Lt, 13.98 MVR/Lt (50.00)" oninput="this.rows = Math.max(1, this.value.split(String.fromCharCode(10)).length);${pcInvFuelVehs ? ' pcInvDescLitres(this)' : ''}" class="sm:col-span-5 resize-y ${VEH_FIELD}">${esc(inv.description || '')}</textarea>
 ${inv.link && vSafeUrl(inv.link) ? `<div class="sm:col-span-5 text-[11px] text-slate-400">Saved earlier as a link: ${vLink(inv.link, 'open')}</div>` : ''}
-    <div class="sm:col-span-5 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs -mt-0.5"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcRowFileChosen(this)"><span class="pc-att-act">📎 Attach the invoice file (PDF or photo)</span></label><span class="pc-att-info text-slate-500"></span><button type="button" onclick="pcRowReadAttached(this)" class="pc-att-read font-semibold text-brand-600 hover:underline hidden">Fill the boxes from this file</button><button type="button" onclick="pcRowAttachRemove(this)" class="pc-att-rm text-slate-400 hover:text-rose-600 hidden">Remove file</button></div></div>`;
+    <div class="sm:col-span-5 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs -mt-0.5"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcRowFileChosen(this)"><span class="pc-att-act">📎 Attach the invoice file (PDF or photo)</span></label><span class="pc-att-info text-slate-500"></span><button type="button" onclick="pcRowReadAttached(this)" class="pc-att-read font-semibold text-brand-600 hover:underline hidden">Fill the boxes from this file</button><button type="button" onclick="pcRowView(this)" class="pc-att-view font-semibold text-brand-600 hover:underline hidden">👁 View</button><button type="button" onclick="pcRowAttachRemove(this)" class="pc-att-rm text-slate-400 hover:text-rose-600 hidden">Remove file</button></div></div>`;
 }
 function pcAttachRefresh(row){
   const att = pcAttach[row.dataset.key], fid = row.dataset.fid, n = att ? att.pages.length : (+row.dataset.pages || 0), has = !!(att || fid);
   row.querySelector('.pc-att-info').textContent = has ? '📎 ' + (att ? att.name + ' · ' : (row.dataset.fname ? row.dataset.fname + ' · ' : '')) + n + ' page' + (n === 1 ? '' : 's') + (att ? ' (saved with the request)' : ' kept') : '';
   row.querySelector('.pc-att-act').textContent = has ? 'Replace file' : '📎 Attach the invoice file (PDF or photo)';
-  row.querySelector('.pc-att-rm').classList.toggle('hidden', !has);
+  row.querySelector('.pc-att-rm').classList.toggle('hidden', !has); const vw = row.querySelector('.pc-att-view'); if(vw) vw.classList.toggle('hidden', !has);
   const rd = row.querySelector('.pc-att-read'); if(rd) rd.classList.toggle('hidden', !has);
 }
+function pcRowView(btn){ const row = btn.closest('.pc-irow'); attViewObj(pcAttach[row.dataset.key], row.dataset.fid, 'Invoice', btn); }
 function pcRowAttachRemove(btn){ const row = btn.closest('.pc-irow'); delete pcAttach[row.dataset.key]; row.dataset.fid = ''; row.dataset.pages = '0'; row.dataset.fname = ''; pcAttachRefresh(row); }
 function pcReadInvoices(){
   return [...document.querySelectorAll('#pc-invoices .pc-irow')].map(row => { const g = f => row.querySelector(`[data-f="${f}"]`).value.trim(); const go = f => { const e = row.querySelector(`[data-f="${f}"]`); return e ? e.value.trim() : ''; };
@@ -10892,12 +10893,12 @@ async function agOpenFile(fid, title, backId){
 let agFormAtt = null;
 function agFileRow(d){
   agFormAtt = null; const t = d ? agTrack(d) : {};
-  return `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agFormFile(this)"><span id="ag-att-act">${t.fileId ? 'Replace the attached agreement' : '📎 Attach the agreement (PDF)'}</span></label><span id="ag-att-info" class="text-xs text-slate-500">${t.fileId ? '📎 ' + esc(t.fileName || 'Agreement') + ' kept' : 'Optional — attach the file, link it above, or both.'}</span></div>
+  return `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agFormFile(this)"><span id="ag-att-act">${t.fileId ? 'Replace the attached agreement' : '📎 Attach the agreement (PDF)'}</span></label><span id="ag-att-info" class="text-xs text-slate-500">${t.fileId ? '📎 ' + esc(t.fileName || 'Agreement') + ' kept' : 'Optional — attach the file, link it above, or both.'}</span><span class="flex-1"></span><button type="button" id="ag-att-view" onclick="attViewObj(agFormAtt, '${t.fileId ? esc(t.fileId) : ''}', 'Agreement', this)" class="text-xs font-semibold text-brand-600 hover:underline ${t.fileId ? '' : 'hidden'}">👁 View</button></div>
     <p class="text-[11.5px] text-slate-400 mt-2">Handovers, annexes and other documents are added on the agreement's page under <b>Additional documents</b>.</p>`;
 }
 async function agFormFile(input){
   const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('ag-att-info'); info.textContent = 'Preparing the file…';
-  try{ agFormAtt = await agPrepare(files); info.textContent = '📎 ' + agAttText(agFormAtt) + ' (saved with the agreement)'; document.getElementById('ag-att-act').textContent = 'Replace file'; }
+  try{ agFormAtt = await agPrepare(files); info.textContent = '📎 ' + agAttText(agFormAtt) + ' (saved with the agreement)'; document.getElementById('ag-att-act').textContent = 'Replace file'; const vb = document.getElementById('ag-att-view'); if(vb) vb.classList.remove('hidden'); }
   catch(e){ agFormAtt = null; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); }
 }
 // additional documents: a handover from the app, a link, an attached file — or all three
@@ -12796,7 +12797,7 @@ function openBaEntry(id, euid, type){
       vS('Expense category', 'category', [['', '— Not set (Other)']].concat(BA_CATS.map(c => [c, c])), baCat(d.category)) + vF('Voucher no. (optional)', 'voucher', d.voucher || '', 'text') +
       vTa('Details', 'details', d.details || '', { rows:3, span:'sm:col-span-2', ph:'Items bought — one per line' }) + (AI_READ_URL ? `<div class="sm:col-span-2 -mt-2"><button type="button" onclick="aiTidyField(this, 'details')" class="text-xs font-semibold text-brand-600 hover:underline">Tidy the details with AI</button></div>` : '') + vF('Remarks (invoice no.)', 'remarks', d.remarks || '', 'text') + (d.link && vSafeUrl(d.link) ? `<div class="text-[11px] text-slate-400 self-end pb-3">Saved earlier as a link: ${vLink(d.link, 'open')}</div>` : '')) +
     `<div class="mt-3 rounded-lg border border-dashed border-slate-300 px-3.5 py-3 text-sm"><div class="flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="baFileChosen(this, '${id}', '${euid || ''}')"><span id="ba-att-act">${e && e.fileId ? 'Replace invoice file' : '📎 Attach the invoice (PDF or photo)'}</span></label>
-      <span id="ba-att-info" class="text-slate-500 text-xs">${e && e.fileId ? '📎 ' + esc(e.fileName || 'Invoice') + ' · ' + (e.filePages || 1) + ' page' + ((e.filePages || 1) === 1 ? '' : 's') + ' kept' : ''}</span>${e && e.fileId ? `<button type="button" id="ba-att-rm" onclick="baAttRemove()" class="text-xs text-slate-400 hover:text-rose-600">Remove file</button>` : ''}</div>
+      <span id="ba-att-info" class="text-slate-500 text-xs">${e && e.fileId ? '📎 ' + esc(e.fileName || 'Invoice') + ' · ' + (e.filePages || 1) + ' page' + ((e.filePages || 1) === 1 ? '' : 's') + ' kept' : ''}</span><button type="button" id="ba-att-view" onclick="attViewObj(baAtt, '${e && e.fileId ? esc(e.fileId) : ''}', 'Invoice', this)" class="text-xs font-semibold text-brand-600 hover:underline ${e && e.fileId ? '' : 'hidden'}">👁 View</button>${e && e.fileId ? `<button type="button" id="ba-att-rm" onclick="baAttRemove()" class="text-xs text-slate-400 hover:text-rose-600">Remove file</button>` : ''}</div>
       <div id="ba-att-status" class="text-[11.5px] text-slate-400 mt-1">Attaching marks the invoice as received and fills the empty boxes from it.</div></div>` +
     vFoot(e ? 'Save' : 'Add entry', `saveBaEntry('${id}', '${euid || ''}')`, e ? `deleteBaEntry('${id}', '${euid}')` : ''), true);
 }
@@ -12805,7 +12806,7 @@ function baAttRemove(){ baAtt = { remove:true }; document.getElementById('ba-att
 async function baFileChosen(input, id, euid){
   const files = [...input.files]; input.value = ''; if(!files.length) return; const st = document.getElementById('ba-att-status'), f = document.getElementById('vform');
   st.textContent = 'Reading the invoice file…';
-  try{ const att = await pcPrepareAttachment(files); baAtt = att; document.getElementById('ba-att-info').textContent = '📎 ' + att.name + ' · ' + att.pages.length + ' page' + (att.pages.length === 1 ? '' : 's') + ' (saved with the entry)'; document.getElementById('ba-att-act').textContent = 'Replace invoice file'; }
+  try{ const att = await pcPrepareAttachment(files); baAtt = att; { const vb = document.getElementById('ba-att-view'); if(vb) vb.classList.remove('hidden'); } document.getElementById('ba-att-info').textContent = '📎 ' + att.name + ' · ' + att.pages.length + ' page' + (att.pages.length === 1 ? '' : 's') + ' (saved with the entry)'; document.getElementById('ba-att-act').textContent = 'Replace invoice file'; }
   catch(e){ st.textContent = 'Could not attach that file: ' + (e && e.message ? e.message : e); return; }
   if(f.invoice.value !== 'Received') f.invoice.value = 'Received';
   try{ const got = pcParseInvoiceText(await pcReadInvoiceFile(files[0], m => { st.textContent = m; })); let n = 0;
@@ -13966,7 +13967,15 @@ function openTravelForm(id, scope){
 // signed travel request form / signed memo kept with the request (original PDF or photos), uploaded in the background
 const trAtt = {}, TR_ATT = { form:{ field:'formFile', name:'Signed travel request form' }, memo:{ field:'memoFile', name:'Signed memo' }, slip:{ field:'slipFile', name:'DSA payment slip' } };
 function trAttRow(k, f, label){ delete trAtt[k];
-  return `<div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="trAttPick(this, '${k}')"><span id="tr-att-act-${k}">${f ? 'Replace the attached file' : '📎 ' + label}</span></label><span id="tr-att-info-${k}" class="text-xs text-slate-500">${f ? '📎 ' + esc(f.fileName || 'File') + ' kept' : ''}</span></div>`; }
+  return `<div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="trAttPick(this, '${k}')"><span id="tr-att-act-${k}">${f ? 'Replace the attached file' : '📎 ' + label}</span></label><span id="tr-att-info-${k}" class="text-xs text-slate-500">${f ? '📎 ' + esc(f.fileName || 'File') + ' kept' : ''}</span><span class="flex-1"></span><button type="button" id="tr-att-view-${k}" onclick="event.stopPropagation(); attViewAny('${k}', '${f && f.fileId ? esc(f.fileId) : ''}', '${esc(String(label || '').replace(/^Attach (the )?/i, '').replace(/'/g, ''))}', this)" class="text-xs font-semibold text-brand-600 hover:underline ${f && f.fileId ? '' : 'hidden'}">👁 View</button></div>`; }
+// View on any attachment box: the file just chosen (not saved yet) or the one kept — opened in a new tab so the form stays as it is
+function attViewAny(k, fid, title, btn){ attViewObj(trAtt[k], fid, title, btn); }
+function attViewObj(a, fid, title, btn){
+  if(a && (a.pdf || (a.pages && a.pages.length))){ const w = window.open('', '_blank'); if(a.pdf){ const url = URL.createObjectURL(new Blob([a.bytes], { type:'application/pdf' })); if(w) w.location.href = url; else window.open(url, '_blank'); return; }
+    const html = `<!doctype html><title>${esc(a.name || title)}</title><body style="margin:0;background:#525659;text-align:center">${(a.pages || []).map(p => `<img src="${p.jpeg}" style="max-width:100%;margin:12px auto;display:block;box-shadow:0 2px 8px #0006">`).join('')}</body>`;
+    if(w){ w.document.write(html); w.document.close(); } return; }
+  if(fid) attPdfGo(fid, 'open', title || 'Document', btn);
+}
 /* ---------- reading an attached file: the labelled details on it (dates, amounts, numbers, names) fill the form's EMPTY boxes — never what was typed ---------- */
 // which boxes each attachment can fill (form field names, or #element-ids)
 function attReadMap(k){
@@ -14087,7 +14096,7 @@ async function attReadInto(k, file, info){
   say(filled.length ? 'filled from it: ' + filled.join(', ') + ' — please check' : 'nothing new to fill from it');
 }
 async function trAttPick(input, k){ const files = [...input.files]; input.value = ''; if(!files.length) return; const info = document.getElementById('tr-att-info-' + k); info.textContent = 'Preparing…';
-  try{ trAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(trAtt[k]) + ' (saved when you press Save)'; document.getElementById('tr-att-act-' + k).textContent = 'Replace file'; if(k === 'pcform') pcRequesterChanged(); attReadInto(k, files[0], info); }catch(e){ delete trAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
+  try{ trAtt[k] = await agPrepare(files); info.textContent = '📎 ' + agAttText(trAtt[k]) + ' (saved when you press Save)'; document.getElementById('tr-att-act-' + k).textContent = 'Replace file'; const vb = document.getElementById('tr-att-view-' + k); if(vb) vb.classList.remove('hidden'); if(k === 'pcform') pcRequesterChanged(); attReadInto(k, files[0], info); }catch(e){ delete trAtt[k]; info.textContent = 'Could not attach: ' + (e && e.message ? e.message : e); } }
 async function trBgUpload(id, k, att){
   const key = uid(); agUploads[key] = { name:att.name, f:0 }; agUploadBar(); const field = TR_ATT[k].field;
   try{ const t0 = trById(id), st = await agStore(att, (t0 && (k === 'form' ? t0.formNumber : (t0.dsa || {}).memoNo)) || '', f => { agUploads[key].f = f; agUploadBar(); });

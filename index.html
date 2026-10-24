@@ -1961,7 +1961,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.306';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.307';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -14024,20 +14024,26 @@ function prParseForm(text){
   const h = L.findIndex(l => /Description/i.test(l) && /(Qty|Unit\s*Cost|Amount)/i.test(l)), t = L.findIndex((l, i) => i > h && /^Total\b/i.test(l));
   if(h >= 0) L.slice(h + 1, t > h ? t : h + 12).forEach(l => {
     const m = /^(\S+)\s+(.+?)\s+(?:([A-Za-z]{2,6})\s+)?(\d[\d,]*(?:\.\d+)?)\s+(\d[\d,]*\.\d{2})\s+(\d[\d,]*\.\d{2})(?:\s+(.+))?$/.exec(l);
-    if(m) out.items.push({ code:m[1], name:m[2].trim(), uom:m[3] || '', qty:money(m[4]), unitCost:money(m[5]), amount:money(m[6]), budget:(m[7] || '').trim() });
+    if(m){ out.items.push({ code:m[1], name:m[2].trim(), uom:m[3] || '', qty:money(m[4]), unitCost:money(m[5]), amount:money(m[6]), budget:(m[7] || '').trim() }); return; }
+    // a scan read less cleanly: an item line (ITM-… or text) ending in qty · unit cost · amount, checked by qty × unit cost = amount
+    const nums = [...l.matchAll(/\d[\d,]*(?:[.,]\d{1,2})?/g)].map(x => ({ v:money(x[0].replace(/,(?=\d{2}$)/, '.')), i:x.index, t:x[0] })).filter(x => x.v > 0);
+    if(nums.length < 3 || /^total\b/i.test(l)) return;
+    for(let k = nums.length - 3; k >= 0; k--){ const [q, u, a] = nums.slice(k, k + 3); if(Math.abs(q.v * u.v - a.v) <= Math.max(1, a.v * 0.005)){
+      const head = l.slice(0, q.i).trim(), cm = /^([A-Z]{2,4}-?\d{3,6})\s+(.*)$/i.exec(head), body = cm ? cm[2] : head, um = /^(.*?)\s+([A-Za-z]{2,6})$/.exec(body);
+      out.items.push({ code:cm ? cm[1].toUpperCase() : '', name:(um ? um[1] : body).replace(/[|]+/g, ' ').replace(/\s+/g, ' ').trim(), uom:um ? um[2] : '', qty:q.v, unitCost:u.v, amount:a.v, budget:(/[A-Za-z]/.test(l.slice(a.i + a.t.length)) ? l.slice(a.i + a.t.length).trim() : '') }); return; } }
   });
   const names = []; L.forEach(l => { const re = /Name\s*:\s*(.+?)(?=\s+Name\s*:|$)/gi; let m; while((m = re.exec(l))) names.push(m[1].trim()); });
-  const ai = L.findIndex(l => /Authori[sz]ed\s*By/i.test(l)), an = ai >= 0 ? L.slice(ai).map(l => /Name\s*:\s*(.+)$/i.exec(l)).find(Boolean) : null;
+  const ai = L.findIndex(l => /Authori[sz]ed\s*By/i.test(l)), an = ai >= 0 ? L.slice(ai).map(l => /Name\s*:\s*((?:(?!Name\s*:).)+)$/i.exec(l)).find(Boolean) : null;
   out.prepared = names[0] || ''; out.approved = names[1] || ''; out.authorised = an ? an[1].trim() : (names[2] || '');
   if(out.authorised && out.approved === out.authorised) out.approved = names.find((x, i) => i > 0 && x !== out.authorised) || '';
-  const des = []; L.forEach((l, i) => { if(!/Des\w{0,4}nation\s*:/i.test(l)) return; let v = l.replace(/.*Des\w{0,4}nation\s*:\s*/i, '').trim(); if(/&$/.test(v) && L[i + 1] && !/:/.test(L[i + 1])) v += ' ' + L[i + 1]; des.push(v.replace(/Manaaer/g, 'Manager')); });
+  const des = []; L.forEach((l, i) => { if(!/Des\w{0,4}nation\s*:/i.test(l)) return; l.split(/(?=Des\w{0,4}nation\s*:)/i).filter(x => /^Des\w{0,4}nation\s*:/i.test(x)).forEach(part => { let v = part.replace(/^Des\w{0,4}nation\s*:\s*/i, '').trim(); if(/&$/.test(v) && L[i + 1] && !/:/.test(L[i + 1])) v += ' ' + L[i + 1]; des.push(v.replace(/Manaaer/g, 'Manager').replace(/(\w)\. (\w)/, '$1, $2')); }); });
   out.approvedDesig = des.length >= 3 ? des[1] : des.length === 2 ? (des[0] && !des[1] ? '' : des[0]) : ''; out.authorisedDesig = des.length >= 3 ? des[2] : des[des.length - 1] || '';
   return out;
 }
 async function prReadForm(file, info){
   const base = info ? info.textContent : '', say = t => { if(info && info.isConnected) info.textContent = base + ' · ' + t; };
   say('reading the PR form…');
-  let got; try{ got = prParseForm(await pcReadInvoiceFile(file, m => say(m), { width:1700 })); }catch(e){ say('could not read it — fill the boxes by hand'); return; }
+  let got; try{ got = prParseForm(await pcReadInvoiceFile(file, m => say(m), { width:2400 })); if(!got.items.length) got = prParseForm(await pcReadInvoiceFile(file, m => say(m), { width:1700 })); }catch(e){ say('could not read it — fill the boxes by hand'); return; }
   const done = [], mark = el => { if(!el) return; el.classList.add('ring-2', 'ring-amber-300'); setTimeout(() => el.classList.remove('ring-2', 'ring-amber-300'), 6000); };
   const set = (id, v, label) => { const el = document.getElementById(id); if(!el || v == null || v === '') return; el.value = v; el.dispatchEvent(new Event('input', { bubbles:true })); el.dispatchEvent(new Event('change', { bubbles:true })); mark(el); done.push(label); };
   set('pr-number', got.number, 'PR number'); if(got.date) set('pr-date', got.date, 'date');

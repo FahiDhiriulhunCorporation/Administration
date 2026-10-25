@@ -1970,7 +1970,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.314';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.315';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -7535,6 +7535,35 @@ const TK_PRI_CLS = { Urgent:'bg-rose-100 text-rose-700', High:'bg-amber-100 text
 const TK_PRI_ICON = { Urgent:'⏫', High:'🔺', Normal:'▪', Low:'🔻' };
 const tkPri = t => TK_PRIORITY.includes(t.priority) ? t.priority : 'Normal';
 const tkPriPill = (t, sm) => `<span class="inline-flex items-center gap-1 ${sm ? 'px-2 py-0.5 text-[10.5px]' : 'px-2.5 py-0.5 text-xs'} rounded-full font-semibold whitespace-nowrap ${TK_PRI_CLS[tkPri(t)]}" title="${tkPri(t)} priority">${TK_PRI_ICON[tkPri(t)]} ${tkPri(t)}</span>`;
+// status / priority changed straight from the task (no Edit): a small dropdown styled like the tag
+const TK_ST_CLS = { 'Not started':'bg-slate-100 text-slate-700 border-slate-200', 'In progress':'bg-sky-100 text-sky-700 border-sky-200', 'On hold':'bg-amber-100 text-amber-800 border-amber-200', 'Completed':'bg-emerald-100 text-emerald-700 border-emerald-200', 'Cancelled':'bg-slate-100 text-slate-500 border-slate-200' };
+function tkStatusSel(t, sm){
+  if(!tkCanUpdate(t)) return tkPill(t);
+  const cur = t.status || 'Not started', opts = TK_STATUS.filter(s => s !== 'Cancelled' || canManageInventory() || cur === 'Cancelled');
+  return `<select aria-label="Status" title="Change status" onclick="event.stopPropagation()" onchange="tkQuickSet('${t.id}', 'status', this.value)" class="${sm ? 'text-[11px]' : 'text-xs'} font-semibold rounded-full border px-2.5 py-0.5 pr-7 cursor-pointer ${TK_ST_CLS[cur] || TK_ST_CLS['Not started']}">${opts.map(s => `<option value="${s}" ${s === cur ? 'selected' : ''}>${s}</option>`).join('')}</select>${tkOverdue(t) ? ' ' + vPill('crit', 'Overdue') : ''}`;
+}
+function tkPriSel(t, sm){
+  if(!canManageInventory()) return tkPriPill(t, sm);
+  const cur = tkPri(t);
+  return `<select aria-label="Priority" title="Change priority" onclick="event.stopPropagation()" onchange="tkQuickSet('${t.id}', 'priority', this.value)" class="${sm ? 'text-[11px]' : 'text-xs'} font-semibold rounded-full border border-transparent px-2.5 py-0.5 pr-7 cursor-pointer ${TK_PRI_CLS[cur]}">${TK_PRIORITY.map(x => `<option value="${x}" ${x === cur ? 'selected' : ''}>${TK_PRI_ICON[x]} ${x}</option>`).join('')}</select>`;
+}
+async function tkQuickSet(id, field, val){
+  const t = tkById(id); if(!t) return; const by = authUser ? authUser.name : '', inModal = !!document.getElementById('tk-quick');
+  let rec;
+  if(field === 'status'){
+    if(!tkCanUpdate(t) || !TK_STATUS.includes(val) || val === (t.status || 'Not started')) return;
+    if(val === 'Cancelled' && !canManageInventory()){ toast('Only admins can cancel a task.', true); return openTkView(id); }
+    const progress = val === 'Completed' ? 100 : tkProg(t);
+    rec = { id, status:val, progress, completedOn:val === 'Completed' ? t.completedOn || vToday() : '', updates:(t.updates || []).concat([{ at:Date.now(), by, text:'Status: ' + val, progress, status:val }]) };
+  } else {
+    if(!canManageInventory() || !TK_PRIORITY.includes(val) || val === tkPri(t)) return;
+    rec = { id, priority:val, updates:(t.updates || []).concat([{ at:Date.now(), by, text:'Priority: ' + val, progress:tkProg(t), status:t.status || 'Not started' }]) };
+  }
+  try{ await vehSave('tasks', rec); }catch(e){ toast('Could not save: ' + (e && e.message ? e.message : e), true); }
+  rerenderMain(); toast((t.no ? t.no + ' · ' : '') + (field === 'status' ? 'status ' : 'priority ') + val + '.');
+  if(inModal) openTkView(id);
+  if(field === 'status' && val === 'Completed' && t.status !== 'Completed') try{ eggTaskDone(tkById(id)); }catch(e){}
+}
 function tkPill(t){
   const s = tkState(t), k = { 'Overdue':'crit', 'Completed':'good', 'In progress':'acc', 'On hold':'warn' }[s] || '';
   return vPill(k, esc(s));
@@ -7592,7 +7621,7 @@ function tkList(){
   const prio = t => t.priority === 'Urgent' || t.priority === 'High' ? `<span class="ml-1.5 inline-block w-1.5 h-1.5 rounded-full align-middle ${t.priority === 'Urgent' ? 'bg-rose-500' : 'bg-amber-500'}" title="${t.priority} priority"></span>` : '';
   return vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Task' }, { t:'Priority' }, { t:'Team' }, { t:'Dates' }, { t:'Progress' }, { t:'Status' }, { t:'' }])}<tbody>${list.map(t => `<tr class="${vTr} cursor-pointer" onclick="openTkView('${t.id}')" title="Open task details">
     ${vTd(`<div class="font-semibold text-slate-900">${esc(t.title)}</div><div class="text-[11px] text-slate-400">${esc([t.no, t.category].filter(Boolean).join(' · '))}</div>`, { first:1 })}
-    ${vTd(tkPriPill(t))}${vTd(who(t))}${vTd(dates(t))}${vTd(bar(t))}${vTd(tkPill(t))}${vTd(`<span class="text-slate-300 text-lg leading-none">›</span>`, { last:1, cls:'w-6 text-right' })}</tr>`).join('')}</tbody></table>`);
+    ${vTd(tkPriSel(t))}${vTd(who(t))}${vTd(dates(t))}${vTd(bar(t))}${vTd(`<span class="whitespace-nowrap">${tkStatusSel(t)}</span>`)}${vTd(`<span class="text-slate-300 text-lg leading-none">›</span>`, { last:1, cls:'w-6 text-right' })}</tr>`).join('')}</tbody></table>`);
 }
 
 /* ---------- Board: tasks in buckets by location (like Planner); drag a card to move it to another location ---------- */
@@ -7881,7 +7910,7 @@ function openTkView(id){
   const t = tkById(id); if(!t) return;
   const can = tkCanUpdate(t), admin = canManageInventory(), p = tkProg(t), c = TK_COL[tkState(t)], ups = (t.updates || []).slice().reverse();
   const dur = t.start && t.due ? tkDays(t.start, t.due) + 1 : 0, gone = t.start && t.due ? Math.max(0, Math.min(dur, tkDays(t.start, vToday()) + 1)) : 0, timePct = dur ? Math.round(gone / dur * 100) : 0;
-  openModal((t.no ? t.no + ' · ' : '') + t.title, `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${tkPill(t)}${tkPriPill(t)}${t.category ? `<span class="text-xs text-slate-500">${esc(t.category)}</span>` : ''}<span class="text-xs text-slate-500">📍 ${esc(tkLocNames(t))}</span></div>
+  openModal((t.no ? t.no + ' · ' : '') + t.title, `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div id="tk-quick" class="flex items-center gap-2 flex-wrap">${tkStatusSel(t)}${tkPriSel(t)}${t.category ? `<span class="text-xs text-slate-500">${esc(t.category)}</span>` : ''}<span class="text-xs text-slate-500">📍 ${esc(tkLocNames(t))}</span></div>
       ${admin ? `<div class="flex gap-2">${vBtnPlain('Edit', `openTkEdit('${t.id}')`)}</div>` : ''}</div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">${[['Start', vDate(t.start)], ['Due', t.due ? vDate(t.due) : 'No due date'], ['Duration', dur ? dur + ' days' : '—'], ['Completed', t.completedOn ? vDate(t.completedOn) : '—']].map(([l, v]) => `<div class="rounded-lg bg-slate-50 px-3 py-2"><div class="text-[11px] text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800">${v}</div></div>`).join('')}</div>
     <div class="mb-1 flex justify-between text-xs text-slate-500"><span>Progress</span><span class="num font-semibold text-slate-800">${p}%</span></div>

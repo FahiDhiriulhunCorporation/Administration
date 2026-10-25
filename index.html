@@ -1970,7 +1970,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.312';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.314';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3573,6 +3573,7 @@ function irData(r, src){
   return { no:(fleet ? r.irNo : r.no) || '', type, subject:subj, date:r.date ? pcOrdinalDate(r.date) : '', time:x.time || '', location:x.location || '', reportDate:x.reportDate ? pcOrdinalDate(x.reportDate) : (r.date ? pcOrdinalDate(r.date) : ''),
     vehicle, persons, desc:String((fleet ? r.issue : r.description) || '').trim(), damage:irLines(x.damage), injuries:irLines(x.injuries), cause:String(x.cause || '').trim(), actions:irLines(fleet ? (x.actions || r.notes) : x.actions), remarks:String(x.remarks || '').trim(),
     by:x.reportedBy || r.reportedBy || '', byDesig:x.reportedDesig || '', byDept:x.reportedDept || '', status:r.status || 'Open',
+    photos:fleet ? [] : (Array.isArray(r.photos) ? r.photos.filter(x => x && x.fileId) : []),
     rev:fleet ? null : r.reviewSame ? { n:r.reportedBy || '', d:r.reportedDesig || '', dep:r.reportedDept || '', dt:r.reportDate ? pcOrdinalDate(r.reportDate) : '' } : (r.reviewedBy || r.reviewedDesig) ? { n:r.reviewedBy || '', d:r.reviewedDesig || '', dep:r.reviewedDept || '', dt:r.reviewDate ? pcOrdinalDate(r.reviewDate) : '' } : null };
 }
 function irDamageItems(lines){ const out = []; lines.forEach(l => { if(irSub(l) && out.length) out[out.length - 1].pts.push(irStrip(l)); else out.push({ t:irStrip(l), pts:[] }); }); return out; }
@@ -3611,7 +3612,19 @@ async function buildIrPdf(D){
   const rv = D.rev && D.rev.n ? [D.rev.n, D.rev.d, D.rev.dep, D.rev.dt] : null;
   [[L, 'Reported by', [D.by, D.byDesig, D.byDept, D.reportDate], true], [L + half + 10, 'Reviewed by', rv || ['Name:', 'Designation:', 'Date:'], !!rv]].forEach(([x, lab, ls, named]) => {
     pg.text(x, y, lab, { font:'F11', size:10 }); pg.line(x, y + SG, x + half - 30, y + SG, K, 0.6); ls.filter(Boolean).forEach((l, i) => pg.text(x, y + SG + 16 + i * 13, l, { size:9.5, bold:i === 0 && named })); });
-  return lhPdfFinish(pages, 'Incident Report ' + (D.no || ''), R, { black:true });
+  // photographs of the incident / damage: two per row, each with its number and caption
+  const ph = await irPhotoData(D.photos), images = {};
+  if(ph.length){ newPage(); head('Photographs');
+    const gap = 16, cw = (R - L - gap) / 2, ch = 185;
+    for(let i = 0; i < ph.length; i += 2){
+      const row = ph.slice(i, i + 2), caps = row.map((p, j) => pdfWrap('Photo ' + (i + j + 1) + (p.cap ? ' — ' + p.cap : ''), false, 9, cw)), capH = Math.max(...caps.map(c => c.length)) * 12;
+      need(ch + capH + 22); const top = y;
+      row.forEach((p, j) => { const key = 'IrPh' + (i + j + 1), x = L + j * (cw + gap), sc = Math.min(cw / p.w, ch / p.h), w = p.w * sc, h = p.h * sc; images[key] = { w:p.w, h:p.h, jpeg:pdfB64(p.b64) };
+        pg.fill(x, top, cw, ch, SOFT); pg.image(key, x + (cw - w) / 2, top + (ch - h) / 2, w, h);
+        caps[j].forEach((ln, k) => pg.text(x + (cw - pdfTextWidth(ln, false, 9)) / 2, top + ch + 14 + k * 12, ln, { size:9, color:p.cap ? K : G })); });
+      y = top + ch + capH + 22; }
+  }
+  return lhPdfFinish(pages, 'Incident Report ' + (D.no || ''), R, { black:true, images });
 }
 async function buildIrDocx(D){
   const PF = 'Poppins', HF = 'Segoe UI Black', TW = 9026;
@@ -3641,8 +3654,20 @@ async function buildIrDocx(D){
   if(D.remarks){ head('Remarks', ++n); para(D.remarks); }
   const sc = (lab, ls) => `<w:tc><w:tcPr><w:tcW w:w="${TW / 2}" w:type="dxa"/></w:tcPr>${wP(wR(lab, { font:HF, sz:20 }), { after:1080 })}<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="6" w:space="4" w:color="000000"/></w:pBdr><w:spacing w:after="40"/><w:ind w:right="500"/></w:pPr>${T(ls[0], { b:ls[0] !== 'Name:' })}</w:p>${ls.slice(1).map(l => wP(T(l, { sz:18 }), { after:20 })).join('')}</w:tc>`;
   out.push(P('', { after:240 }), `<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${TW / 2}"/><w:gridCol w:w="${TW / 2}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${sc('Reported by', [D.by || 'Name:', D.byDesig, D.byDept, D.reportDate].filter(Boolean))}${sc('Reviewed by', D.rev && D.rev.n ? [D.rev.n, D.rev.d, D.rev.dep, D.rev.dt].filter(Boolean) : ['Name:', 'Designation:', 'Date:'])}</w:tr></w:tbl>`);
+  // photographs: a two-column table on a new page, each picture with its number and caption
+  const ph = await irPhotoData(D.photos), media = [];
+  if(ph.length){
+    out.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>'); head('Photographs');
+    const EMU = 635, cwT = Math.floor(TW / 2), maxW = (cwT - 160) * EMU, maxH = 2300000;
+    const pic = (p, n) => { const sc = Math.min(maxW / p.w, maxH / p.h), cx = Math.round(p.w * sc), cy = Math.round(p.h * sc), rid = 'rIdIrPh' + n; media.push({ rid, name:'incident_photo_' + n + '.jpg', b64:p.b64 });
+      return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${200 + n}" name="Photo ${n}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${200 + n}" name="incident_photo_${n}.jpg"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`; };
+    const cell = (p, n) => `<w:tc><w:tcPr><w:tcW w:w="${cwT}" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="160" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>` +
+      (p ? wP(pic(p, n), { jc:'center', after:60 }).replace('<w:pPr>', '<w:pPr><w:keepNext/>') + wP(T('Photo ' + n, { b:true, sz:18 }) + (p.cap ? T(' — ' + p.cap, { sz:18 }) : ''), { after:80, jc:'center' }) : wP('')) + '</w:tc>';
+    let rows = ''; for(let i = 0; i < ph.length; i += 2) rows += `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cell(ph[i], i + 1)}${cell(ph[i + 1], i + 2)}</w:tr>`;
+    out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${cwT}"/><w:gridCol w:w="${cwT}"/></w:tblGrid>${rows}</w:tbl>`, wP(''));
+  }
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
-  return lhDocx(doc, LH_NS);
+  return lhDocx(doc, LH_NS, media);
 }
 
 /* ---------- the page ---------- */
@@ -3655,7 +3680,7 @@ function viewIncidentReports(){
     return `<tr class="${vTr} cursor-pointer" onclick="openIrReport('${r.id}')">${vTd(`<div class="font-semibold text-slate-900 whitespace-nowrap">${esc(D.no || '—')}</div><div class="text-[11px] text-slate-400">${esc(vDate(r.date))}${D.time ? ' · ' + esc(D.time) : ''}</div>`, { first:1 })}
       ${vTd(`<div class="text-slate-800">${esc(D.subject)}</div><div class="text-[11.5px] text-slate-400">${esc([D.type, D.location].filter(Boolean).join(' · '))}</div>`)}
       ${vTd(D.vehicle ? `<div class="font-semibold text-slate-800">${esc(D.vehicle.vReg)}</div><div class="text-[11px] text-slate-400">${esc(D.vehicle.vModel)}</div>` : '<span class="text-slate-300">—</span>')}
-      ${vTd(vPill(k, esc(D.status)))}
+      ${vTd((admin && src === 'doc' ? irStatusSel(r.id, D.status) : vPill(k, esc(D.status))) + (src === 'doc' && attHas(r.signedFile) ? `<div class="mt-1 text-[11px] font-semibold text-emerald-600 whitespace-nowrap">✓ Signed copy</div>` : ''))}
       ${vTd(`<button onclick="event.stopPropagation(); openIrReport('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">📄 Report</button>${admin ? `<button onclick="event.stopPropagation(); ${src === 'fleet' ? `openVehServiceForm('${r.id}')` : `openIrForm('${r.id}')`}" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>` : ''}`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('');
   return vHead('Incident Report', 'Reports of any incident — vehicle damage, property, injury, security, fire, equipment — on the letterhead (PDF and Word). A vehicle can be added when one is involved.', admin ? vBtnPrimary('+ Incident report', "openIrForm('')") : '') +
     vKpis(statCard('Reports', fmtNum(all.length), 'All time', 'brand') + statCard('This year', fmtNum(all.filter(x => String(x.r.date || '').slice(0, 4) === yr).length), yr, 'slate') + statCard('Not resolved', fmtNum(open), 'Open or in progress', open ? 'amber' : 'slate') + statCard('With a vehicle', fmtNum(all.filter(x => x.D.vehicle).length), 'Vehicle involved', 'slate')) +
@@ -3683,6 +3708,9 @@ function openIrForm(id){
       ta('Cause of incident', 'cause', 'What led to the incident', 2) +
       ta('Immediate action taken', 'actions', 'One action per line', 3) +
       ta('Remarks', 'remarks', 'Recommendation / next steps', 2) +
+      `<div class="sm:col-span-2"><label class="${VEH_LBL}">Photos of the incident and damage <span class="font-normal text-slate-400">(optional — printed on a Photographs page at the end of the report)</span></label>
+        <div id="ir-photos" class="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+        <div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="image/*" multiple class="hidden" onchange="irPhotoPick(this)">📷 Add photos</label><span id="ir-photo-info" class="text-xs text-slate-500">Choose one or several photos (JPG / PNG). Add a caption under each.</span></div></div>` +
       vF('Report prepared by', 'reportedBy', d.reportedBy, 'text', { attrs:' list="ir-staff" oninput="irFillDesig(this, \'reportedDesig\')"' }) + vF('Designation', 'reportedDesig', d.reportedDesig) +
       vF('Department', 'reportedDept', d.reportedDept) + vF('Date of report', 'reportDate', d.reportDate || vToday(), 'date') +
       `<div class="sm:col-span-2 pt-3 mt-1 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap"><span class="text-sm font-semibold text-slate-800">Reviewed by</span><label class="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer"><input type="checkbox" name="reviewSame" ${d.reviewSame ? 'checked' : ''} onchange="irRevSame()" class="w-4 h-4"> Same as report prepared by</label></div>` +
@@ -3690,7 +3718,8 @@ function openIrForm(id){
       vF('Department', 'reviewedDept', d.reviewedDept) + vF('Date reviewed', 'reviewDate', d.reviewDate, 'date') +
       `<p class="sm:col-span-2 -mt-1 text-xs text-slate-500">Leave empty to print blank Name / Designation / Date lines for the reviewer to fill in by hand.</p>`) +
     vFoot(r ? 'Save' : 'Save report', `saveIrForm('${id || ''}')`, r ? `deleteIr('${id}')` : ''), true);
-  setTimeout(() => { const p = document.querySelector('#vform [name=persons]'); if(p) p.setAttribute('list', 'ir-people'); irRevSame(); }, 0);
+  irPh = { keep:((r && r.photos) || []).filter(x => x && x.fileId).map(x => Object.assign({}, x)), add:[], drop:[] };
+  setTimeout(() => { const p = document.querySelector('#vform [name=persons]'); if(p) p.setAttribute('list', 'ir-people'); irRevSame(); irPhotoRender(); }, 0);
 }
 // "same as report prepared by": copy the preparer into the reviewer boxes (kept in step while ticked)
 function irRevSame(){
@@ -3706,20 +3735,27 @@ async function saveIrForm(id){
   if(!o.type) return vFail('Choose the type of incident.'); if(!o.date) return vFail('Enter the date of the incident.'); if(!o.description) return vFail('Describe the incident.');
   o.reviewSame = o.reviewSame === 'on';
   if(o.reviewSame) Object.assign(o, { reviewedBy:o.reportedBy, reviewedDesig:o.reportedDesig, reviewedDept:o.reportedDept, reviewDate:o.reportDate });
-  const rec = Object.assign({ id:id || undefined }, o, { no, vehicleId:o.vehicleId && vehById(o.vehicleId) ? o.vehicleId : '' });
+  const ph = irPh || { keep:[], add:[], drop:[] }; irPh = null;
+  const rec = Object.assign({ id:id || undefined }, o, { no, vehicleId:o.vehicleId && vehById(o.vehicleId) ? o.vehicleId : '', photos:ph.keep.map(x => ({ fileId:x.fileId, fileName:x.fileName || '', caption:String(x.caption || '').trim() })) });
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
-  const nid = await vehSave('incidentReports', rec); closeModal(); rerenderMain(); toast('Incident report ' + rec.no + ' saved.'); if(!id) setTimeout(() => openIrReport(nid), 200);
+  const nid = await vehSave('incidentReports', rec); closeModal(); rerenderMain(); toast('Incident report ' + rec.no + ' saved.' + (ph.add.length ? ' Uploading ' + ph.add.length + ' photo' + (ph.add.length === 1 ? '' : 's') + '…' : ''));
+  ph.drop.forEach(fid => agFileDel(fid));
+  if(ph.add.length) irPhotoJobs[nid || id] = irPhotoUpload(nid || id, rec.no, ph.add);
+  if(!id) setTimeout(() => openIrReport(nid), 200);
 }
-function deleteIr(id){ const r = (state.incidentReports || []).find(x => x.id === id); if(!r) return; closeModal(); confirmAction('Delete incident report ' + (r.no || '') + '?', async () => { await vehDelete('incidentReports', id); toast('Deleted.'); }); }
+function deleteIr(id){ const r = (state.incidentReports || []).find(x => x.id === id); if(!r) return; closeModal(); confirmAction('Delete incident report ' + (r.no || '') + '?', async () => { await vehDelete('incidentReports', id); [r.signedFile && r.signedFile.fileId].concat((r.photos || []).map(x => x && x.fileId)).filter(Boolean).forEach(fid => agFileDel(fid)); toast('Deleted.'); }); }
 function openIrReport(id){
   const x = irFind(id); if(!x) return; const D = irData(x.r, x.src), edit = x.src === 'fleet' ? `openVehServiceForm('${id}')` : `openIrForm('${id}')`;
   const missing = [!D.location && 'location', !D.damage.length && 'damage / loss', !D.cause && 'cause'].filter(Boolean);
   openModal('Incident report' + (D.no ? ' — ' + D.no : ''), `<div class="text-sm font-semibold text-slate-800">${esc(D.subject)}</div><div class="text-xs text-slate-500 mb-3">${esc([D.type, D.date, D.location].filter(Boolean).join(' · '))}</div>
     ${missing.length ? `<div class="rounded-lg bg-amber-50 text-amber-800 text-sm px-4 py-2.5 mb-4">Not filled in yet: ${esc(missing.join(', '))}.</div>` : ''}
+    ${x.src === 'doc' ? irSignedBox(x.r, canManageInventory()) : ''}
     <div class="flex justify-end gap-2.5 flex-wrap">${canManageInventory() ? vBtnPlain('Edit', 'closeModal(); ' + edit) : ''}${vBtnPlain('Download Word', `irDownload('${id}', 'word', this)`)}${vBtnPrimary('Download PDF', `irDownload('${id}', 'pdf', this)`)}</div>`);
 }
 async function irDownload(id, kind, btn){
-  const x = irFind(id); if(!x) return; const D = irData(x.r, x.src), lbl = btn ? btn.textContent : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  const lbl = btn ? btn.textContent : '';
+  if(irPhotoJobs[id]){ if(btn){ btn.disabled = true; btn.textContent = 'Uploading photos…'; } try{ await irPhotoJobs[id]; }catch(e){} }
+  const x = irFind(id); if(!x){ if(btn){ btn.disabled = false; btn.textContent = lbl; } return; } const D = irData(x.r, x.src); if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
   const name = 'Incident Report - ' + [D.no, D.vehicle && D.vehicle.vReg].filter(Boolean).join(' ');
   try{ if(kind === 'word') downloadBlob(await buildIrDocx(D), name + '.docx'); else downloadBlob(await buildIrPdf(D), name + '.pdf'); }
   catch(e){ console.error(e); toast('Could not create the report: ' + (e && e.message ? e.message : e), true); }
@@ -3817,6 +3853,89 @@ function wfStep(el){
   return false;
 }
 
+
+/* ---------- Incident report: status straight from the list, and the signed copy kept with the report ---------- */
+function irStatusSel(id, cur){
+  const c = cur === 'Resolved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : cur === 'In progress' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200';
+  return `<select aria-label="Status" onclick="event.stopPropagation()" onchange="irSetStatus('${id}', this.value)" class="text-xs font-semibold rounded-full border px-2.5 py-1 pr-7 cursor-pointer ${c}">${IR_STATUSES.map(t => `<option value="${esc(t)}" ${t === cur ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+}
+async function irSetStatus(id, val){
+  const r = (state.incidentReports || []).find(x => x.id === id); if(!r || !IR_STATUSES.includes(val) || r.status === val) return;
+  if(!vehRequireAdmin('change the status')) return rerenderMain();
+  try{ await vehSave('incidentReports', { id, status:val }); toast('Incident report ' + (r.no || '') + ' is now ' + val + '.'); }catch(e){ toast('Could not change the status: ' + (e && e.message ? e.message : e), true); }
+  rerenderMain(); const sb = document.getElementById('ir-modal-status'); if(sb) sb.outerHTML = irStatusSel(id, val).replace('<select ', '<select id="ir-modal-status" ');
+}
+function irSignedBox(r, admin){
+  const f = attHas(r.signedFile) ? r.signedFile : null, nm = esc(String('Signed incident report ' + (r.no || '')).replace(/'/g, ''));
+  return `<div class="rounded-lg border border-slate-200 px-4 py-3 mb-4 text-sm">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-2"><span class="font-semibold text-slate-800">Status</span>${admin ? irStatusSel(r.id, r.status || 'Open').replace('<select ', '<select id="ir-modal-status" ') : vPill(r.status === 'Resolved' ? 'good' : r.status === 'In progress' ? 'warn' : 'crit', esc(r.status || 'Open'))}</div>
+    <div class="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-slate-100"><span class="font-semibold text-slate-800">Signed report</span>
+      <span id="ir-signed-info" class="flex items-center gap-3 flex-wrap">${f ? `<span class="text-emerald-700 font-semibold">✓ ${esc(f.fileName || 'Signed copy')}</span>
+        <button type="button" onclick="attPdfGo('${esc(f.fileId)}', 'open', '${nm}', this)" class="text-brand-600 font-semibold hover:underline">View</button>
+        <button type="button" onclick="attPdfGo('${esc(f.fileId)}', 'download', '${nm}', this)" class="text-slate-500 hover:text-brand-600 font-semibold">⬇ PDF</button>` : '<span class="text-slate-400">Not attached yet</span>'}
+      ${admin ? `<label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="irSignedPick(this, '${r.id}')">${f ? 'Replace' : '📎 Attach signed report'}</label>${f ? `<button type="button" onclick="irSignedRemove('${r.id}')" class="text-rose-600 font-semibold hover:underline">Remove</button>` : ''}` : ''}</span></div>
+    ${admin ? '<div class="text-[11px] text-slate-400 mt-1.5">The scanned PDF or photos of the printed report after it is signed.</div>' : ''}</div>`;
+}
+async function irSignedPick(input, id){
+  const files = [...input.files]; input.value = ''; if(!files.length) return; const r = (state.incidentReports || []).find(x => x.id === id); if(!r) return;
+  const info = document.getElementById('ir-signed-info'); if(info) info.innerHTML = '<span class="text-slate-500">Preparing…</span>';
+  let att; try{ att = await agPrepare(files); }catch(e){ toast('Could not attach: ' + (e && e.message ? e.message : e), true); return openIrReport(id); }
+  att.name = 'Signed incident report ' + (r.no || '') + (att.pdf ? '.pdf' : '');
+  closeModal(); toast('Uploading the signed report…');
+  attBg(att, r.no || '', async st => { const cur = ((state.incidentReports || []).find(x => x.id === id) || {}).signedFile; await vehSave('incidentReports', { id, signedFile:st }); return cur && cur.fileId; });
+}
+function irSignedRemove(id){ const r = (state.incidentReports || []).find(x => x.id === id); if(!r || !attHas(r.signedFile)) return; closeModal();
+  confirmAction('Remove the signed copy of incident report ' + (r.no || '') + '?', async () => { const fid = r.signedFile.fileId; await vehSave('incidentReports', { id, signedFile:null }); agFileDel(fid); toast('Signed copy removed.'); rerenderMain(); }); }
+
+/* ---------- Incident report photos: several pictures, each kept as its own file with a caption ---------- */
+let irPh = null; const irPhotoJobs = {}, IR_PHOTO_MAX = 24;
+function irPhotoRender(){
+  const box = document.getElementById('ir-photos'); if(!box || !irPh) return;
+  const card = (src, cap, kind, i, fid) => `<div class="rounded-lg border border-slate-200 overflow-hidden bg-white flex flex-col">
+      <div class="bg-slate-100 cursor-zoom-in" style="position:relative;height:112px;overflow:hidden" onclick="irPhotoView('${kind}', ${i})">${src ? `<img src="${src}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : `<div class="w-full h-full flex items-center justify-center text-xs text-slate-400" data-ir-thumb="${esc(fid || '')}">Loading…</div>`}
+        <button type="button" title="Remove photo" aria-label="Remove photo" onclick="event.stopPropagation(); irPhotoRemove('${kind}', ${i})" style="position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:15px;line-height:1">×</button>
+        <span style="position:absolute;bottom:4px;left:4px;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.6);color:#fff">Photo ${kind === 'keep' ? i + 1 : irPh.keep.length + i + 1}${kind === 'add' ? ' · new' : ''}</span></div>
+      <input type="text" value="${esc(cap || '')}" placeholder="Caption, e.g. Rear bumper dent" oninput="irPh.${kind}[${i}].caption = this.value" class="${VEH_FIELD} !rounded-none !border-0 !border-t !border-slate-200 text-xs !py-1.5"></div>`;
+  box.innerHTML = irPh.keep.map((p, i) => card(p.thumb || '', p.caption, 'keep', i, p.fileId)).join('') + irPh.add.map((p, i) => card(p.thumb, p.caption, 'add', i)).join('');
+  irPh.keep.forEach(p => { if(p.thumb || p.__loading) return; p.__loading = 1; pcFileLoad(p.fileId).then(d => { const pg = d && d.pages && d.pages[0]; p.thumb = pg ? pg.jpeg : ''; const el = document.querySelector(`[data-ir-thumb="${CSS.escape(p.fileId)}"]`); if(el) el.outerHTML = p.thumb ? `<img src="${p.thumb}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : '<div class="w-full h-full flex items-center justify-center text-xs text-slate-400">Not available</div>'; }).catch(() => {}); });
+  const info = document.getElementById('ir-photo-info'), n = irPh.keep.length + irPh.add.length;
+  if(info) info.textContent = n ? n + ' photo' + (n === 1 ? '' : 's') + (irPh.add.length ? ' (' + irPh.add.length + ' new, uploaded when you press Save)' : '') : 'Choose one or several photos (JPG / PNG). Add a caption under each.';
+}
+async function irPhotoPick(input){
+  const files = [...input.files].filter(f => /^image\//.test(f.type || '')); input.value = ''; if(!files.length || !irPh) return toast('Choose photos (JPG or PNG).', true);
+  const room = IR_PHOTO_MAX - irPh.keep.length - irPh.add.length; if(room <= 0) return toast('Up to ' + IR_PHOTO_MAX + ' photos per report.', true);
+  const info = document.getElementById('ir-photo-info'); let bad = 0;
+  for(const [k, f] of files.slice(0, room).entries()){
+    if(info) info.textContent = 'Preparing photo ' + (k + 1) + ' of ' + Math.min(files.length, room) + '…';
+    try{ const att = await pcPrepareAttachment([f]); if(!irPh) return; irPh.add.push({ att, thumb:att.pages[0].jpeg, caption:'', name:f.name }); }catch(e){ bad++; }
+  }
+  irPhotoRender();
+  if(files.length > room) toast('Only ' + room + ' more photo' + (room === 1 ? '' : 's') + ' could be added (up to ' + IR_PHOTO_MAX + ').', true);
+  if(bad) toast(bad + ' photo' + (bad === 1 ? '' : 's') + ' could not be read.', true);
+}
+function irPhotoRemove(kind, i){ if(!irPh) return; const [p] = irPh[kind].splice(i, 1); if(kind === 'keep' && p) irPh.drop.push(p.fileId); irPhotoRender(); }
+function irPhotoView(kind, i){ const p = irPh && irPh[kind][i]; if(!p || !p.thumb) return; const w = window.open('', '_blank'); if(!w) return;
+  w.document.write(`<!doctype html><title>${esc(p.caption || 'Photo')}</title><body style="margin:0;background:#525659;text-align:center;font:14px sans-serif;color:#fff"><img src="${p.thumb}" style="max-width:100%;max-height:92vh;margin:12px auto;display:block;box-shadow:0 2px 8px #0006">${esc(p.caption || '')}</body>`); w.document.close(); }
+// after saving: each new photo is uploaded as its own file and added to the report
+async function irPhotoUpload(id, no, list){
+  const key = uid(); agUploads[key] = { name:list.length + ' incident photo' + (list.length === 1 ? '' : 's'), f:0 }; agUploadBar(); let ok = 0;
+  try{
+    for(const [i, p] of list.entries()){
+      try{ const st = await agStore(p.att, no || '', f => { agUploads[key].f = (i + f) / list.length; agUploadBar(); });
+        const r = (state.incidentReports || []).find(x => x.id === id); if(!r){ agFileDel(st.fileId); break; }
+        await vehSave('incidentReports', { id, photos:(r.photos || []).concat([{ fileId:st.fileId, fileName:p.name || st.fileName, caption:String(p.caption || '').trim() }]) }); ok++; }
+      catch(e){ toast('The photo ' + (p.name || '') + ' could not be uploaded: ' + (e && e.message ? e.message : e), true); }
+    }
+    if(ok) toast(ok + ' photo' + (ok === 1 ? '' : 's') + ' added to incident report ' + (no || '') + '.');
+  } finally { delete agUploads[key]; agUploadBar(); delete irPhotoJobs[id]; }
+}
+// the saved photos as JPEG data for the PDF / Word report
+async function irPhotoData(list){
+  const out = [];
+  for(const p of list || []){ let d = null; try{ d = await pcFileLoad(p.fileId); }catch(e){} const pg = d && d.pages && d.pages[0], m = pg && /^data:image\/jpeg;base64,(.+)$/.exec(pg.jpeg || '');
+    if(m) out.push({ w:pg.w, h:pg.h, b64:m[1], cap:String(p.caption || '').trim() }); }
+  return out;
+}
 
 /* ---------- Writing help: underline mistakes in the box (red = spelling, blue = grammar), with one-click fixes under it ---------- */
 const WF_GRAM = [
@@ -11251,7 +11370,7 @@ const LH_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/
 // a Word file on the FDC letterhead (the logo strip in the header, the address footer with page numbers)
 // where the letterhead picture sits on the page, in points — the same place and size as in the company's Word template
 const LH_HDR = { x:0, y:6.5, w:595.3, h:101.7 };        // full page width, as in the letterhead template (FAHI logo, the 60 years logo, the stripes)
-async function lhDocx(docXml, NS){
+async function lhDocx(docXml, NS, media){
   await loadScriptOnce(JSZIP_URL); if(typeof JSZip === 'undefined') throw new Error('The Word builder could not be loaded. Check your internet connection.');
   const zip = new JSZip(), EW = 7559675, EH = 1291590, X = { NS };
   zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>');
@@ -11266,6 +11385,12 @@ async function lhDocx(docXml, NS){
   const fld = c => `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${c} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${wR('1', { b:true, font:'Aptos', sz:16 })}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
   zip.file('word/footer1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${X.NS}>${wP(wR('Page ', { font:'Aptos', sz:16 }) + fld('PAGE') + wR(' of ', { font:'Aptos', sz:16 }) + fld('NUMPAGES'), { jc:'right', after:80 })}${EXCO_FOOT.map(l => { const m = /^(\d+)(st|nd|rd|th)(\b.*)$/.exec(l), o = { font:'Aptos', color:'767171', sz:18 }; return wP(m ? wR(m[1], o) + wR(m[2], Object.assign({ sup:true }, o)) + wR(m[3], o) : wR(l, o), { jc:'center', line:240 }); }).join('')}</w:ftr>`);
   zip.file('word/document.xml', docXml);
+  if(media && media.length){                                 // pictures in the body (e.g. incident photos): media = [{ rid, name, b64 }] (JPEG)
+    const rp = 'word/_rels/document.xml.rels', rels = await zip.file(rp).async('string'), ct = await zip.file('[Content_Types].xml').async('string');
+    zip.file(rp, rels.replace('</Relationships>', media.map(m => `<Relationship Id="${m.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${m.name}"/>`).join('') + '</Relationships>'));
+    if(!/Extension="jpg"/.test(ct)) zip.file('[Content_Types].xml', ct.replace('<Default Extension="xml"', '<Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="xml"'));
+    media.forEach(m => zip.file('word/media/' + m.name, m.b64, { base64:true }));
+  }
   return zip.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression:'DEFLATE' });
 }
 
@@ -11326,7 +11451,7 @@ async function lhPdfFinish(pages, docTitle, right, o){
     EXCO_FOOT.forEach((l, k) => lhFootLine(f, l, 805 + k * 11.5, 9, 'F6', 'apt_regular', [0.46, 0.44, 0.44]));
     p.ops = f.ops.concat(p.ops);
   });
-  return pcPdfFinish(pages.map(p => ({ ops:p.ops, bare:true })), { title:'', number:'', docTitle, images:hdr ? { ExH:hdr } : {}, family:o.family || '', italic:!!o.italic, apt:!o.calFoot, heavy:!!o.heavy, cal:!!(o.calFoot || o.cal), light:!!o.light, black:!!o.black, calB:!!o.calB });
+  return pcPdfFinish(pages.map(p => ({ ops:p.ops, bare:true })), { title:'', number:'', docTitle, images:Object.assign(hdr ? { ExH:hdr } : {}, o.images || {}), family:o.family || '', italic:!!o.italic, apt:!o.calFoot, heavy:!!o.heavy, cal:!!(o.calFoot || o.cal), light:!!o.light, black:!!o.black, calB:!!o.calB });
 }
 /* ---------- MEMO: the Administration memo (number, From / To / CC / Date, subject, body, optional table, sign-off, attachments) as Word and PDF ---------- */
 const MEMO_BISMILLAH = 'بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ';

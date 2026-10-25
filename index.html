@@ -740,6 +740,15 @@ function refreshAppearanceModal(){
   .dash-cards.dash-blur .bg-white{ -webkit-backdrop-filter: blur(var(--card-blur, 0px)); backdrop-filter: blur(var(--card-blur, 0px)); }
   textarea.note-ta, html[data-theme="dark"] textarea.note-ta{background:transparent!important;border:0!important;box-shadow:none!important}
   textarea.note-ta::placeholder{color:currentColor!important;opacity:.45}
+.wf-ov{position:absolute;pointer-events:none;color:transparent!important;background:transparent!important;overflow:hidden;z-index:2;margin:0;word-wrap:break-word;overflow-wrap:break-word}
+.wf-m{text-decoration-line:underline;text-decoration-style:wavy;text-decoration-skip-ink:none;text-underline-offset:3px;text-decoration-thickness:1.5px}
+.wf-s{text-decoration-color:#dc2626}.wf-g{text-decoration-color:#2563eb}
+.wf-hint{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;font-size:11.5px;line-height:1.3}
+.wf-chip{display:inline-flex;align-items:center;border-radius:999px;border:1px solid;overflow:hidden}
+.wf-chip button{padding:2px 7px;background:transparent;color:inherit}.wf-chip button+button{padding:2px 6px;opacity:.6;border-left:1px solid currentColor}.wf-chip button:hover{background:rgba(127,127,127,.15);opacity:1}
+.wf-chip s{opacity:.7}.wf-chip.wf-s{color:#b91c1c;border-color:rgba(220,38,38,.4);background:rgba(220,38,38,.07)}.wf-chip.wf-g{color:#1d4ed8;border-color:rgba(37,99,235,.4);background:rgba(37,99,235,.07)}
+html[data-theme="dark"] .wf-chip.wf-s{color:#fca5a5}html[data-theme="dark"] .wf-chip.wf-g{color:#93c5fd}html[data-theme="dark"] .wf-s{text-decoration-color:#f87171}html[data-theme="dark"] .wf-g{text-decoration-color:#60a5fa}
+.wf-all{padding:2px 9px;border-radius:999px;font-weight:600;color:#fff;background:#2563eb}.wf-more{padding:2px 4px;opacity:.7}
 </style>
 <script>
   if('serviceWorker' in navigator){
@@ -1961,7 +1970,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.310';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.312';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3563,7 +3572,8 @@ function irData(r, src){
   const subj = x.subject || (type + (v ? ' — ' + v.plate + (vName(v) ? ' (' + vName(v) + ')' : '') : x.location ? ' — ' + x.location : ''));
   return { no:(fleet ? r.irNo : r.no) || '', type, subject:subj, date:r.date ? pcOrdinalDate(r.date) : '', time:x.time || '', location:x.location || '', reportDate:x.reportDate ? pcOrdinalDate(x.reportDate) : (r.date ? pcOrdinalDate(r.date) : ''),
     vehicle, persons, desc:String((fleet ? r.issue : r.description) || '').trim(), damage:irLines(x.damage), injuries:irLines(x.injuries), cause:String(x.cause || '').trim(), actions:irLines(fleet ? (x.actions || r.notes) : x.actions), remarks:String(x.remarks || '').trim(),
-    by:x.reportedBy || r.reportedBy || '', byDesig:x.reportedDesig || '', byDept:x.reportedDept || '', status:r.status || 'Open' };
+    by:x.reportedBy || r.reportedBy || '', byDesig:x.reportedDesig || '', byDept:x.reportedDept || '', status:r.status || 'Open',
+    rev:fleet ? null : r.reviewSame ? { n:r.reportedBy || '', d:r.reportedDesig || '', dep:r.reportedDept || '', dt:r.reportDate ? pcOrdinalDate(r.reportDate) : '' } : (r.reviewedBy || r.reviewedDesig) ? { n:r.reviewedBy || '', d:r.reviewedDesig || '', dep:r.reviewedDept || '', dt:r.reviewDate ? pcOrdinalDate(r.reviewDate) : '' } : null };
 }
 function irDamageItems(lines){ const out = []; lines.forEach(l => { if(irSub(l) && out.length) out[out.length - 1].pts.push(irStrip(l)); else out.push({ t:irStrip(l), pts:[] }); }); return out; }
 
@@ -3573,7 +3583,7 @@ async function buildIrPdf(D){
   const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = 126;
   const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP + 8; }, need = h => { if(y + h > BOT) newPage(); };
   const H = (t, z) => pdfTextWidthK(t, 'apt_black', z);
-  const head = (t, n) => { y += 10; need(LH * 4); pg.text(L, y, (n ? n + '.  ' : '') + t, { font:'F11', size:12 }); y += 7; pg.line(L, y, R, y, LINE, 0.8); y += LH + 2; };
+  const head = (t, n) => { y += 10; need(LH * 4); if(n){ pg.text(L, y, n + '.', { font:'F11', size:12 }); pg.text(L + 20, y, t, { font:'F11', size:12 }); } else pg.text(L, y, t, { font:'F11', size:12 }); y += 7; pg.line(L, y, R, y, LINE, 0.8); y += LH + 2; };
   const jl = (x, ln, last, w) => { const sp = (ln.match(/ /g) || []).length, ws = !last && sp ? (w - pdfTextWidth(ln, false, FS)) / sp : 0; pg.text(x, y, ln, ws > 0 && ws < 12 ? { size:FS, ws } : { size:FS }); };
   const para = t => { String(t || '').split('\n').forEach(seg => { const ls = pdfWrap(seg, false, FS, R - L); need(Math.min(ls.length, 3) * LH); ls.forEach((ln, i) => { need(LH); jl(L, ln, i === ls.length - 1, R - L); y += LH; }); y += 5; }); };
   const bullet = (t, ind, mark) => { const w = R - L - ind - 14, ls = pdfWrap(t, false, FS, w); need(ls.length * LH); pg.text(L + ind, y, mark || '•', { size:FS }); ls.forEach((ln, i) => { jl(L + ind + 14, ln, i === ls.length - 1, w); y += LH; }); y += 2; };
@@ -3597,9 +3607,10 @@ async function buildIrPdf(D){
   head('Cause of Incident', ++n); para(D.cause || '—');
   head('Immediate Action Taken', ++n); (D.actions.length ? D.actions : ['—']).forEach(t => bullet(irStrip(t), 6));
   if(D.remarks){ head('Remarks', ++n); para(D.remarks); }
-  y += 18; need(110); const half = (R - L) / 2;
-  [[L, 'Reported by', [D.by, D.byDesig, D.byDept, D.reportDate]], [L + half + 10, 'Reviewed by', ['Name:', 'Designation:', 'Date:']]].forEach(([x, lab, ls]) => {
-    pg.text(x, y, lab, { font:'F11', size:10 }); pg.line(x, y + 38, x + half - 30, y + 38, K, 0.6); ls.filter(Boolean).forEach((l, i) => pg.text(x, y + 54 + i * 13, l, { size:9.5, bold:i === 0 && lab === 'Reported by' })); });
+  y += 18; need(150); const half = (R - L) / 2, SG = 76;          // SG: room above the line for a signature
+  const rv = D.rev && D.rev.n ? [D.rev.n, D.rev.d, D.rev.dep, D.rev.dt] : null;
+  [[L, 'Reported by', [D.by, D.byDesig, D.byDept, D.reportDate], true], [L + half + 10, 'Reviewed by', rv || ['Name:', 'Designation:', 'Date:'], !!rv]].forEach(([x, lab, ls, named]) => {
+    pg.text(x, y, lab, { font:'F11', size:10 }); pg.line(x, y + SG, x + half - 30, y + SG, K, 0.6); ls.filter(Boolean).forEach((l, i) => pg.text(x, y + SG + 16 + i * 13, l, { size:9.5, bold:i === 0 && named })); });
   return lhPdfFinish(pages, 'Incident Report ' + (D.no || ''), R, { black:true });
 }
 async function buildIrDocx(D){
@@ -3607,7 +3618,7 @@ async function buildIrDocx(D){
   const T = (t, o) => wR(String(t == null ? '' : t), Object.assign({ font:PF, sz:20 }, o || {})), Hd = (t, o) => wR(t, Object.assign({ font:HF, sz:24 }, o || {}));
   const P = (inner, o) => wP(inner, Object.assign({ after:80, line:264 }, o || {})), keep = x => x.replace('<w:pPr>', '<w:pPr><w:keepNext/>');
   const out = [];
-  const head = (t, n) => out.push(keep(`<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="CBD5E1"/></w:pBdr><w:spacing w:before="280" w:after="140"/></w:pPr>${Hd((n ? n + '.  ' : '') + t)}</w:p>`));
+  const head = (t, n) => out.push(keep(`<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="CBD5E1"/></w:pBdr><w:spacing w:before="280" w:after="140"/>${n ? '<w:tabs><w:tab w:val="left" w:pos="400"/></w:tabs><w:ind w:left="400" w:hanging="400"/>' : ''}</w:pPr>${n ? Hd(n + '.') + '<w:r><w:tab/></w:r>' : ''}${Hd(t)}</w:p>`));
   const para = t => String(t || '—').split('\n').forEach(s => out.push(P(T(s), { jc:'both' })));
   const bullet = (t, lvl, mark) => out.push(P(T(mark || '•') + '<w:r><w:tab/></w:r>' + T(t), { after:40, jc:'both', ind:`<w:ind w:left="${lvl ? 1080 : 540}" w:hanging="300"/>` }).replace('<w:pPr>', '<w:pPr><w:keepLines/>'));
   const kv = rows => { const cw = TW / 4, cell = (inner, w, shade) => `<w:tc><w:tcPr><w:tcW w:w="${Math.round(w)}" w:type="dxa"/>${shade ? '<w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>' : ''}<w:tcMar><w:top w:w="70" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tcMar></w:tcPr>${wP(inner, { line:264 })}</w:tc>`;
@@ -3628,8 +3639,8 @@ async function buildIrDocx(D){
   head('Cause of Incident', ++n); para(D.cause);
   head('Immediate Action Taken', ++n); (D.actions.length ? D.actions : ['—']).forEach(t => bullet(irStrip(t), 0));
   if(D.remarks){ head('Remarks', ++n); para(D.remarks); }
-  const sc = (lab, ls) => `<w:tc><w:tcPr><w:tcW w:w="${TW / 2}" w:type="dxa"/></w:tcPr>${wP(wR(lab, { font:HF, sz:20 }), { after:520 })}<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="6" w:space="4" w:color="000000"/></w:pBdr><w:spacing w:after="40"/><w:ind w:right="500"/></w:pPr>${T(ls[0], { b:lab === 'Reported by' })}</w:p>${ls.slice(1).map(l => wP(T(l, { sz:18 }), { after:20 })).join('')}</w:tc>`;
-  out.push(P('', { after:240 }), `<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${TW / 2}"/><w:gridCol w:w="${TW / 2}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${sc('Reported by', [D.by || 'Name:', D.byDesig, D.byDept, D.reportDate].filter(Boolean))}${sc('Reviewed by', ['Name:', 'Designation:', 'Date:'])}</w:tr></w:tbl>`);
+  const sc = (lab, ls) => `<w:tc><w:tcPr><w:tcW w:w="${TW / 2}" w:type="dxa"/></w:tcPr>${wP(wR(lab, { font:HF, sz:20 }), { after:1080 })}<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="6" w:space="4" w:color="000000"/></w:pBdr><w:spacing w:after="40"/><w:ind w:right="500"/></w:pPr>${T(ls[0], { b:ls[0] !== 'Name:' })}</w:p>${ls.slice(1).map(l => wP(T(l, { sz:18 }), { after:20 })).join('')}</w:tc>`;
+  out.push(P('', { after:240 }), `<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${TW / 2}"/><w:gridCol w:w="${TW / 2}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${sc('Reported by', [D.by || 'Name:', D.byDesig, D.byDept, D.reportDate].filter(Boolean))}${sc('Reviewed by', D.rev && D.rev.n ? [D.rev.n, D.rev.d, D.rev.dep, D.rev.dt].filter(Boolean) : ['Name:', 'Designation:', 'Date:'])}</w:tr></w:tbl>`);
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
   return lhDocx(doc, LH_NS);
 }
@@ -3659,7 +3670,8 @@ function openIrForm(id){
   const staff = sdAll().map(p => `<option value="${esc(p.name)} — ${esc(p.designation || '')}"></option>`).join(''), names = sdAll().map(p => `<option value="${esc(p.name)}">${esc(p.designation || '')}</option>`).join('');
   const ta = (lab, k, ph, rows) => vTa(lab, k, d[k] || '', { span:'sm:col-span-2', rows:rows || 3, ph });
   openModal(r ? 'Edit incident report ' + (r.no || '') : 'New incident report', vFormOpen + `<datalist id="ir-people">${staff}</datalist><datalist id="ir-staff">${names}</datalist>` + vGrid(2,
-      vS('Type of incident', 'type', IR_TYPES, d.type || '', 'Choose…', { req:1 }) + vS('Status', 'status', IR_STATUSES, d.status || 'Open') +
+      vF('Report no.', 'no', d.no || irNextNo(), 'text', { req:1, attrs:' autocomplete="off" spellcheck="false"' }) + vS('Status', 'status', IR_STATUSES, d.status || 'Open') +
+      vS('Type of incident', 'type', IR_TYPES, d.type || '', 'Choose…', { req:1, span:'sm:col-span-2' }) +
       vF('Subject', 'subject', d.subject, 'text', { span:'sm:col-span-2', attrs:' placeholder="Filled in from the type, vehicle or location if left empty"' }) +
       vF('Date of incident', 'date', d.date, 'date', { req:1 }) + vF('Time of incident', 'time', d.time, 'text', { attrs:' placeholder="e.g. Around 14:00"' }) +
       vF('Location', 'location', d.location, 'text', { span:'sm:col-span-2', attrs:' placeholder="e.g. National Art Gallery"' }) +
@@ -3672,14 +3684,29 @@ function openIrForm(id){
       ta('Immediate action taken', 'actions', 'One action per line', 3) +
       ta('Remarks', 'remarks', 'Recommendation / next steps', 2) +
       vF('Report prepared by', 'reportedBy', d.reportedBy, 'text', { attrs:' list="ir-staff" oninput="irFillDesig(this, \'reportedDesig\')"' }) + vF('Designation', 'reportedDesig', d.reportedDesig) +
-      vF('Department', 'reportedDept', d.reportedDept) + vF('Date of report', 'reportDate', d.reportDate || vToday(), 'date')) +
+      vF('Department', 'reportedDept', d.reportedDept) + vF('Date of report', 'reportDate', d.reportDate || vToday(), 'date') +
+      `<div class="sm:col-span-2 pt-3 mt-1 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap"><span class="text-sm font-semibold text-slate-800">Reviewed by</span><label class="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer"><input type="checkbox" name="reviewSame" ${d.reviewSame ? 'checked' : ''} onchange="irRevSame()" class="w-4 h-4"> Same as report prepared by</label></div>` +
+      vF('Reviewer name', 'reviewedBy', d.reviewedBy, 'text', { attrs:' list="ir-staff" oninput="irFillDesig(this, \'reviewedDesig\')"' }) + vF('Designation', 'reviewedDesig', d.reviewedDesig) +
+      vF('Department', 'reviewedDept', d.reviewedDept) + vF('Date reviewed', 'reviewDate', d.reviewDate, 'date') +
+      `<p class="sm:col-span-2 -mt-1 text-xs text-slate-500">Leave empty to print blank Name / Designation / Date lines for the reviewer to fill in by hand.</p>`) +
     vFoot(r ? 'Save' : 'Save report', `saveIrForm('${id || ''}')`, r ? `deleteIr('${id}')` : ''), true);
-  setTimeout(() => { const p = document.querySelector('#vform [name=persons]'); if(p) p.setAttribute('list', 'ir-people'); }, 0);
+  setTimeout(() => { const p = document.querySelector('#vform [name=persons]'); if(p) p.setAttribute('list', 'ir-people'); irRevSame(); }, 0);
+}
+// "same as report prepared by": copy the preparer into the reviewer boxes (kept in step while ticked)
+function irRevSame(){
+  const f = document.getElementById('vform'); if(!f) return; const on = f.reviewSame && f.reviewSame.checked, pairs = [['reportedBy', 'reviewedBy'], ['reportedDesig', 'reviewedDesig'], ['reportedDept', 'reviewedDept'], ['reportDate', 'reviewDate']];
+  pairs.forEach(([a, b]) => { const s = f[a], t = f[b]; if(!s || !t) return; if(on) t.value = s.value; t.readOnly = on; t.classList.toggle('opacity-60', on);
+    if(!s.__irRev){ s.__irRev = 1; s.addEventListener('input', () => { if(f.reviewSame && f.reviewSame.checked) t.value = s.value; }); } });
 }
 async function saveIrForm(id){
   const o = vehFormObj(document.getElementById('vform')), old = id ? (state.incidentReports || []).find(x => x.id === id) : null;
+  const no = String(o.no || '').trim().toUpperCase();
+  if(!no) return vFail('Enter the report number.');
+  if(irAll().some(x => x.r.id !== id && String(x.r.irNo || x.r.no || '').toUpperCase() === no)) return vFail('Report number ' + no + ' is already used by another incident report.');
   if(!o.type) return vFail('Choose the type of incident.'); if(!o.date) return vFail('Enter the date of the incident.'); if(!o.description) return vFail('Describe the incident.');
-  const rec = Object.assign({ id:id || undefined }, o, { no:(old && old.no) || irNextNo(), vehicleId:o.vehicleId && vehById(o.vehicleId) ? o.vehicleId : '' });
+  o.reviewSame = o.reviewSame === 'on';
+  if(o.reviewSame) Object.assign(o, { reviewedBy:o.reportedBy, reviewedDesig:o.reportedDesig, reviewedDept:o.reportedDept, reviewDate:o.reportDate });
+  const rec = Object.assign({ id:id || undefined }, o, { no, vehicleId:o.vehicleId && vehById(o.vehicleId) ? o.vehicleId : '' });
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   const nid = await vehSave('incidentReports', rec); closeModal(); rerenderMain(); toast('Incident report ' + rec.no + ' saved.'); if(!id) setTimeout(() => openIrReport(nid), 200);
 }
@@ -3719,7 +3746,7 @@ function irFillDesig(inp, name){ const p = sdAll().find(x => trNorm(x.name) === 
 ===================================================================== */
 const WF_KEY = 'fdc_writing_help';
 const wfOn = () => { try{ return localStorage.getItem(WF_KEY) !== '0'; }catch(e){ return true; } };
-function wfSet(on){ try{ localStorage.setItem(WF_KEY, on ? '1' : '0'); }catch(e){} toast(on ? 'Spelling and grammar help is on.' : 'Spelling and grammar help is off.'); }
+function wfSet(on){ try{ localStorage.setItem(WF_KEY, on ? '1' : '0'); }catch(e){} if(!on && typeof wfClearAll === 'function') wfClearAll(); toast(on ? 'Spelling and grammar help is on.' : 'Spelling and grammar help is off.'); }
 const wfToggleHtml = () => `<label class="flex items-start gap-3 mt-5 pt-4 border-t border-slate-100 cursor-pointer"><input type="checkbox" ${wfOn() ? 'checked' : ''} onchange="wfSet(this.checked)" class="mt-1 w-4 h-4"><span><span class="text-sm font-semibold text-slate-800">Correct spelling and grammar while typing</span><span class="block text-xs text-slate-500">Common misspellings and simple grammar are fixed as you type (Ctrl+Z undoes a fix). Other spelling mistakes are underlined in red — right-click for suggestions.</span></span></label>`;
 // misspelling → correct (British spelling, as in the app's documents)
 const WF_FIX = Object.assign(Object.create(null), {
@@ -3740,6 +3767,7 @@ const WF_FIX = Object.assign(Object.create(null), {
   colleage:'colleague', collegue:'colleague', guidence:'guidance', grammer:'grammar', alot:'a lot', noone:'no one', infact:'in fact', inspite:'in spite', aswell:'as well', incase:'in case', ofcourse:'of course', eachother:'each other',
   dont:"don't", doesnt:"doesn't", didnt:"didn't", cant:"can't", wont:"won't", isnt:"isn't", wasnt:"wasn't", arent:"aren't", werent:"weren't", couldnt:"couldn't", shouldnt:"shouldn't", wouldnt:"wouldn't", hasnt:"hasn't", havent:"haven't", im:"I'm", ive:"I've",
   breifly:'briefly', brief:'brief', concious:'conscious', curteous:'courteous', fourty:'forty', ninty:'ninety', lenght:'length', strenght:'strength', heigth:'height', wieght:'weight', recieptes:'receipts', liason:'liaison', perseverence:'perseverance',
+  howsever:'however', howver:'however', hwoever:'however', howerver:'however', taillight:'taillight', tailight:'taillight', overtook:'overtook', overtaked:'overtook',
   shatterd:'shattered', shatered:'shattered', brakes:'brakes', overpas:'overpass', motorcylce:'motorcycle', motorcyle:'motorcycle', motorbyke:'motorbike', bycicle:'bicycle', bicyle:'bicycle', pedestrain:'pedestrian', pedestrains:'pedestrians', injurys:'injuries', injurries:'injuries', brusie:'bruise', bruse:'bruise'
 });
 // "a" → "an" before a vowel sound (but "a user", "a one-off", "a university"…), "an" → "a" before a consonant sound (but "an hour", "an MVR…")
@@ -3789,6 +3817,86 @@ function wfStep(el){
   return false;
 }
 
+
+/* ---------- Writing help: underline mistakes in the box (red = spelling, blue = grammar), with one-click fixes under it ---------- */
+const WF_GRAM = [
+  [/\b(in to)\b(?! (?:the )?(?:system|account|portal|app))/gi, m => 'into', 'Did you mean “into”?'],
+  [/\b(could|should|would|must|might) of\b/gi, m => m.replace(/of$/i, 'have'), 'Use “have” after could / should / would.'],
+  [/\b(more|less|better|worse|rather|greater|larger|smaller|higher|lower|faster|slower|other) then\b/gi, m => m.replace(/then$/i, 'than'), 'Comparisons take “than”.'],
+  [/\btheir (is|are|was|were)\b/gi, m => m.replace(/^their/i, w => wfCase(w, 'there')), 'Did you mean “there”?'],
+  [/\bit's own\b/gi, m => wfCase(m, 'its own'), '“its” (no apostrophe) shows possession.'],
+  [/\byour welcome\b/gi, m => wfCase(m, "you're welcome"), 'Did you mean “you’re”?'],
+  [/\birregardless\b/gi, m => wfCase(m, 'regardless'), 'Use “regardless”.'],
+  [/\bto who\b/gi, m => m.replace(/who$/i, 'whom'), 'After “to”, use “whom”.'],
+  [/(^|[.;!?]\s+)(however|therefore|moreover|furthermore|nevertheless|consequently)(?=\s)(?!,)/gim, null, 'Add a comma after this word.', (m, g) => g[2] + ','],
+  [/\b(\w+)\s+\1\b/gi, null, 'Repeated word.', (m, g) => /^(had|that|very|so|bye|no)$/i.test(g[1]) || /^\d+$/.test(g[1]) ? null : g[1]],
+  [/\b(a|an) ([a-z][\w-]*)/gi, null, 'Use “a” before a consonant sound and “an” before a vowel sound.', (m, g) => { const want = wfVowel(g[2]) ? 'an' : 'a'; return g[1].toLowerCase() === want ? null : wfCase(g[1], want) + ' ' + g[2]; }],
+  [/(?<=\S) +(?=[,.;:!?](?:\s|$))/g, m => '', 'Remove the space before the punctuation.'],
+  [/(?<=\S) {2,}(?=\S)/g, m => ' ', 'Double space.'],
+  [/(?<=[a-z]{2})([,;])(?=[A-Za-z]{2})/g, m => m + ' ', 'Add a space after the punctuation.'],
+  [/(?<![\w'])i(?![\w'.])/g, m => 'I', 'Write “I” as a capital.']
+];
+function wfIssues(text, multi){
+  const out = [], add = (s, e, kind, fix, msg) => { if(fix == null || out.some(o => s < o.e && e > o.s)) return; out.push({ s, e, kind, fix, msg }); };
+  // known misspellings (also catches pasted text)
+  text.replace(/[A-Za-z']+/g, (w, at) => { const f = WF_FIX[w.toLowerCase()]; if(f && f !== w.toLowerCase()) add(at, at + w.length, 's', wfCase(w, f), 'Spelling'); return w; });
+  WF_GRAM.forEach(([re, fx, msg, fg]) => { re.lastIndex = 0; let m; while((m = re.exec(text))){ if(!m[0].length){ re.lastIndex++; continue; }
+    let s = m.index, e = s + m[0].length, fix;
+    if(fg){ fix = fg(m[0], m); if(fix == null) continue; if(m[1] !== undefined && /^(\s|$|[.;!?])/.test(m[1]) && m[2]){ s += m[1].length; } }
+    else fix = fx(m[0]);
+    if(fix === m[0]) continue;
+    if(/\.(pdf|docx?|xlsx?|png|jpe?g|com|mv|org|net)\b/i.test(text.slice(Math.max(0, s - 6), e + 6)) && /[,;]/.test(m[0])) continue;
+    add(s, e, 'g', fix, msg); } });
+  // sentence starts with a small letter (text areas)
+  if(multi) text.replace(/(^|[.!?]\s+|\n\s*)([a-z])(?=[a-z]*\b)/g, (all, pre, ch, at) => { const p = text.slice(0, at + pre.length); if(!/\b(e\.g|i\.e|etc|no|vs|approx)\.\s+$/i.test(p)) add(at + pre.length, at + pre.length + 1, 'g', ch.toUpperCase(), 'Start the sentence with a capital.'); return all; });
+  return out.sort((a, b) => a.s - b.s);
+}
+const WF_STYLE_KEYS = ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'wordSpacing', 'textIndent', 'textAlign', 'textTransform', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'boxSizing'];
+function wfMirror(el){
+  if(!wfOn() || !wfField(el) || !el.isConnected) return;
+  let ov = el.__wfOv, hint = el.__wfHint;
+  const issues = wfIssues(el.value || '', el.tagName === 'TEXTAREA').filter(i => !(el.__wfIgn || []).includes(i.s + ':' + el.value.slice(i.s, i.e)));
+  if(!ov){
+    const par = el.parentElement; if(!par) return;
+    if(getComputedStyle(par).position === 'static') par.style.position = 'relative';
+    ov = el.__wfOv = document.createElement('div'); ov.className = 'wf-ov'; ov.setAttribute('aria-hidden', 'true'); el.after(ov);
+    hint = el.__wfHint = document.createElement('div'); hint.className = 'wf-hint'; ov.after(hint);
+    hint.addEventListener('mousedown', e => { const b = e.target.closest('[data-wf]'); if(!b) return; e.preventDefault(); wfHintClick(el, b.dataset.wf, b.dataset.i); });
+    el.addEventListener('scroll', () => { ov.scrollTop = el.scrollTop; ov.scrollLeft = el.scrollLeft; });
+    if(window.ResizeObserver) new ResizeObserver(() => wfMirror(el)).observe(el);
+  }
+  el.__wfList = issues;
+  const cs = getComputedStyle(el), st = ov.style;
+  WF_STYLE_KEYS.forEach(k => st[k] = cs[k]);
+  const bl = parseFloat(cs.borderLeftWidth) || 0, br = parseFloat(cs.borderRightWidth) || 0, sb = Math.max(0, el.offsetWidth - el.clientWidth - bl - br);
+  st.paddingRight = (parseFloat(cs.paddingRight) + sb) + 'px'; st.borderStyle = 'solid'; st.borderColor = 'transparent';
+  st.left = el.offsetLeft + 'px'; st.top = el.offsetTop + 'px'; st.width = el.offsetWidth + 'px'; st.height = el.offsetHeight + 'px';
+  st.whiteSpace = el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'pre'; st.display = issues.length ? '' : 'none';
+  const v = el.value || ''; let html = '', at = 0;
+  issues.forEach(i => { html += esc(v.slice(at, i.s)) + `<span class="wf-m wf-${i.kind}">${esc(v.slice(i.s, i.e)) || '&nbsp;'}</span>`; at = i.e; });
+  html += esc(v.slice(at)) + (v.endsWith('\n') ? '​' : '');
+  ov.innerHTML = el.tagName === 'TEXTAREA' ? html : `<span style="display:inline-block;padding-right:2px">${html}</span>`;
+  ov.scrollTop = el.scrollTop; ov.scrollLeft = el.scrollLeft;
+  const lab = i => { const was = v.slice(i.s, i.e); return /^\s+$/.test(was) || !i.fix.trim() ? i.msg : `<s>${esc(was.trim() || was)}</s> → <b>${esc(i.fix.trim() || '·')}</b>`; };
+  hint.style.display = issues.length ? '' : 'none';
+  hint.innerHTML = issues.length ? issues.slice(0, 4).map((i, n) => `<span class="wf-chip wf-${i.kind}" title="${esc(i.msg)}"><button type="button" data-wf="fix" data-i="${n}">${lab(i)}</button><button type="button" data-wf="ign" data-i="${n}" title="Ignore" aria-label="Ignore">×</button></span>`).join('') + (issues.length > 4 ? `<span class="wf-more">+${issues.length - 4} more</span>` : '') + (issues.length > 1 ? `<button type="button" class="wf-all" data-wf="all">Fix all</button>` : '') : '';
+}
+function wfHintClick(el, act, n){
+  const list = el.__wfList || [];
+  if(act === 'ign'){ const i = list[+n]; if(i) (el.__wfIgn = el.__wfIgn || []).push(i.s + ':' + el.value.slice(i.s, i.e)); return wfMirror(el); }
+  const todo = act === 'all' ? list.slice() : [list[+n]].filter(Boolean);
+  el.focus(); el.__wfBusy = true;
+  try{ todo.sort((a, b) => b.s - a.s).forEach(i => { el.setSelectionRange(i.s, i.e); let ok = false; try{ ok = document.execCommand('insertText', false, i.fix); }catch(e){} if(!ok) el.setRangeText(i.fix, i.s, i.e, 'end'); }); }
+  finally { el.__wfBusy = false; }
+  el.dispatchEvent(new Event('change', { bubbles:true }));
+  wfMirror(el); if(act === 'all' && (el.__wfList || []).length) wfMirror(el);
+}
+let wfRaf = 0;
+document.addEventListener('input', e => { const el = e.target; if(!wfField(el)) return; cancelAnimationFrame(wfRaf); wfRaf = requestAnimationFrame(() => wfMirror(el)); });
+document.addEventListener('focusin', e => { if(wfField(e.target)) wfMirror(e.target); });
+// boxes that open already filled in (editing a saved record) are checked too
+new MutationObserver(ms => { if(!wfOn()) return; ms.forEach(m => m.addedNodes.forEach(n => { if(n.nodeType !== 1) return; (n.matches && n.matches('textarea') ? [n] : Array.from(n.querySelectorAll ? n.querySelectorAll('textarea') : [])).forEach(t => t.value && requestAnimationFrame(() => wfMirror(t))); })); }).observe(document.documentElement, { childList:true, subtree:true });
+function wfClearAll(){ document.querySelectorAll('.wf-ov,.wf-hint').forEach(x => x.style.display = 'none'); }
 
 /* ---------- Settings (shared by everyone; admins change them) ---------- */
 function openVehSettings(){

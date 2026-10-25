@@ -193,13 +193,13 @@ function appearanceBodyHtml(){
 }
 function openAppearanceModal(){
   if(typeof toggleSidebar === 'function') toggleSidebar(false);
-  openModal('Appearance', appearanceBodyHtml());
+  openModal('Appearance', appearanceBodyHtml() + (typeof wfToggleHtml === 'function' ? wfToggleHtml() : ''));
 }
 function refreshAppearanceModal(){
   const overlay = document.getElementById('modal-overlay');
   const title = document.getElementById('modal-title');
   if(overlay && !overlay.classList.contains('hidden') && title && title.textContent === 'Appearance'){
-    document.getElementById('modal-body').innerHTML = appearanceBodyHtml();
+    document.getElementById('modal-body').innerHTML = appearanceBodyHtml() + (typeof wfToggleHtml === 'function' ? wfToggleHtml() : '');
   }
 }
 </script>
@@ -1961,7 +1961,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.308';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.310';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3574,8 +3574,9 @@ async function buildIrPdf(D){
   const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP + 8; }, need = h => { if(y + h > BOT) newPage(); };
   const H = (t, z) => pdfTextWidthK(t, 'apt_black', z);
   const head = (t, n) => { y += 10; need(LH * 4); pg.text(L, y, (n ? n + '.  ' : '') + t, { font:'F11', size:12 }); y += 7; pg.line(L, y, R, y, LINE, 0.8); y += LH + 2; };
-  const para = t => { String(t || '').split('\n').forEach(seg => { const ls = pdfWrap(seg, false, FS, R - L); need(Math.min(ls.length, 3) * LH); ls.forEach(ln => { need(LH); pg.text(L, y, ln, { size:FS }); y += LH; }); y += 5; }); };
-  const bullet = (t, ind, mark, b) => { const ls = pdfWrap(t, !!b, FS, R - L - ind - 14); need(ls.length * LH); pg.text(L + ind, y, mark || '•', { size:FS, bold:!!mark }); ls.forEach(ln => { pg.text(L + ind + 14, y, ln, { size:FS, bold:!!b }); y += LH; }); y += 2; };
+  const jl = (x, ln, last, w) => { const sp = (ln.match(/ /g) || []).length, ws = !last && sp ? (w - pdfTextWidth(ln, false, FS)) / sp : 0; pg.text(x, y, ln, ws > 0 && ws < 12 ? { size:FS, ws } : { size:FS }); };
+  const para = t => { String(t || '').split('\n').forEach(seg => { const ls = pdfWrap(seg, false, FS, R - L); need(Math.min(ls.length, 3) * LH); ls.forEach((ln, i) => { need(LH); jl(L, ln, i === ls.length - 1, R - L); y += LH; }); y += 5; }); };
+  const bullet = (t, ind, mark) => { const w = R - L - ind - 14, ls = pdfWrap(t, false, FS, w); need(ls.length * LH); pg.text(L + ind, y, mark || '•', { size:FS }); ls.forEach((ln, i) => { jl(L + ind + 14, ln, i === ls.length - 1, w); y += LH; }); y += 2; };
   const kv = rows => { const cw = (R - L) / 2, lw = 96; let i = 0;
     while(i < rows.length){ const pair = rows.slice(i, i + 2), h = Math.max(...pair.map(([, v]) => pdfWrap(String(v || '—'), false, FS, cw - lw - 12).length)) * LH + 10; need(h);
       pg.fill(L, y - 4, R - L, h, SOFT); pair.forEach(([k, v], j) => { if(!k) return; const x = L + j * cw + 8; pg.text(x, y + 8, k, { bold:true, size:8.5, color:G }); pdfWrap(String(v || '—'), false, FS, cw - lw - 12).forEach((ln, q) => pg.text(x + lw, y + 8 + q * LH, ln, { size:FS })); });
@@ -3591,7 +3592,7 @@ async function buildIrPdf(D){
   let n = 0;
   head('Incident Description', ++n); para(D.desc || '—');
   const dm = irDamageItems(D.damage);
-  head('Damage / Loss Assessment', ++n); if(dm.length){ para('The following damages were observed:'); dm.forEach((it, i) => { need(LH * 2); bullet(it.t, 6, (i + 1) + '.', true); it.pts.forEach(pt => bullet(pt, 26, '–')); y += 2; }); } else para('No damage or loss recorded.');
+  head('Damage / Loss Assessment', ++n); if(dm.length){ para('The following damages were observed:'); dm.forEach((it, i) => { need(LH * 2); bullet(it.t, 6, (i + 1) + '.'); it.pts.forEach(pt => bullet(pt, 26, '–')); y += 2; }); } else para('No damage or loss recorded.');
   head('Injuries & Third-Party Damage', ++n); (D.injuries.length ? D.injuries : ['No injuries were reported.']).forEach(t => bullet(irStrip(t), 6));
   head('Cause of Incident', ++n); para(D.cause || '—');
   head('Immediate Action Taken', ++n); (D.actions.length ? D.actions : ['—']).forEach(t => bullet(irStrip(t), 6));
@@ -3608,7 +3609,7 @@ async function buildIrDocx(D){
   const out = [];
   const head = (t, n) => out.push(keep(`<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="CBD5E1"/></w:pBdr><w:spacing w:before="280" w:after="140"/></w:pPr>${Hd((n ? n + '.  ' : '') + t)}</w:p>`));
   const para = t => String(t || '—').split('\n').forEach(s => out.push(P(T(s), { jc:'both' })));
-  const bullet = (t, lvl, mark, b) => out.push(P(T(mark || '•', { b:!!b }) + '<w:r><w:tab/></w:r>' + T(t, { b:!!b }), { after:40, ind:`<w:ind w:left="${lvl ? 1080 : 540}" w:hanging="300"/>` }).replace('<w:pPr>', '<w:pPr><w:keepLines/>'));
+  const bullet = (t, lvl, mark) => out.push(P(T(mark || '•') + '<w:r><w:tab/></w:r>' + T(t), { after:40, jc:'both', ind:`<w:ind w:left="${lvl ? 1080 : 540}" w:hanging="300"/>` }).replace('<w:pPr>', '<w:pPr><w:keepLines/>'));
   const kv = rows => { const cw = TW / 4, cell = (inner, w, shade) => `<w:tc><w:tcPr><w:tcW w:w="${Math.round(w)}" w:type="dxa"/>${shade ? '<w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>' : ''}<w:tcMar><w:top w:w="70" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tcMar></w:tcPr>${wP(inner, { line:264 })}</w:tc>`;
     const B = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(k => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>`).join('') + '</w:tblBorders>';
     const trs = []; for(let i = 0; i < rows.length; i += 2){ const pr = rows.slice(i, i + 2); while(pr.length < 2) pr.push(['', '']); trs.push(`<w:tr><w:trPr><w:cantSplit/></w:trPr>${pr.map(([k, v]) => cell(T(k, { b:true, sz:17, color:'475569' }), cw * 0.9, !!k) + cell(T(v || (k ? '—' : '')), cw * 1.1)).join('')}</w:tr>`); }
@@ -3622,7 +3623,7 @@ async function buildIrDocx(D){
   let n = 0;
   head('Incident Description', ++n); para(D.desc);
   const dm = irDamageItems(D.damage);
-  head('Damage / Loss Assessment', ++n); if(dm.length){ para('The following damages were observed:'); dm.forEach((it, i) => { bullet(it.t, 0, (i + 1) + '.', true); it.pts.forEach(pt => bullet(pt, 1, '–')); }); } else para('No damage or loss recorded.');
+  head('Damage / Loss Assessment', ++n); if(dm.length){ para('The following damages were observed:'); dm.forEach((it, i) => { bullet(it.t, 0, (i + 1) + '.'); it.pts.forEach(pt => bullet(pt, 1, '–')); }); } else para('No damage or loss recorded.');
   head('Injuries & Third-Party Damage', ++n); (D.injuries.length ? D.injuries : ['No injuries were reported.']).forEach(t => bullet(irStrip(t), 0));
   head('Cause of Incident', ++n); para(D.cause);
   head('Immediate Action Taken', ++n); (D.actions.length ? D.actions : ['—']).forEach(t => bullet(irStrip(t), 0));
@@ -3709,6 +3710,85 @@ function irFormFields(r){
       f('Report prepared by', 'reportedBy', x.reportedBy) + f('Designation', 'reportedDesig', x.reportedDesig) + f('Department', 'reportedDept', x.reportedDept) + f('Date of report', 'reportDate', x.reportDate, { type:'date' }))}</div></details>`;
 }
 function irFillDesig(inp, name){ const p = sdAll().find(x => trNorm(x.name) === trNorm(inp.value)), el = inp.form && inp.form.elements[name]; if(p && el && !el.value) el.value = p.designation || ''; }
+
+/* =====================================================================
+   WRITING HELP — while typing in text boxes: the browser's spell check (red underline, right-click for suggestions),
+   common misspellings corrected as each word is finished, and simple grammar fixed: "i" → "I", a capital at the start
+   of a sentence, a space after a comma or full stop, no double spaces, a repeated word, "a" → "an" before a vowel sound.
+   Each fix can be undone with Ctrl+Z. Turned on or off under Appearance.
+===================================================================== */
+const WF_KEY = 'fdc_writing_help';
+const wfOn = () => { try{ return localStorage.getItem(WF_KEY) !== '0'; }catch(e){ return true; } };
+function wfSet(on){ try{ localStorage.setItem(WF_KEY, on ? '1' : '0'); }catch(e){} toast(on ? 'Spelling and grammar help is on.' : 'Spelling and grammar help is off.'); }
+const wfToggleHtml = () => `<label class="flex items-start gap-3 mt-5 pt-4 border-t border-slate-100 cursor-pointer"><input type="checkbox" ${wfOn() ? 'checked' : ''} onchange="wfSet(this.checked)" class="mt-1 w-4 h-4"><span><span class="text-sm font-semibold text-slate-800">Correct spelling and grammar while typing</span><span class="block text-xs text-slate-500">Common misspellings and simple grammar are fixed as you type (Ctrl+Z undoes a fix). Other spelling mistakes are underlined in red — right-click for suggestions.</span></span></label>`;
+// misspelling → correct (British spelling, as in the app's documents)
+const WF_FIX = Object.assign(Object.create(null), {
+  techinal:'technical', techincal:'technical', tecnical:'technical', acuisition:'acquisition', aquisition:'acquisition', acquistion:'acquisition', passanger:'passenger', passangers:'passengers', ligments:'ligaments', ligment:'ligament',
+  recieve:'receive', recieved:'received', reciept:'receipt', recieving:'receiving', beleive:'believe', belive:'believe', acheive:'achieve', acheived:'achieved', occured:'occurred', occurance:'occurrence', occurence:'occurrence', occuring:'occurring',
+  seperate:'separate', seperately:'separately', definately:'definitely', definatly:'definitely', accomodation:'accommodation', accomodate:'accommodate', acommodation:'accommodation', adress:'address', adressed:'addressed', untill:'until', truely:'truly',
+  wich:'which', whcih:'which', teh:'the', hte:'the', adn:'and', nad:'and', taht:'that', thier:'their', wiht:'with', becuase:'because', becasue:'because', beacuse:'because', recomend:'recommend', recomended:'recommended', reccomend:'recommend', reccommend:'recommend',
+  neccessary:'necessary', necessery:'necessary', neccesary:'necessary', occassion:'occasion', occassionally:'occasionally', embarass:'embarrass', existance:'existence', independant:'independent', maintainance:'maintenance', maintenence:'maintenance', mantainance:'maintenance', maintanance:'maintenance',
+  managment:'management', mangement:'management', goverment:'government', govenment:'government', enviroment:'environment', enviromental:'environmental', commitee:'committee', comittee:'committee', committment:'commitment', commited:'committed',
+  procurment:'procurement', purchace:'purchase', purchse:'purchase', requistion:'requisition', requisiton:'requisition', invocie:'invoice', invioce:'invoice', paymnet:'payment', ammount:'amount', amout:'amount', budjet:'budget', buget:'budget',
+  vehical:'vehicle', vehicel:'vehicle', vechicle:'vehicle', vehcile:'vehicle', vehciles:'vehicles', accident:'accident', accidant:'accident', incedent:'incident', incidant:'incident', damadge:'damage', damge:'damage', demage:'damage', windsheild:'windshield', windscreen:'windscreen',
+  shipmant:'shipment', shippment:'shipment', replacment:'replacement', repalce:'replace', repalced:'replaced', insurence:'insurance', insurace:'insurance', reimbursment:'reimbursement', reimbursmentment:'reimbursement',
+  responsable:'responsible', responsiblity:'responsibility', posession:'possession', possesion:'possession', succesful:'successful', successfull:'successful', sucessful:'successful', sucess:'success', begining:'beginning', comming:'coming', runing:'running',
+  wierd:'weird', freind:'friend', calender:'calendar', tommorow:'tomorrow', tomorow:'tomorrow', tommorrow:'tomorrow', yesterady:'yesterday', wednesay:'Wednesday', wendesday:'Wednesday', febuary:'February', feburary:'February', janurary:'January', agust:'August', setpember:'September',
+  arguement:'argument', judgement:'judgement', publically:'publicly', relevent:'relevant', refered:'referred', refering:'referring', reffered:'referred', transfered:'transferred', transfering:'transferring', prefered:'preferred', occurrance:'occurrence',
+  approvel:'approval', aproval:'approval', aprove:'approve', aproved:'approved', autorized:'authorized', authorised:'authorised', athority:'authority', authoriy:'authority', departmnet:'department', deparment:'department', departement:'department',
+  employe:'employee', emplyee:'employee', staffs:'staff', infomation:'information', informaton:'information', informtion:'information', documnet:'document', docuemnt:'document', attachement:'attachment', attatchment:'attachment', atachment:'attachment',
+  colleage:'colleague', collegue:'colleague', guidence:'guidance', grammer:'grammar', alot:'a lot', noone:'no one', infact:'in fact', inspite:'in spite', aswell:'as well', incase:'in case', ofcourse:'of course', eachother:'each other',
+  dont:"don't", doesnt:"doesn't", didnt:"didn't", cant:"can't", wont:"won't", isnt:"isn't", wasnt:"wasn't", arent:"aren't", werent:"weren't", couldnt:"couldn't", shouldnt:"shouldn't", wouldnt:"wouldn't", hasnt:"hasn't", havent:"haven't", im:"I'm", ive:"I've",
+  breifly:'briefly', brief:'brief', concious:'conscious', curteous:'courteous', fourty:'forty', ninty:'ninety', lenght:'length', strenght:'strength', heigth:'height', wieght:'weight', recieptes:'receipts', liason:'liaison', perseverence:'perseverance',
+  shatterd:'shattered', shatered:'shattered', brakes:'brakes', overpas:'overpass', motorcylce:'motorcycle', motorcyle:'motorcycle', motorbyke:'motorbike', bycicle:'bicycle', bicyle:'bicycle', pedestrain:'pedestrian', pedestrains:'pedestrians', injurys:'injuries', injurries:'injuries', brusie:'bruise', bruse:'bruise'
+});
+// "a" → "an" before a vowel sound (but "a user", "a one-off", "a university"…), "an" → "a" before a consonant sound (but "an hour", "an MVR…")
+const WF_A_EXC = /^(uni|use|usu|user|euro|eu|one|once|ubiq|uk\b|us\b|ute|utili|unique|unit|ufo)/i, WF_AN_EXC = /^(hour|honest|hono|heir|mvr|fdc|hr\b|sop|mou|nda|sms|x-?ray|mri)/i;
+const wfVowel = w => /^[aeiou]/i.test(w) ? !WF_A_EXC.test(w) : WF_AN_EXC.test(w);
+const wfCase = (src, out) => src === src.toUpperCase() && src.length > 1 ? out.toUpperCase() : /^[A-Z]/.test(src) ? out.charAt(0).toUpperCase() + out.slice(1) : out;
+// which boxes get help: every text area, and free-text one-line boxes (not numbers, codes, emails, links, names of files…)
+function wfField(el){
+  if(!el || el.readOnly || el.disabled) return false;
+  if(el.tagName === 'TEXTAREA') return true;
+  if(el.tagName !== 'INPUT' || (el.type && el.type !== 'text')) return false;
+  const n = (el.name || el.id || '') + ' ' + (el.placeholder || '');
+  return /(title|subject|purpose|remark|note|descr|detail|issue|reason|location|destination|comment|matter|activit|cause|action|progress|item|support|impact|concern)/i.test(n) && !/(no\b|number|code|ref|plate|sku|email|url|link|phone|staff ?no|id\b)/i.test(n);
+}
+document.addEventListener('focusin', e => { const el = e.target; if(!wfField(el)) return; if(!el.hasAttribute('spellcheck')) el.spellcheck = true; if(!el.lang) el.lang = 'en-GB'; if(el.tagName === 'TEXTAREA') el.setAttribute('autocapitalize', 'sentences'); });
+// replace text inside the box keeping the undo history (Ctrl+Z puts it back)
+function wfReplace(el, from, to, text){
+  const caret = el.selectionStart, keep = caret - to;
+  el.setSelectionRange(from, to);
+  let ok = false; try{ ok = document.execCommand('insertText', false, text); }catch(e){}
+  if(!ok){ el.setRangeText(text, from, to, 'end'); }
+  const p = from + text.length + keep; el.setSelectionRange(p, p);
+}
+document.addEventListener('input', e => {
+  const el = e.target; if(!wfOn() || !wfField(el) || e.isComposing || el.__wfBusy) return;
+  if(e.inputType && !/^insert(Text|LineBreak|Paragraph)$/.test(e.inputType)) return;
+  const v = el.value, c = el.selectionStart; if(c == null || c < 2) return;
+  const last = v[c - 1]; if(!/[\s.,;:!?)]/.test(last)) return;                   // a word was just finished
+  el.__wfBusy = true;
+  try{ for(let round = 0; round < 4 && wfStep(el); round++); } finally { el.__wfBusy = false; }
+}, true);
+// one fix at the caret; true when something was changed (then the next fix is looked for)
+function wfStep(el){
+  const v = el.value, c = el.selectionStart, last = v[c - 1], before = v.slice(0, c - 1);
+  // no space before a comma / full stop, no double spaces
+  if(/[,.;:!?]/.test(last) && /\S $/.test(before)){ wfReplace(el, c - 2, c - 1, ''); return true; }
+  if(last === ' ' && /\S  $/.test(v.slice(0, c))){ wfReplace(el, c - 1, c, ''); return true; }
+  const m = /([A-Za-z']+)$/.exec(before); if(!m) return false;
+  const word = m[1], ws = c - 1 - word.length, lw = word.toLowerCase(), prev = v.slice(0, ws);
+  if(WF_FIX[lw] && WF_FIX[lw] !== lw){ wfReplace(el, ws, c - 1, wfCase(word, WF_FIX[lw])); return true; }
+  if(word === 'i'){ wfReplace(el, ws, c - 1, 'I'); return true; }
+  const pm = /([A-Za-z']+)(\s+)$/.exec(prev);
+  if(pm && pm[1].toLowerCase() === lw && lw.length > 1 && !/^(had|that|very|so|bye|no)$/.test(lw)){ wfReplace(el, ws - pm[2].length, c - 1, ''); return true; }
+  if(pm && /^an?$/i.test(pm[1]) && /^[a-z]/i.test(word)){ const want = wfVowel(word) ? 'an' : 'a'; if(pm[1].toLowerCase() !== want){ const s0 = ws - pm[2].length - pm[1].length; wfReplace(el, s0, s0 + pm[1].length, wfCase(pm[1], want)); return true; } }
+  if(el.tagName === 'TEXTAREA' && /^[a-z]/.test(word) && (/^\s*$/.test(prev) || /[.!?]\s+$/.test(prev) || /\n\s*$/.test(prev)) && !/(\b(e\.g|i\.e|etc|no|vs|approx)\.\s+)$/i.test(prev)){ wfReplace(el, ws, ws + 1, word[0].toUpperCase()); return true; }
+  const j = /([a-z]{2,})([,;])([a-z]{2,})$/i.exec(before); if(j && !/\.(pdf|docx?|xlsx?|png|jpe?g|com|mv|org|net)$/i.test(before)){ const at = c - 1 - j[3].length; wfReplace(el, at, at, ' '); return true; }
+  return false;
+}
+
 
 /* ---------- Settings (shared by everyone; admins change them) ---------- */
 function openVehSettings(){

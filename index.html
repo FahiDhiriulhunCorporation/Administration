@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.322';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.323';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2166,6 +2166,7 @@ function toast(msg, isError){
    NAVIGATION
 ===================================================================== */
 const ICONS = {
+  bell:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 8.5a5 5 0 0 1 10 0c0 4 1.5 5.5 1.5 5.5h-13S5 12.5 5 8.5Z"/><path d="M8.3 16.5a1.8 1.8 0 0 0 3.4 0" stroke-linecap="round"/></svg>',
   dashboard:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1"/><rect x="11" y="2.5" width="6.5" height="6.5" rx="1"/><rect x="2.5" y="11" width="6.5" height="6.5" rx="1"/><rect x="11" y="11" width="6.5" height="6.5" rx="1"/></svg>',
   products:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6.2 10 2.5l7.5 3.7v7.6L10 17.5l-7.5-3.7z"/><path d="M2.5 6.2 10 9.9l7.5-3.7"/><path d="M10 9.9v7.6"/></svg>',
   levels:'<svg width="18" height="18" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 5.5 10 2.5l7.5 3v.01L10 8.5l-7.5-3z"/><path d="m2.5 10 7.5 3 7.5-3M2.5 14.3 10 17.3l7.5-3"/></svg>',
@@ -2273,7 +2274,8 @@ function currentNav(){
     { id:'petty-count', label:'Cash Count', icon:'coins', badge:nUnbal, tone:'crit', hint:'Funds whose cash count does not balance' },
     { id:'business-advance', label:'Business Advance', icon:'wallet', badge:cntOf(baPendingAll), tone:'warn', hint:'Payments from business advances still without an invoice' },
   ];
-  if(canManageInventory() || (authUser && authUser.role==='admin')) nav.push({ section:'Settings' });
+  nav.push({ section:'Settings' });
+  nav.push({ id:'notifications', label:'Notifications', icon:'bell' });
   if(canManageInventory()) nav.push({ id:'locations', label:'Locations', icon:'locations' });
   if(canManageInventory()) nav.push({ id:'backups', label:'Backups', icon:'statement' });
   if(authUser && authUser.role==='admin') nav.push({ id:'admin', label:'Admin Panel', icon:'admin' });
@@ -2812,7 +2814,7 @@ function viewVehicles(){
       statCard('Expired documents', fmtNum(expired), 'Annual fee, insurance, roadworthiness', expired ? 'rose' : 'slate') +
       statCard('Expiring ≤ ' + vehSettings.remindDays + ' days', fmtNum(expiring), 'Renew soon', expiring ? 'amber' : 'slate') +
       statCard('Statutory cost (current)', vMoney0(annual), 'Sum of latest renewal costs', 'emerald'))}
-    ${vPanel('Needs attention', 'Items expiring within ' + vehSettings.remindDays + ' days or already expired' + (('Notification' in window) && Notification.permission === 'default' ? ` · <button onclick="vehEnableNotif()" class="font-semibold text-brand-600 hover:underline">Enable desktop reminders</button>` : ''), attention)}
+    ${vPanel('Needs attention', 'Items expiring within ' + vehSettings.remindDays + ' days or already expired' , attention)}
     <div class="flex flex-wrap gap-2.5 mb-5">
       ${vSearch('veh-q', 'q', 'Search plate, make, model, driver…')}
       ${vSelect('ftype', VEH_TYPES, vehUi.ftype, 'All types')}${vSelect('ffuel', VEH_FUELS, vehUi.ffuel, 'All fuel')}${vSelect('fstatus', VEH_STATUSES, vehUi.fstatus, 'All status')}
@@ -4062,8 +4064,7 @@ function openVehSettings(){
   const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
   openModal('Vehicle settings', vFormOpen + vGrid(2, vF('Reminder window (days before expiry)', 'remindDays', vehSettings.remindDays, 'number', { attrs:' step="1" min="1"' }) + vF('Currency label', 'currency', vehSettings.currency) +
     vF('Fueling petty cash balance (MVR)', 'fuelFloat', vehSettings.fuelPettyCashFloat != null ? vehSettings.fuelPettyCashFloat : 700, 'number') + vS('Fueling petty cash custodian', 'fuelCustodian', state.profiles.map(p => [p.uid, p.name || p.email]), vehSettings.fuelCustodianUid || '', 'Not assigned')) +
-    `<div class="mt-4 text-sm text-slate-600">Desktop notifications on this device: <b>${perm}</b> ${perm === 'default' ? `<button type="button" onclick="vehEnableNotif()" class="ml-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Enable</button>` : ''}</div>
-     <div class="mt-4 pt-4 border-t border-slate-100"><button type="button" onclick="openVehMigration()" class="text-sm font-semibold text-brand-600 hover:underline">Import data from the old Vehicle Management app…</button></div>` +
+    `<div class="mt-4 pt-4 border-t border-slate-100"><button type="button" onclick="openVehMigration()" class="text-sm font-semibold text-brand-600 hover:underline">Import data from the old Vehicle Management app…</button></div>` +
     vFoot('Save settings', 'saveVehSettings()'));
 }
 function vehEnableNotif(){
@@ -8420,8 +8421,7 @@ function ntToggle(btn){
   const w = Math.min(360, innerWidth - 16);
   p.className = 'bg-white border border-slate-200 rounded-xl shadow-xl text-slate-800';
   p.style.cssText = `position:fixed;z-index:9995;width:${w}px;top:${r.bottom + 8}px;left:${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px;max-height:70vh;overflow:auto`;
-  p.innerHTML = `<div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2"><b class="text-sm">Notifications</b><span class="flex items-center gap-3"><span class="text-[11px] text-slate-400">${list.length} item${list.length === 1 ? '' : 's'}</span><button type="button" data-nd="1" title="Desktop reminder settings" class="text-[11.5px] font-semibold text-brand-600 hover:underline">🔔 Reminders</button></span></div>` +
-    (('Notification' in window) && Notification.permission === 'default' && ndPrefs().on ? `<div class="px-4 py-2.5 border-b border-slate-100 bg-slate-50 text-[12px] text-slate-600 flex items-center justify-between gap-2">Get these as desktop reminders<button type="button" data-nd-allow="1" class="px-2.5 py-1 rounded-md text-[11.5px] font-semibold bg-brand-600 text-white">Turn on</button></div>` : '') +
+  p.innerHTML = `<div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2"><b class="text-sm">Notifications</b><span class="flex items-center gap-3"><span class="text-[11px] text-slate-400">${list.length} item${list.length === 1 ? '' : 's'}</span></span></div>` +
     (list.length ? list.map((x, i) => `<button data-i="${i}" class="w-full text-left px-4 py-2.5 flex gap-3 hover:bg-slate-50 border-b border-slate-100 last:border-0"><span class="text-lg leading-none mt-0.5">${x.icon}</span><span class="flex-1 min-w-0"><span class="block text-[13px] ${x.at > seen ? 'font-semibold text-slate-900' : 'text-slate-600'}">${esc(x.text)}</span><span class="block text-[11px] text-slate-400">${esc(x.sub || '')}${x.sub ? ' · ' : ''}${fmtDT(x.at)}</span></span>${x.at > seen ? '<span class="w-2 h-2 rounded-full bg-brand-600 mt-1.5 shrink-0"></span>' : ''}</button>`).join('') : '<div class="px-4 py-8 text-center text-sm text-slate-400">You are all caught up ✨</div>');
   document.body.appendChild(p);
   p.onclick = e => { if(e.target.closest('[data-nd]')){ p.remove(); return openNdSettings(); } if(e.target.closest('[data-nd-allow]')){ Notification.requestPermission().then(() => { p.remove(); ndSoon(); openNdSettings(); }); return; }
@@ -8491,12 +8491,12 @@ let ndTimer = 0; function ndSoon(){ clearTimeout(ndTimer); ndTimer = setTimeout(
 setInterval(() => { try{ ndCheck(); stkAlertCheck && stkAlertCheck(); }catch(e){} }, 60000);   // picks up the end of quiet hours, repeats and the summary time
 function ntOpenPanel(){ const b = [...document.querySelectorAll('.nt-btn')].find(x => x.offsetParent); if(b && !document.getElementById('nt-panel')) ntToggle(b); }
 // the settings window
-function openNdSettings(){
+function ndSettingsHtml(){
   const o = ndPrefs(), perm = ('Notification' in window) ? Notification.permission : 'unsupported';
   const permTxt = { granted:'<b class="text-emerald-600">Allowed</b>', denied:'<b class="text-rose-600">Blocked</b> — allow notifications for this site in the browser settings (padlock next to the address).', default:'<b class="text-amber-600">Not allowed yet</b>', unsupported:'<b>Not supported in this browser</b>' }[perm];
   const tg = (id, on, label, sub) => `<label class="flex items-start gap-3 py-2 cursor-pointer"><input type="checkbox" id="${id}" ${on ? 'checked' : ''} class="mt-0.5 w-4 h-4"><span><span class="text-sm text-slate-800">${label}</span>${sub ? `<span class="block text-[11.5px] text-slate-500">${sub}</span>` : ''}</span></label>`;
   const tm = (id, v) => `<input type="time" id="${id}" value="${esc(v)}" class="${VEH_INPUT} !py-1.5 !w-32">`;
-  openModal('Desktop reminders', `
+  return `
     <div class="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 mb-4 text-sm flex items-center justify-between gap-3 flex-wrap"><span>Notifications on this device: ${permTxt}</span>
       <span class="flex gap-2">${perm === 'default' ? `<button type="button" onclick="ndAllow()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white">Allow notifications</button>` : ''}${perm === 'granted' ? `<button type="button" onclick="ndTest()" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Send a test</button>` : ''}</span></div>
     ${tg('nd-on', o.on, '<b>Show desktop reminders</b>', 'Pop-up notices on this computer while the app is open in a browser tab (it can be in the background).')}
@@ -8512,7 +8512,13 @@ function openNdSettings(){
       ${tg('nd-wk', o.weekend, 'Quiet on Friday and Saturday')}
     </div>
     <div class="mt-2">${tg('nd-sound', o.sound, 'Play a sound')}${tg('nd-stay', o.stay, 'Keep each notice on screen until I close it')}</div>
-    <div class="flex justify-end gap-2.5 mt-5"><button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="closeModal()">Cancel</button><button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="ndSaveForm()">Save</button></div>`, false);
+    <div class="flex justify-end gap-2.5 mt-5"><button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="ndSaveForm()">Save settings</button></div>`;
+}
+function openNdSettings(){ goTo('notifications'); }
+// Settings → Notifications: the only place to change reminders
+function viewNotifSettings(){
+  return vHead('Notifications', 'Desktop reminders on this computer: what you are reminded about, when, and how. Each person sets their own; the settings are kept on this device.', '') +
+    `<div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 max-w-3xl">${ndSettingsHtml()}</div>`;
 }
 function ndReadForm(){
   const v = id => document.getElementById(id), o = ndPrefs();
@@ -8521,8 +8527,8 @@ function ndReadForm(){
   o.quiet = v('nd-quiet').checked; o.qFrom = v('nd-qf').value || '18:00'; o.qTo = v('nd-qt').value || '07:00'; o.weekend = v('nd-wk').checked; o.sound = v('nd-sound').checked; o.stay = v('nd-stay').checked;
   return o;
 }
-function ndSaveForm(){ const o = ndReadForm(); ndSave(o); try{ localStorage.setItem(STK_NOTIFY_KEY, o.on && o.cats.stock ? '1' : '0'); }catch(e){} closeModal(); toast('Reminder settings saved.'); rerenderMain(); ndSoon(); }
-function ndAllow(){ if(!('Notification' in window)) return; Notification.requestPermission().then(() => { const o = document.getElementById('nd-on') ? ndReadForm() : null; if(o) ndSave(o); openNdSettings(); ndSoon(); }); }
+function ndSaveForm(){ const o = ndReadForm(); ndSave(o); try{ localStorage.setItem(STK_NOTIFY_KEY, o.on && o.cats.stock ? '1' : '0'); }catch(e){} toast('Reminder settings saved.'); rerenderMain(); ndSoon(); }
+function ndAllow(){ if(!('Notification' in window)) return; Notification.requestPermission().then(() => { const o = document.getElementById('nd-on') ? ndReadForm() : null; if(o) ndSave(o); rerenderMain(); ndSoon(); }); }
 function ndTest(){ const o = document.getElementById('nd-on') ? ndReadForm() : ndPrefs(); ndSave(o); const ok = ndShow('🔔 Test reminder', 'This is how your reminders will look.' + (ndQuietNow(o) ? '\n(Quiet hours are on now — real reminders wait until they end.)' : ''), 'fdc-nt-test', "ntOpenPanel()", null, true); if(!ok) toast('Could not show a notification — check the browser settings.', true); }
 
 /* ---------- daily summary email (first person to open the app each day sends it, through EmailJS) ---------- */
@@ -16169,6 +16175,7 @@ function render(){
     else if(ui.tab==='tasks') el.innerHTML = viewTasks();
     else if(ui.tab==='my-work') el.innerHTML = viewMyWork();
     else if(ui.tab==='backups') el.innerHTML = viewBackups();
+    else if(ui.tab==='notifications') el.innerHTML = viewNotifSettings();
     else if(ui.tab==='docs' || String(ui.tab).startsWith('docs-')) el.innerHTML = viewDocs(ui.tab === 'docs' ? '' : ui.tab.slice(5));
     else if(ui.tab==='vehicle-reports') el.innerHTML = viewVehicleReports();
     else if(ui.tab==='locations') el.innerHTML = viewLocations();
@@ -16998,7 +17005,9 @@ function stkNotifySet(on){
   else { toast(on ? 'Stock reminders are on.' : 'Stock reminders are off on this device.'); rerenderMain(); if(on){ try{ localStorage.removeItem('fdc_stock_daily_' + (authUser ? authUser.uid : '')); }catch(e){} stkAlertCheck(); } }
 }
 // the switch on the Stock Levels page
-function stkNotifyBar(){
+function stkNotifyBar(){ return '';                       // reminders are set in Settings → Notifications
+}
+function stkNotifyBarOld(){
   const locs = stkMyLocations(); if(!authUser || !locs.length) return '';
   const on = stkNotifyOn(), perm = ('Notification' in window) ? Notification.permission : 'unsupported', n = stkAlertList().length;
   const st = !on ? 'Off' : perm === 'granted' ? 'On' : perm === 'denied' ? 'Blocked by the browser' : perm === 'unsupported' ? 'Not supported here' : 'Not allowed yet';

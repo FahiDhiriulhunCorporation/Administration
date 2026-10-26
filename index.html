@@ -749,6 +749,7 @@ function refreshAppearanceModal(){
 .wf-chip s{opacity:.7}.wf-chip.wf-s{color:#b91c1c;border-color:rgba(220,38,38,.4);background:rgba(220,38,38,.07)}.wf-chip.wf-g{color:#1d4ed8;border-color:rgba(37,99,235,.4);background:rgba(37,99,235,.07)}
 html[data-theme="dark"] .wf-chip.wf-s{color:#fca5a5}html[data-theme="dark"] .wf-chip.wf-g{color:#93c5fd}html[data-theme="dark"] .wf-s{text-decoration-color:#f87171}html[data-theme="dark"] .wf-g{text-decoration-color:#60a5fa}
 .wf-all{padding:2px 9px;border-radius:999px;font-weight:600;color:#fff;background:#2563eb}.wf-more{padding:2px 4px;opacity:.7}
+.as-menu > summary::-webkit-details-marker{display:none}.as-menu > summary{list-style:none}
 </style>
 <script>
   if('serviceWorker' in navigator){
@@ -1972,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.321';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.322';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -17421,6 +17422,7 @@ const DEPARTMENTS = [
   { name: 'Facility Management', code: 'FM' },
   { name: 'Finance', code: 'F' },
   { name: 'Human Resource', code: 'HR' },
+  { name: 'Information Technology', code: 'IT' },
   { name: 'Logistics', code: 'L' },
   { name: 'Marketing', code: 'M' },
   { name: 'Planning', code: 'PL' },
@@ -19357,7 +19359,7 @@ function getFilteredAssets(){
   if(f.locationId) list = list.filter(a=> f.locationId === '__ext' ? isExtLoc(a.locationId) : a.locationId===f.locationId);
   if(f.department){
     const q = f.department.toLowerCase();
-    list = list.filter(a=>(a.department||'').toLowerCase().includes(q));
+    list = list.filter(a=>(a.department||'').toLowerCase() === q);
   }
   if(f.search){
     const q = f.search.toLowerCase();
@@ -19378,37 +19380,41 @@ function assetStatusBadge(status){
     ? '<span class="inline-flex px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs font-semibold">Retired</span>'
     : '<span class="inline-flex px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">Active</span>';
 }
+document.addEventListener('click', e => { document.querySelectorAll('details.as-menu[open]').forEach(d => { if(!d.contains(e.target)) d.open = false; }); });
 function viewAssets(){
   const f = ui.assetsFilter;
   const list = getFilteredAssets().sort(byTag);
   const locOptions = LOCATIONS.map(l=>`<option value="${l.id}" ${f.locationId===l.id?'selected':''}>${esc(l.name)}</option>`).join('') + (state.assets.some(a=>isExtLoc(a.locationId)) ? `<option value="__ext" ${f.locationId==='__ext'?'selected':''}>↗ Outside the corporation</option>` : '');
 
+  const admin = canManageInventory();
   const rows = list.map(a=>{
     const loc = getLocation(a.locationId);
     return `
-      <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-        <td class="px-5 sm:px-6 py-3">
+      <tr class="as-row border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer" onclick="if(!event.target.closest('button,details,a')) openAssetDetail('${a.id}')">
+        <td class="px-5 sm:px-6 py-2.5">
           <div class="flex items-center gap-3">
             ${a.image ? `<img src="${a.image}" alt="" class="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0">` : `<div class="w-9 h-9 rounded-lg bg-slate-100 shrink-0"></div>`}
             <div class="min-w-0">
-              <button onclick="openAssetDetail('${a.id}')" class="font-semibold text-slate-800 hover:text-brand-600 hover:underline text-left">${esc(a.name)}</button>
-              <div class="text-[11.5px] text-slate-400">${a.serialNumber?('SN '+esc(a.serialNumber)):esc(a.category||'')}${a.serialNumber&&a.category?(' · '+esc(a.category)):''}</div>
+              <div class="font-semibold text-slate-800 truncate">${esc(a.name)}${a.tag ? ` <span class="ml-1 align-middle inline-flex px-1.5 py-0 rounded bg-slate-100 text-slate-500 text-[10.5px] font-medium num">${esc(a.tag)}</span>` : ''}</div>
+              <div class="text-[11.5px] text-slate-400 truncate">${[a.serialNumber ? 'SN ' + esc(a.serialNumber) : '', esc(a.category || '')].filter(Boolean).join(' · ') || '&nbsp;'}</div>
             </div>
           </div>
         </td>
-        <td class="py-3">${a.tag ? `<span class="inline-flex px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium num">${esc(a.tag)}</span>` : '<span class="text-slate-300">—</span>'}</td>
-        <td class="py-3">${loc ? locTag(loc.id) : '<span class="text-slate-400">—</span>'}</td>
-        <td class="py-3 text-slate-600">${esc(a.department||'—')}</td>
-        <td class="py-3 text-slate-600">${esc(a.assignedTo||'—')}</td>
-        <td class="py-3">${assetStatusBadge(a.status)}</td>
-        <td class="py-3 pr-5 sm:pr-6 text-right whitespace-nowrap">
-          <button onclick="openAssetDetail('${a.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Details</button>
-          <button onclick="openTransferForm('${a.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Transfer</button>
-          ${canManageInventory() ? `<button onclick="openAssetForm('${a.id}')" class="text-xs font-semibold text-brand-600 hover:underline mr-3">Edit</button>` : ''}
-          ${canManageInventory() ? `<button onclick="deleteAsset('${a.id}')" class="text-xs font-semibold text-rose-600 hover:underline">Delete</button>` : ''}
+        <td class="py-2.5 pr-3"><div class="max-w-[11rem] truncate">${loc ? locTag(loc.id) : '<span class="text-slate-400">—</span>'}</div></td>
+        <td class="py-2.5 pr-3 min-w-0"><div class="text-slate-800 truncate max-w-[14rem]">${esc(a.assignedTo || '—')}</div><div class="text-[11.5px] text-slate-400 truncate max-w-[14rem]">${esc(a.department || '')}</div></td>
+        <td class="py-2.5 pr-3">${assetStatusBadge(a.status)}</td>
+        <td class="py-2.5 pr-5 sm:pr-6 text-right whitespace-nowrap">
+          <button onclick="openTransferForm('${a.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Transfer</button>
+          <details class="as-menu inline-block relative ml-2 align-middle"><summary title="More" aria-label="More actions" class="list-none cursor-pointer w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 text-base leading-none">⋯</summary>
+            <div class="rounded-lg border border-slate-200 bg-white shadow-lg py-1 text-left" style="position:absolute;right:0;top:100%;margin-top:4px;z-index:30;width:9rem">
+              <button onclick="this.closest('details').open=false; openAssetDetail('${a.id}')" class="block w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Details</button>
+              ${admin ? `<button onclick="this.closest('details').open=false; openAssetForm('${a.id}')" class="block w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Edit</button>
+              <button onclick="this.closest('details').open=false; deleteAsset('${a.id}')" class="block w-full text-left px-3 py-1.5 text-sm text-rose-600 hover:bg-rose-50">Delete</button>` : ''}
+            </div></details>
         </td>
       </tr>`;
   }).join('');
+  const deptOpts = [...new Set(DEPARTMENTS.map(d => d.name).concat(state.assets.map(a => a.department).filter(Boolean)))].sort((x, y) => x.localeCompare(y));
 
   const recentTransfers = [...state.assetTransfers].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,8);
 
@@ -19444,8 +19450,9 @@ function viewAssets(){
       <select onchange="ui.assetsFilter.locationId=this.value; rerenderMain();" class="px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
         <option value="">All locations</option>${locOptions}
       </select>
-      <input type="text" id="assets-department-input" placeholder="Department" value="${esc(f.department)}" oninput="ui.assetsFilter.department=this.value; rerenderMain();"
-        class="w-40 px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      <select onchange="ui.assetsFilter.department=this.value; rerenderMain();" class="max-w-[14rem] px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
+        <option value="">All departments</option>${deptOpts.map(d => `<option value="${esc(d)}" ${f.department === d ? 'selected' : ''}>${esc(d)} (${state.assets.filter(a => a.department === d).length})</option>`).join('')}
+      </select>
       ${hasActiveAssetFilters() ? `<button onclick="clearAssetFilters()" class="text-xs font-semibold text-brand-600 hover:underline self-center">Clear filters</button>` : ''}
       <span class="self-center text-xs text-slate-400 ml-auto">${list.length} asset${list.length===1?'':'s'}</span>
     </div>
@@ -19456,12 +19463,10 @@ function viewAssets(){
         <table class="w-full text-sm">
           <thead><tr class="sticky-thead sticky-thead-1 text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
             <th class="px-5 sm:px-6 py-3 font-semibold">Asset</th>
-            <th class="py-3 font-semibold">Asset code</th>
             <th class="py-3 font-semibold">Location</th>
-            <th class="py-3 font-semibold">Department</th>
-            <th class="py-3 font-semibold">Assigned to</th>
+            <th class="py-3 font-semibold">Assigned to · department</th>
             <th class="py-3 font-semibold">Status</th>
-            <th class="py-3 pr-5 sm:pr-6 font-semibold text-right">Actions</th>
+            <th class="py-3 pr-5 sm:pr-6 font-semibold text-right"></th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>

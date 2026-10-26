@@ -852,7 +852,9 @@ const DEFAULT_LOCATIONS = [
 let LOCATIONS = DEFAULT_LOCATIONS.map(l=>({...l}));
 let notificationSettings = { enabled:false, serviceId:'', templateId:'', publicKey:'', recipients:'' };
 let notifiedLowStockKeys = new Set(); // dedupe: avoid re-emailing while a product/location stays below reorder level
-function getLocation(id){ return LOCATIONS.find(l=>l.id===id); }
+// a place outside the corporation (an asset handed over to another organisation) is kept as "ext:<the place typed>"
+const LOC_EXT = 'ext:', isExtLoc = id => typeof id === 'string' && id.startsWith(LOC_EXT);
+function getLocation(id){ if(isExtLoc(id)){ const n = id.slice(LOC_EXT.length).trim() || 'Outside the corporation'; return { id, name:n, code:'Outside', color:'#f59e0b', external:true, stockValuation:false }; } return LOCATIONS.find(l=>l.id===id); }
 
 const ui = {
   tab: 'dashboard',
@@ -1970,7 +1972,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.317';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.321';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3936,6 +3938,42 @@ async function irPhotoData(list){
     if(m) out.push({ w:pg.w, h:pg.h, b64:m[1], cap:String(p.caption || '').trim() }); }
   return out;
 }
+
+/* ---------- every "Department" box is a drop-down of the departments (a value saved before that is not in the list is kept as an option) ---------- */
+function deptMatch(v){
+  const t = String(v || '').trim(); if(!t) return '';
+  const low = x => String(x || '').toLowerCase().replace(/[^a-z&]+/g, ' ').trim(), l = low(t);
+  const d = DEPARTMENTS.find(x => low(x.name) === l) || DEPARTMENTS.find(x => String(x.code).toLowerCase() === t.toLowerCase() && DEPARTMENTS.filter(y => y.code === x.code).length === 1)
+    || DEPARTMENTS.find(x => l.length > 3 && (low(x.name).startsWith(l) || l.startsWith(low(x.name)))) || (/^admin/.test(l) ? DEPARTMENTS.find(x => /^admin/i.test(x.name)) : null);
+  return d ? d.name : '';
+}
+const deptIsField = el => el && el.tagName === 'INPUT' && (!el.type || el.type === 'text') && !el.dataset.deptFree &&
+  (/(department|dept)$/i.test(el.name || '') || /(^|[-_.])(department|dept)$|Dept$/i.test(el.id || '') || /depts$/i.test(el.getAttribute('list') || '') || /(^|\.)(department|dept)$/i.test(el.name || ''));
+function deptOptions(sel, v){
+  const cur = String(v == null ? '' : v).trim(), m = deptMatch(cur), keep = cur && !m ? cur : '';
+  sel.innerHTML = `<option value="">Select department…</option>` + DEPARTMENTS.map(d => `<option value="${esc(d.name)}">${esc(d.name)}</option>`).join('') + (keep ? `<option value="${esc(keep)}">${esc(keep)} (not in the list)</option>` : '');
+  return m || keep;
+}
+const DEPT_VAL = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+function deptSelectify(inp){
+  if(!deptIsField(inp) || inp.closest('[data-dept-free]')) return;
+  const sel = document.createElement('select');
+  ['id', 'name', 'class', 'style', 'title', 'form', 'onchange', 'oninput', 'onblur', 'onfocus', 'required', 'aria-label'].forEach(a => { if(inp.hasAttribute(a)) sel.setAttribute(a, inp.getAttribute(a)); });
+  Object.keys(inp.dataset).forEach(k => sel.dataset[k] = inp.dataset[k]);
+  if(inp.disabled) sel.disabled = true;
+  if(inp.readOnly){ sel.style.pointerEvents = 'none'; sel.tabIndex = -1; sel.classList.add('opacity-70'); }
+  sel.classList.add('dept-select');
+  DEPT_VAL.set.call(sel, deptOptions(sel, inp.value));
+  // code that fills the box (e.g. from a scanned form) may set a name written differently: match it, or keep it as an extra option
+  Object.defineProperty(sel, 'value', { configurable:true, get(){ return DEPT_VAL.get.call(this); }, set(v){ const s = String(v == null ? '' : v); const m = deptMatch(s);
+    if(s && !m && ![...this.options].some(o => o.value === s)){ const o = document.createElement('option'); o.value = s; o.textContent = s + ' (not in the list)'; this.appendChild(o); }
+    DEPT_VAL.set.call(this, m || s); } });
+  inp.replaceWith(sel);
+}
+function deptScan(root){ try{ (root.querySelectorAll ? root.querySelectorAll('input') : []).forEach(deptSelectify); if(root.tagName === 'INPUT') deptSelectify(root); }catch(e){} }
+new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if(n.nodeType === 1) deptScan(n); }))).observe(document.documentElement, { childList:true, subtree:true });
+document.addEventListener('DOMContentLoaded', () => deptScan(document));
+setTimeout(() => deptScan(document), 0);
 
 /* ---------- Writing help: underline mistakes in the box (red = spelling, blue = grammar), with one-click fixes under it ---------- */
 const WF_GRAM = [
@@ -7510,6 +7548,20 @@ async function saveSdTorList(){
 const CP_STATUS = ['Open', 'Pending', 'Review', 'Resolved', 'Implemented'];
 const cpDone = s => s === 'Resolved' || s === 'Implemented';                 // closed: a resolution is set (Implemented = it has been carried out)
 const cpPill = s => vPill(cpDone(s) ? 'good' : s === 'Review' ? 'acc' : s === 'Pending' ? 'warn' : 'crit', esc(s === 'Implemented' ? '✓ Implemented' : s || 'Open'));
+// level of a complaint: how serious it is (sets the order of open complaints)
+const CP_LEVELS = ['Low', 'Medium', 'High', 'Critical'];
+const CP_LEVEL_INFO = { Low:'Minor inconvenience, no effect on work', Medium:'Affects work but there is a way around it', High:'Stops work or affects many people — needs quick action', Critical:'Safety, security or major loss — needs immediate action' };
+const CP_LEVEL_CLS = { Low:'bg-slate-100 text-slate-600', Medium:'bg-sky-100 text-sky-700', High:'bg-amber-100 text-amber-800', Critical:'bg-rose-100 text-rose-700' };
+const cpLevel = c => CP_LEVELS.includes(c && c.level) ? c.level : 'Medium';
+const cpLevelPill = c => `<span title="${esc(CP_LEVEL_INFO[cpLevel(c)])}" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold whitespace-nowrap ${CP_LEVEL_CLS[cpLevel(c)]}">${cpLevel(c) === 'Critical' ? '‼ ' : cpLevel(c) === 'High' ? '! ' : ''}${cpLevel(c)}</span>`;
+function cpLevelSel(c){
+  return `<select aria-label="Level" title="${esc(CP_LEVEL_INFO[cpLevel(c)])}" onclick="event.stopPropagation()" onchange="cpSetLevel('${c.id}', this.value)" class="text-[11px] font-semibold rounded-full border border-transparent px-2.5 py-0.5 pr-7 cursor-pointer ${CP_LEVEL_CLS[cpLevel(c)]}">${CP_LEVELS.map(l => `<option value="${l}" ${l === cpLevel(c) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+}
+async function cpSetLevel(id, lv){
+  const c = state.complaints.find(x => x.id === id); if(!c || !CP_LEVELS.includes(lv) || lv === cpLevel(c)) return;
+  await vehSave('complaints', { id, level:lv, history:(c.history || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:'Level: ' + lv }]) });
+  toast((c.no || 'Complaint') + ' level set to ' + lv + '.'); rerenderMain(); if(document.getElementById('cp-view-level')) openCpView(id);
+}
 const cpById = id => state.complaints.find(c => c.id === id) || null;
 const cpOpen = () => state.complaints.filter(c => !cpDone(c.status));
 function cpNextNo(){ const y = vToday().slice(0, 4); let max = 0; state.complaints.forEach(c => { const m = /^CMP-(\d{4})-(\d+)$/.exec(c.no || ''); if(m && m[1] === y) max = Math.max(max, +m[2]); }); return 'CMP-' + y + '-' + String(max + 1).padStart(3, '0'); }
@@ -8350,6 +8402,8 @@ function ntList(){
   }
   try{ const tm = clIsoAdd(t0, 1), lv = lvBetween(tm, tm).filter(x => x.items.some(i => i.from === tm) && (admin || x.key === me) && (!lvBetween(t0, t0).some(y => y.key === x.key)));
     if(lv.length) add('lv-' + tm, '🌴', (admin ? 'Leave starts tomorrow: ' : 'Your leave starts tomorrow') + (admin ? lv.map(x => x.name).slice(0, 4).join(', ') : ''), '', dayAt(t0), `goTo('leave-plan')`); }catch(e){}
+  try{ const st = typeof stkAlertList === 'function' ? stkAlertList() : []; if(st.length){ const outN = st.filter(a => a.s === 'out').length;
+    add('stk-' + t0 + '-' + st.length, '📦', (outN ? outN + ' out of stock' : '') + (outN && st.length - outN ? ', ' : '') + (st.length - outN ? (st.length - outN) + ' at re-order level' : ''), st.slice(0, 3).map(a => displayName(a.p) + ' (' + (a.l.code || a.l.name) + ')').join(', ') + (st.length > 3 ? '…' : ''), dayAt(t0), `vehUi.slLow = 'low'; goTo('levels')`); } }catch(e){}
   if(admin){
     try{ const v = vehAlerts(); if(v.length) add('veh-' + t0 + v.length, '🚗', v.length + ' vehicle alert' + (v.length === 1 ? '' : 's'), 'Insurance, registration or service due', dayAt(t0), `goTo('vehicles')`); }catch(e){}
   }
@@ -8365,14 +8419,110 @@ function ntToggle(btn){
   const w = Math.min(360, innerWidth - 16);
   p.className = 'bg-white border border-slate-200 rounded-xl shadow-xl text-slate-800';
   p.style.cssText = `position:fixed;z-index:9995;width:${w}px;top:${r.bottom + 8}px;left:${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px;max-height:70vh;overflow:auto`;
-  p.innerHTML = `<div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between"><b class="text-sm">Notifications</b><span class="text-[11px] text-slate-400">${list.length} item${list.length === 1 ? '' : 's'}</span></div>` +
+  p.innerHTML = `<div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2"><b class="text-sm">Notifications</b><span class="flex items-center gap-3"><span class="text-[11px] text-slate-400">${list.length} item${list.length === 1 ? '' : 's'}</span><button type="button" data-nd="1" title="Desktop reminder settings" class="text-[11.5px] font-semibold text-brand-600 hover:underline">🔔 Reminders</button></span></div>` +
+    (('Notification' in window) && Notification.permission === 'default' && ndPrefs().on ? `<div class="px-4 py-2.5 border-b border-slate-100 bg-slate-50 text-[12px] text-slate-600 flex items-center justify-between gap-2">Get these as desktop reminders<button type="button" data-nd-allow="1" class="px-2.5 py-1 rounded-md text-[11.5px] font-semibold bg-brand-600 text-white">Turn on</button></div>` : '') +
     (list.length ? list.map((x, i) => `<button data-i="${i}" class="w-full text-left px-4 py-2.5 flex gap-3 hover:bg-slate-50 border-b border-slate-100 last:border-0"><span class="text-lg leading-none mt-0.5">${x.icon}</span><span class="flex-1 min-w-0"><span class="block text-[13px] ${x.at > seen ? 'font-semibold text-slate-900' : 'text-slate-600'}">${esc(x.text)}</span><span class="block text-[11px] text-slate-400">${esc(x.sub || '')}${x.sub ? ' · ' : ''}${fmtDT(x.at)}</span></span>${x.at > seen ? '<span class="w-2 h-2 rounded-full bg-brand-600 mt-1.5 shrink-0"></span>' : ''}</button>`).join('') : '<div class="px-4 py-8 text-center text-sm text-slate-400">You are all caught up ✨</div>');
   document.body.appendChild(p);
-  p.onclick = e => { const b = e.target.closest('button[data-i]'); if(!b) return; const x = list[+b.dataset.i]; p.remove(); try{ (new Function(x.go))(); }catch(err){} };
+  p.onclick = e => { if(e.target.closest('[data-nd]')){ p.remove(); return openNdSettings(); } if(e.target.closest('[data-nd-allow]')){ Notification.requestPermission().then(() => { p.remove(); ndSoon(); openNdSettings(); }); return; }
+    const b = e.target.closest('button[data-i]'); if(!b) return; const x = list[+b.dataset.i]; p.remove(); try{ (new Function(x.go))(); }catch(err){} };
   try{ localStorage.setItem(NT_KEY(), String(Date.now())); }catch(e){}
   setTimeout(ntBadge, 50);
   setTimeout(() => document.addEventListener('mousedown', function off(e){ if(!p.contains(e.target) && !e.target.closest('.nt-btn')){ p.remove(); document.removeEventListener('mousedown', off); } }), 0);
 }
+
+/* ---------- desktop reminders for the notifications, personalised by each user (kept on this device) ---------- */
+const ND_CATS = [
+  ['assign', '📋', 'Tasks assigned to me'], ['overdue', '⏰', 'My overdue tasks'], ['due', '📅', 'Tasks due today'],
+  ['approval', '✍️', 'Documents waiting for my approval'], ['request', '✅', 'My stock requests decided'], ['petty', '💵', 'My petty cash (sign / processed)'],
+  ['leave', '🌴', 'Leave starting tomorrow'], ['vehicle', '🚗', 'Vehicle alerts'], ['stock', '📦', 'Stock low or out at my locations']];
+const ND_DEF = { on:true, cats:{}, repeat:0, quiet:false, qFrom:'18:00', qTo:'07:00', weekend:false, sound:true, stay:true, summary:true, sumAt:'08:00' };
+const ndKey = () => 'fdc_desk_prefs_' + (authUser ? authUser.uid : 'local');
+function ndPrefs(){ let p = {}; try{ p = JSON.parse(localStorage.getItem(ndKey()) || '{}') || {}; }catch(e){} const o = Object.assign({}, ND_DEF, p); o.cats = Object.assign({}, ...ND_CATS.map(c => ({ [c[0]]:true })), p.cats || {}); return o; }
+function ndSave(o){ try{ localStorage.setItem(ndKey(), JSON.stringify(o)); }catch(e){} }
+const ndCat = id => /^tk-new/.test(id) ? 'assign' : /^tk-over/.test(id) ? 'overdue' : /^tk-due/.test(id) ? 'due' : /^doc-ap/.test(id) ? 'approval' : /^sr-/.test(id) ? 'request' : /^pc-/.test(id) ? 'petty' : /^lv-/.test(id) ? 'leave' : /^veh-/.test(id) ? 'vehicle' : /^stk-/.test(id) ? 'stock' : 'other';
+const ndPersist = c => /^(overdue|due|approval|petty|vehicle|stock)$/.test(c);       // still needs doing: may be repeated
+const ndMin = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : 0; };
+function ndQuietNow(o){
+  const d = new Date(), m = d.getHours() * 60 + d.getMinutes();
+  if(o.weekend && (d.getDay() === 5 || d.getDay() === 6)) return true;                  // Friday & Saturday
+  if(!o.quiet) return false; const a = ndMin(o.qFrom), b = ndMin(o.qTo);
+  return a === b ? false : a < b ? (m >= a && m < b) : (m >= a || m < b);
+}
+let ndAudio = null;
+function ndBeep(){ try{ ndAudio = ndAudio || new (window.AudioContext || window.webkitAudioContext)(); const t = ndAudio.currentTime;
+  [[880, 0], [1320, 0.13]].forEach(([f, s]) => { const o = ndAudio.createOscillator(), g = ndAudio.createGain(); o.frequency.value = f; o.type = 'sine'; g.gain.setValueAtTime(0.0001, t + s); g.gain.exponentialRampToValueAtTime(0.18, t + s + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + s + 0.22); o.connect(g).connect(ndAudio.destination); o.start(t + s); o.stop(t + s + 0.25); }); }catch(e){} }
+// shows one desktop notification if this user's settings allow it; go = code run when it is clicked
+function ndShow(title, body, tag, go, cat, force){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return false;
+  const o = ndPrefs(); if(!force && (!o.on || (cat && o.cats[cat] === false) || ndQuietNow(o))) return false;
+  try{ const n = new Notification(title, { body, tag, requireInteraction:!!o.stay, silent:true });
+    n.onclick = () => { try{ window.focus(); }catch(e){} try{ (new Function(go || ''))(); }catch(e){} n.close(); };
+    if(o.sound) ndBeep(); return true; }catch(e){ return false; }
+}
+function ndCheck(){
+  if(!authUser || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const o = ndPrefs(); if(!o.on || ndQuietNow(o)) return;                                  // in quiet hours nothing is marked, so it shows afterwards
+  const sk = 'fdc_desk_sent_' + authUser.uid; let sent = null; try{ sent = JSON.parse(localStorage.getItem(sk) || 'null'); }catch(e){}
+  const first = !sent; sent = sent || {}; const now = Date.now();
+  const items = ntList().filter(x => !/^stk-/.test(x.id)).map(x => Object.assign({ cat:ndCat(x.id) }, x)).filter(x => o.cats[x.cat] !== false);
+  const due = items.filter(x => !sent[x.id] || (o.repeat && ndPersist(x.cat) && now - sent[x.id] >= o.repeat * 60000));
+  if(first){                                                                             // the first time: one note for everything already waiting
+    if(items.length) ndShow('Administration — ' + items.length + ' notification' + (items.length === 1 ? '' : 's'), items.slice(0, 4).map(x => x.icon + ' ' + x.text).join('\n') + (items.length > 4 ? '\n+' + (items.length - 4) + ' more' : ''), 'fdc-nt-first', "ntOpenPanel()");
+  } else if(due.length > 3){
+    ndShow(due.length + ' notifications', due.slice(0, 4).map(x => x.icon + ' ' + x.text).join('\n') + (due.length > 4 ? '\n+' + (due.length - 4) + ' more' : ''), 'fdc-nt-' + now, "ntOpenPanel()");
+  } else due.forEach(x => ndShow(x.icon + ' ' + x.text, (x.sub || '') + (sent[x.id] ? (x.sub ? ' · ' : '') + 'reminder' : ''), 'fdc-nt-' + x.id, x.go, x.cat));
+  items.forEach(x => { if(first || due.includes(x)) sent[x.id] = now; });
+  Object.keys(sent).forEach(k => { if(now - sent[k] > 30 * 864e5) delete sent[k]; });
+  try{ localStorage.setItem(sk, JSON.stringify(sent)); }catch(e){}
+  // the morning summary
+  const dk = 'fdc_desk_sum_' + authUser.uid; let last = ''; try{ last = localStorage.getItem(dk) || ''; }catch(e){}
+  const d = new Date(), mins = d.getHours() * 60 + d.getMinutes();
+  if(first){ try{ localStorage.setItem(dk, vToday()); }catch(e){} last = vToday(); }             // the first note already listed everything
+  if(o.summary && last !== vToday() && mins >= ndMin(o.sumAt)){
+    const c = k => items.filter(x => x.cat === k).length, parts = [[c('overdue'), 'overdue'], [c('due'), 'due today'], [c('approval'), 'to approve'], [c('petty'), 'petty cash']].filter(x => x[0]).map(x => x[0] + ' ' + x[1]);
+    let st = []; try{ st = typeof stkAlertList === 'function' && o.cats.stock !== false ? stkAlertList() : []; }catch(e){}
+    if(st.length) parts.push(st.length + ' stock item' + (st.length === 1 ? '' : 's') + ' low or out');
+    if(parts.length) ndShow('Good ' + (d.getHours() < 12 ? 'morning' : d.getHours() < 17 ? 'afternoon' : 'evening') + ', ' + String(authUser.name || '').split(' ')[0], 'Today: ' + parts.join(', ') + '.\nClick to see your notifications.', 'fdc-nt-summary', "ntOpenPanel()", null);
+    try{ localStorage.setItem(dk, vToday()); }catch(e){}
+  }
+}
+let ndTimer = 0; function ndSoon(){ clearTimeout(ndTimer); ndTimer = setTimeout(() => { try{ ndCheck(); }catch(e){} }, 1800); }
+setInterval(() => { try{ ndCheck(); stkAlertCheck && stkAlertCheck(); }catch(e){} }, 60000);   // picks up the end of quiet hours, repeats and the summary time
+function ntOpenPanel(){ const b = [...document.querySelectorAll('.nt-btn')].find(x => x.offsetParent); if(b && !document.getElementById('nt-panel')) ntToggle(b); }
+// the settings window
+function openNdSettings(){
+  const o = ndPrefs(), perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+  const permTxt = { granted:'<b class="text-emerald-600">Allowed</b>', denied:'<b class="text-rose-600">Blocked</b> — allow notifications for this site in the browser settings (padlock next to the address).', default:'<b class="text-amber-600">Not allowed yet</b>', unsupported:'<b>Not supported in this browser</b>' }[perm];
+  const tg = (id, on, label, sub) => `<label class="flex items-start gap-3 py-2 cursor-pointer"><input type="checkbox" id="${id}" ${on ? 'checked' : ''} class="mt-0.5 w-4 h-4"><span><span class="text-sm text-slate-800">${label}</span>${sub ? `<span class="block text-[11.5px] text-slate-500">${sub}</span>` : ''}</span></label>`;
+  const tm = (id, v) => `<input type="time" id="${id}" value="${esc(v)}" class="${VEH_INPUT} !py-1.5 !w-32">`;
+  openModal('Desktop reminders', `
+    <div class="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 mb-4 text-sm flex items-center justify-between gap-3 flex-wrap"><span>Notifications on this device: ${permTxt}</span>
+      <span class="flex gap-2">${perm === 'default' ? `<button type="button" onclick="ndAllow()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white">Allow notifications</button>` : ''}${perm === 'granted' ? `<button type="button" onclick="ndTest()" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Send a test</button>` : ''}</span></div>
+    ${tg('nd-on', o.on, '<b>Show desktop reminders</b>', 'Pop-up notices on this computer while the app is open in a browser tab (it can be in the background).')}
+    <div class="text-xs font-bold uppercase tracking-wide text-slate-500 mt-3 mb-1">Remind me about</div>
+    <div class="grid sm:grid-cols-2 gap-x-4 rounded-lg border border-slate-200 px-3 py-1">${ND_CATS.map(([k, ic, l]) => `<label class="flex items-center gap-2.5 py-1.5 cursor-pointer text-sm text-slate-700"><input type="checkbox" class="nd-cat w-4 h-4" value="${k}" ${o.cats[k] !== false ? 'checked' : ''}> <span>${ic}</span> ${l}</label>`).join('')}</div>
+    <div class="grid sm:grid-cols-2 gap-4 mt-4">
+      <div><label class="${VEH_LBL}">Repeat reminders for things still to do</label><select id="nd-rep" class="${VEH_INPUT} w-full">${[[0, 'Only once'], [30, 'Every 30 minutes'], [60, 'Every hour'], [120, 'Every 2 hours'], [240, 'Every 4 hours'], [480, 'Twice a day']].map(([v, l]) => `<option value="${v}" ${+o.repeat === v ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="text-[11px] text-slate-400 mt-1">Overdue tasks, approvals, petty cash to sign, vehicle and stock alerts.</div></div>
+      <div><label class="${VEH_LBL}">Morning summary</label><div class="flex items-center gap-2"><input type="checkbox" id="nd-sum" ${o.summary ? 'checked' : ''} class="w-4 h-4"> <span class="text-sm text-slate-700">at</span> ${tm('nd-sumat', o.sumAt)}</div><div class="text-[11px] text-slate-400 mt-1">One notice a day with what is overdue, due today and waiting.</div></div>
+    </div>
+    <div class="mt-4 rounded-lg border border-slate-200 px-3 py-2">
+      ${tg('nd-quiet', o.quiet, 'Quiet hours', 'No pop-ups in this time; what came in is shown when it ends.')}
+      <div class="flex items-center gap-2 pl-7 pb-2 text-sm text-slate-600">from ${tm('nd-qf', o.qFrom)} to ${tm('nd-qt', o.qTo)}</div>
+      ${tg('nd-wk', o.weekend, 'Quiet on Friday and Saturday')}
+    </div>
+    <div class="mt-2">${tg('nd-sound', o.sound, 'Play a sound')}${tg('nd-stay', o.stay, 'Keep each notice on screen until I close it')}</div>
+    <div class="flex justify-end gap-2.5 mt-5"><button class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="closeModal()">Cancel</button><button class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="ndSaveForm()">Save</button></div>`, false);
+}
+function ndReadForm(){
+  const v = id => document.getElementById(id), o = ndPrefs();
+  o.on = v('nd-on').checked; o.cats = {}; document.querySelectorAll('.nd-cat').forEach(c => o.cats[c.value] = c.checked);
+  o.repeat = +v('nd-rep').value || 0; o.summary = v('nd-sum').checked; o.sumAt = v('nd-sumat').value || '08:00';
+  o.quiet = v('nd-quiet').checked; o.qFrom = v('nd-qf').value || '18:00'; o.qTo = v('nd-qt').value || '07:00'; o.weekend = v('nd-wk').checked; o.sound = v('nd-sound').checked; o.stay = v('nd-stay').checked;
+  return o;
+}
+function ndSaveForm(){ const o = ndReadForm(); ndSave(o); try{ localStorage.setItem(STK_NOTIFY_KEY, o.on && o.cats.stock ? '1' : '0'); }catch(e){} closeModal(); toast('Reminder settings saved.'); rerenderMain(); ndSoon(); }
+function ndAllow(){ if(!('Notification' in window)) return; Notification.requestPermission().then(() => { const o = document.getElementById('nd-on') ? ndReadForm() : null; if(o) ndSave(o); openNdSettings(); ndSoon(); }); }
+function ndTest(){ const o = document.getElementById('nd-on') ? ndReadForm() : ndPrefs(); ndSave(o); const ok = ndShow('🔔 Test reminder', 'This is how your reminders will look.' + (ndQuietNow(o) ? '\n(Quiet hours are on now — real reminders wait until they end.)' : ''), 'fdc-nt-test', "ntOpenPanel()", null, true); if(!ok) toast('Could not show a notification — check the browser settings.', true); }
 
 /* ---------- daily summary email (first person to open the app each day sends it, through EmailJS) ---------- */
 async function dailyDigest(){
@@ -10548,14 +10698,14 @@ function plusBoot(){
 }
 
 function viewComplaints(){
-  const st = vehUi.cpStatus || '', q = String(vehUi.cpQ || '').toLowerCase().trim(), dep = vehUi.cpDept || '', all = state.complaints;
-  const list = all.filter(c => (!st || (c.status || 'Open') === st) && (!dep || c.department === dep) && (!q || [c.no, c.title, c.description, c.department, c.raisedBy, c.location, c.assignedTo].join(' ').toLowerCase().includes(q)))
-    .sort((a, b) => cpDone(a.status) - cpDone(b.status) || String(b.date || '').localeCompare(String(a.date || '')));
+  const st = vehUi.cpStatus || '', q = String(vehUi.cpQ || '').toLowerCase().trim(), dep = vehUi.cpDept || '', lvf = vehUi.cpLevel || '', all = state.complaints;
+  const list = all.filter(c => (!st || (c.status || 'Open') === st) && (!dep || c.department === dep) && (!lvf || cpLevel(c) === lvf) && (!q || [c.no, c.title, c.description, c.department, c.raisedBy, c.location, c.assignedTo].join(' ').toLowerCase().includes(q)))
+    .sort((a, b) => cpDone(a.status) - cpDone(b.status) || (cpDone(a.status) ? 0 : CP_LEVELS.indexOf(cpLevel(b)) - CP_LEVELS.indexOf(cpLevel(a))) || String(b.date || '').localeCompare(String(a.date || '')));
   const cnt = s => all.filter(c => (c.status || 'Open') === s).length, depts = [...new Set(all.map(c => c.department).filter(Boolean))].sort();
   const kpis = vKpis(statCard('Open', fmtNum(cnt('Open')), 'Not yet looked at', cnt('Open') ? 'rose' : 'slate') + statCard('Pending', fmtNum(cnt('Pending')), 'Waiting on an action', cnt('Pending') ? 'amber' : 'slate') + statCard('Review', fmtNum(cnt('Review')), 'Solution being reviewed', 'brand') + statCard('Resolved', fmtNum(cnt('Resolved') + cnt('Implemented')), fmtNum(cnt('Implemented')) + ' implemented · ' + fmtNum(cnt('Resolved')) + ' to implement', 'emerald'));
   return vHead('Admin Complaints', 'Issues raised by departments: the suggested solutions as they are worked on, and the final resolution.', vBtnPrimary('+ Complaint', "openCpEdit('')")) + kpis +
-    `<div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['', 'All (' + all.length + ')']].concat(CP_STATUS.map(s => [s, s + ' (' + cnt(s) + ')'])), st, 'cpSetStatus')}${vSelect('cpDept', depts, dep, 'All departments')}<input type="search" id="cp-q" value="${esc(vehUi.cpQ || '')}" oninput="vehUi.cpQ = this.value; clearTimeout(window._cpQt); window._cpQt = setTimeout(rerenderMain, 250)" placeholder="Search…" class="${VEH_INPUT} flex-1 min-w-[12rem]"></div>` +
-    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Complaint' }, { t:'Raised by' }, { t:'Processing' }, { t:'Status' }])}<tbody>${list.map(c => { const sol = c.processing || []; return `<tr class="${vTr} cursor-pointer align-top" onclick="openCpView('${c.id}')">${vTd(`<div class="font-semibold text-slate-800">${esc(c.title || '—')}</div><div class="text-[11px] text-slate-400">${esc(c.no || '')} · ${c.date ? vDate(c.date) : ''}${c.location ? ' · ' + esc(c.location) : ''}</div>`, { first:1 })}${vTd(`${esc(c.department || '—')}<div class="text-[11px] text-slate-400">${esc(c.raisedBy || '')}</div>`)}${vTd(c.resolution && c.resolution.text ? `<div class="text-[12.5px] text-emerald-700 max-w-[22rem]">✓ ${esc(c.resolution.text)}</div>` : sol.length ? `<div class="text-[12.5px] text-slate-600 max-w-[22rem] truncate">${esc(sol[sol.length - 1].text)}</div><div class="text-[11px] text-slate-400">${sol.length} suggestion${sol.length === 1 ? '' : 's'}</div>` : '<span class="text-xs text-slate-400">No suggestions yet</span>')}${vTd(cpPill(c.status) + (c.assignedTo ? `<div class="text-[11px] text-slate-400 mt-0.5">${esc(c.assignedTo)}</div>` : ''), { last:1 })}</tr>`; }).join('')}</tbody></table>`)
+    `<div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['', 'All (' + all.length + ')']].concat(CP_STATUS.map(s => [s, s + ' (' + cnt(s) + ')'])), st, 'cpSetStatus')}${vSelect('cpDept', depts, dep, 'All departments')}${vSelect('cpLevel', CP_LEVELS.slice().reverse().map(l => [l, l + ' (' + all.filter(c => cpLevel(c) === l && !cpDone(c.status)).length + ' open)']), lvf, 'All levels')}<input type="search" id="cp-q" value="${esc(vehUi.cpQ || '')}" oninput="vehUi.cpQ = this.value; clearTimeout(window._cpQt); window._cpQt = setTimeout(rerenderMain, 250)" placeholder="Search…" class="${VEH_INPUT} flex-1 min-w-[12rem]"></div>` +
+    (list.length ? vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Complaint' }, { t:'Level' }, { t:'Raised by' }, { t:'Processing' }, { t:'Status' }])}<tbody>${list.map(c => { const sol = c.processing || []; return `<tr class="${vTr} cursor-pointer align-top" onclick="openCpView('${c.id}')">${vTd(`<div class="font-semibold text-slate-800">${esc(c.title || '—')}</div><div class="text-[11px] text-slate-400">${esc(c.no || '')} · ${c.date ? vDate(c.date) : ''}${c.location ? ' · ' + esc(c.location) : ''}</div>`, { first:1 })}${vTd(canManageInventory() && !cpDone(c.status) ? cpLevelSel(c) : cpLevelPill(c))}${vTd(`${esc(c.department || '—')}<div class="text-[11px] text-slate-400">${esc(c.raisedBy || '')}</div>`)}${vTd(c.resolution && c.resolution.text ? `<div class="text-[12.5px] text-emerald-700 max-w-[22rem]">✓ ${esc(c.resolution.text)}</div>` : sol.length ? `<div class="text-[12.5px] text-slate-600 max-w-[22rem] truncate">${esc(sol[sol.length - 1].text)}</div><div class="text-[11px] text-slate-400">${sol.length} suggestion${sol.length === 1 ? '' : 's'}</div>` : '<span class="text-xs text-slate-400">No suggestions yet</span>')}${vTd(cpPill(c.status) + (c.assignedTo ? `<div class="text-[11px] text-slate-400 mt-0.5">${esc(c.assignedTo)}</div>` : ''), { last:1 })}</tr>`; }).join('')}</tbody></table>`)
       : `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(all.length ? 'No complaints match.' : 'No complaints yet. Use "+ Complaint" to record one.')}</div>`);
 }
 function cpSetStatus(v){ vehUi.cpStatus = v; rerenderMain(); }
@@ -10565,6 +10715,7 @@ function openCpEdit(id){
     vGrid(2, vF('Complaint', 'title', c ? c.title : '', 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="e.g. Water leakage in the 3rd floor pantry"' }) +
       `<div><label class="${VEH_LBL}">Raised by (department)${vReqStar}</label><input name="department" list="cp-depts" value="${esc(c ? c.department : (authUser && authUser.department) || '')}" class="${VEH_FIELD}"></div>` + vF('Raised by (person)', 'raisedBy', c ? c.raisedBy : (authUser ? authUser.name : ''), 'text', { attrs:' list="cp-people"' }) +
       vF('Date raised', 'date', c ? c.date : vToday(), 'date', { req:1 }) + vF('Location', 'location', c ? c.location : '', 'text') + vF('Assigned to', 'assignedTo', c ? c.assignedTo : '', 'text', { attrs:' list="cp-people"' }) + vS('Status', 'status', CP_STATUS, c ? c.status || 'Open' : 'Open') +
+      `<div class="sm:col-span-2"><label class="${VEH_LBL}">Level of complaint${vReqStar}</label><div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">${CP_LEVELS.map(l => `<label class="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer has-[:checked]:border-brand-500 has-[:checked]:ring-1 has-[:checked]:ring-brand-500"><input type="radio" name="level" value="${l}" ${cpLevel(c || {}) === l ? 'checked' : ''} class="mt-0.5"><span><span class="text-sm font-semibold text-slate-800">${l}</span><span class="block text-[11px] text-slate-500 leading-snug">${esc(CP_LEVEL_INFO[l])}</span></span></label>`).join('')}</div></div>` +
       vTa('Details', 'description', c ? c.description : '', { span:'sm:col-span-2', rows:3 }) + `<div class="sm:col-span-2"><label class="${VEH_LBL}">Attachment (photos, email…)</label>${attRow('cpdoc', c && c.docFile, 'Attach photos or a document (PDF or images)', c && c.link)}</div>`) +
     vFoot(c ? 'Save' : 'Record complaint', `saveCpEdit('${id || ''}')`, c && canManageInventory() ? `deleteCp('${id}')` : ''), true);
 }
@@ -10572,15 +10723,16 @@ async function saveCpEdit(id){
   const o = vehFormObj(document.getElementById('vform')); if(!String(o.title || '').trim()) return vFail('Enter the complaint.'); if(!String(o.department || '').trim()) return vFail('Enter the department that raised it.'); if(!o.date) return vFail('Enter the date.');
   const c = id ? cpById(id) : null, url = (c && c.link) || '', status = CP_STATUS.includes(o.status) ? o.status : 'Open';
   if(cpDone(status) && !(c && c.resolution && c.resolution.text)) return vFail('Write the final resolution first — open the complaint and use "Resolve".');
-  const rec = { id:id || undefined, title:o.title.trim(), department:o.department.trim(), raisedBy:String(o.raisedBy || '').trim(), date:o.date, location:String(o.location || '').trim(), assignedTo:String(o.assignedTo || '').trim(), status, description:String(o.description || '').trim(), link:url };
+  const rec = { id:id || undefined, title:o.title.trim(), department:o.department.trim(), raisedBy:String(o.raisedBy || '').trim(), date:o.date, location:String(o.location || '').trim(), assignedTo:String(o.assignedTo || '').trim(), status, level:CP_LEVELS.includes(o.level) ? o.level : 'Medium', description:String(o.description || '').trim(), link:url };
   if(!id){ rec.no = cpNextNo(); rec.processing = []; rec.history = [{ at:Date.now(), by:authUser ? authUser.name : '', text:'Raised' }]; }
-  else if(c.status !== status){ rec.history = (c.history || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:'Status: ' + status }]); rec.implemented = status === 'Implemented' ? (c.implemented || { date:vToday(), by:authUser ? authUser.name : '', note:'' }) : null; }
+  if(c && cpLevel(c) !== rec.level) rec.history = (c.history || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:'Level: ' + rec.level }]);
+  if(id && c.status !== status){ rec.history = (rec.history || c.history || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', text:'Status: ' + status }]); rec.implemented = status === 'Implemented' ? (c.implemented || { date:vToday(), by:authUser ? authUser.name : '', note:'' }) : null; }
   const nid = await vehSave('complaints', rec); attSaveTo('complaints', nid || id, 'docFile', 'cpdoc', rec.no || (c && c.no) || 'Complaint'); closeModal(); rerenderMain(); toast(id ? 'Saved.' : 'Complaint ' + rec.no + ' recorded.'); openCpView(id || nid);
 }
 function openCpView(id, editIdx){
   const c = cpById(id); if(!c) return; const sol = c.processing || [], res = c.resolution || {}, admin = canManageInventory();
   const canEd = s => admin || !authUser || !s.by || s.by === authUser.name;                 // the person who wrote it, or an admin
-  openModal((c.no ? c.no + ' · ' : '') + (c.title || ''), `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2">${cpPill(c.status)}<span class="text-xs text-slate-400">Raised ${c.date ? vDate(c.date) : ''} by ${esc(c.department || '')}${c.raisedBy ? ' (' + esc(c.raisedBy) + ')' : ''}${c.location ? ' · ' + esc(c.location) : ''}</span></div>
+  openModal((c.no ? c.no + ' · ' : '') + (c.title || ''), `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${cpPill(c.status)}<span id="cp-view-level">${admin ? cpLevelSel(c) : cpLevelPill(c)}</span><span class="text-xs text-slate-400">Raised ${c.date ? vDate(c.date) : ''} by ${esc(c.department || '')}${c.raisedBy ? ' (' + esc(c.raisedBy) + ')' : ''}${c.location ? ' · ' + esc(c.location) : ''}</span></div>
       <div class="inline-flex rounded-lg bg-slate-100 p-1 gap-1">${CP_STATUS.filter(s => s !== 'Resolved').map(s => `<button onclick="${s === 'Implemented' ? `cpImplemented('${c.id}')` : `cpSetCpStatus('${c.id}', '${s}')`}" class="px-3 py-1 rounded-md text-xs font-semibold ${(c.status || 'Open') === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${s}</button>`).join('')}</div></div>
     ${c.description ? `<div class="text-sm text-slate-700 whitespace-pre-wrap mb-3">${esc(c.description)}</div>` : ''}${c.assignedTo ? `<div class="text-xs text-slate-500 mb-3">Assigned to <b>${esc(c.assignedTo)}</b></div>` : ''}${attView(c.docFile, c.link, 'Attachment') ? `<div class="text-xs mb-3">${attView(c.docFile, c.link, 'Attachment')}</div>` : ''}
     ${vSec('Processing — suggested solutions')}
@@ -10663,7 +10815,7 @@ function wrAutoComplaints(start, end){
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
     .map(c => { const sug = (c.processing || []).map((s, i) => (i + 1) + '. ' + s.text + (s.challenge ? '\n   Challenge: ' + s.challenge : '')), res = c.resolution && c.resolution.text;
       return { complaint:(c.no ? c.no + ' — ' : '') + (c.title || '') + (c.location ? '\nLocation: ' + c.location : '') + (c.description ? '\n' + c.description : ''),
-        raised:[c.department, c.raisedBy, c.date ? pcOrdinalDate(c.date) : ''].filter(Boolean).join('\n'), status:c.status || 'Open',
+        raised:[c.department, c.raisedBy, c.date ? pcOrdinalDate(c.date) : ''].filter(Boolean).join('\n'), status:(c.status || 'Open') + '\nLevel: ' + cpLevel(c),
         processing:[sug.length ? 'Suggested solutions:\n' + sug.join('\n') : (res ? '' : 'No suggestions yet.'), res ? 'Resolution' + (c.resolution.date ? ' (' + pcOrdinalDate(c.resolution.date) + ')' : '') + ': ' + res : '', c.status === 'Implemented' && c.implemented ? 'Implemented' + (c.implemented.date ? ' ' + pcOrdinalDate(c.implemented.date) : '') + (c.implemented.by ? ' by ' + c.implemented.by : '') + (c.implemented.note ? ': ' + c.implemented.note : '') : ''].filter(Boolean).join('\n') }; });
 }
 
@@ -15960,7 +16112,7 @@ try{ window.addEventListener('resize', () => { clearTimeout(window._dashFitT); w
 function render(){
   try{ setTimeout(dashFitValues, 0); setTimeout(fitAppTitle, 0); }catch(e){}
   try{ setTimeout(() => { try{ anyaSync(); }catch(e){} }, 0); }catch(e){}
-  try{ stkAlertSoon(); }catch(e){}
+  try{ stkAlertSoon(); ndSoon(); }catch(e){}
   const activeEl = document.activeElement;
   const activeId = (activeEl && activeEl.id && el_contains_main(activeEl)) ? activeEl.id : null;
   const selStart = (activeId && typeof activeEl.selectionStart === 'number') ? activeEl.selectionStart : null;
@@ -16806,6 +16958,7 @@ function stkAlertList(){
   return out;
 }
 function stkDesktop(title, body, tag){
+  if(typeof ndShow === 'function') return ndShow(title, body, tag, "vehUi.slLow = 'low'; goTo('levels')", 'stock');
   if(!('Notification' in window) || Notification.permission !== 'granted') return false;
   try{ const n = new Notification(title, { body, tag, requireInteraction:true }); n.onclick = () => { try{ window.focus(); }catch(e){} vehUi.slLow = 'low'; goTo('levels'); n.close(); }; return true; }catch(e){ return false; }
 }
@@ -16830,7 +16983,7 @@ function stkAlertCheck(){
   }
   // once a day: what is still low or out at my locations
   let last = ''; try{ last = localStorage.getItem(dkey) || ''; }catch(e){}
-  if(last !== vToday() && 'Notification' in window && Notification.permission === 'granted'){
+  if(false && last !== vToday() && 'Notification' in window && Notification.permission === 'granted'){       // now part of the morning summary (desktop reminder settings)
     const list = stkAlertList();
     if(list.length){ const outN = list.filter(a => a.s === 'out').length;
       stkDesktop('Stock reminder — ' + locs.map(l => l.code || l.name).slice(0, 4).join(', ') + (locs.length > 4 ? '…' : ''), (outN ? outN + ' item' + (outN === 1 ? '' : 's') + ' out of stock' : '') + (outN && list.length - outN ? ', ' : '') + (list.length - outN ? (list.length - outN) + ' at or below the re-order level' : '') + '.\n' + list.slice(0, 4).map(a => displayName(a.p) + ' (' + (a.l.code || a.l.name) + ': ' + fmtNum(a.q) + ')').join(', ') + (list.length > 4 ? '…' : '') + '\nClick to open Stock Levels.', 'fdc-stock-daily'); }
@@ -16839,6 +16992,7 @@ function stkAlertCheck(){
 }
 function stkNotifySet(on){
   try{ localStorage.setItem(STK_NOTIFY_KEY, on ? '1' : '0'); }catch(e){}
+  try{ const o = ndPrefs(); o.cats.stock = !!on; if(on) o.on = true; ndSave(o); }catch(e){}
   if(on && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(() => { rerenderMain(); stkAlertCheck(); });
   else { toast(on ? 'Stock reminders are on.' : 'Stock reminders are off on this device.'); rerenderMain(); if(on){ try{ localStorage.removeItem('fdc_stock_daily_' + (authUser ? authUser.uid : '')); }catch(e){} stkAlertCheck(); } }
 }
@@ -16853,6 +17007,7 @@ function stkNotifyBar(){
     <span class="flex-1"></span>
     ${on && perm === 'default' ? `<button type="button" onclick="stkNotifySet(true)" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white">Allow notifications</button>` : ''}
     ${perm === 'denied' && on ? '<span class="text-[11px] text-slate-400">Allow notifications for this site in the browser settings.</span>' : ''}
+    <button type="button" onclick="openNdSettings()" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-brand-600 hover:underline">Personalise</button>
     <button type="button" onclick="stkNotifySet(${on ? 'false' : 'true'})" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">${on ? 'Turn off' : 'Turn on'}</button></div>`;
 }
 function viewStockLevels(){
@@ -17161,6 +17316,7 @@ function deleteProduct(id){
 function locTag(locId){
   const l = getLocation(locId);
   if(!l) return '<span class="text-slate-400">—</span>';
+  if(l.external) return `<span title="Outside the corporation" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium max-w-[14rem] truncate">↗ ${esc(l.name)}</span>`;
   return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium"><span class="w-1.5 h-1.5 rounded-full" style="background:${l.color}"></span>${esc(l.code)}</span>`;
 }
 function movementRow(m, compact){
@@ -19198,7 +19354,7 @@ function assetLocationTotals(locId){ return state.assets.filter(a=>a.locationId=
 function getFilteredAssets(){
   const f = ui.assetsFilter;
   let list = [...state.assets];
-  if(f.locationId) list = list.filter(a=>a.locationId===f.locationId);
+  if(f.locationId) list = list.filter(a=> f.locationId === '__ext' ? isExtLoc(a.locationId) : a.locationId===f.locationId);
   if(f.department){
     const q = f.department.toLowerCase();
     list = list.filter(a=>(a.department||'').toLowerCase().includes(q));
@@ -19225,7 +19381,7 @@ function assetStatusBadge(status){
 function viewAssets(){
   const f = ui.assetsFilter;
   const list = getFilteredAssets().sort(byTag);
-  const locOptions = LOCATIONS.map(l=>`<option value="${l.id}" ${f.locationId===l.id?'selected':''}>${esc(l.name)}</option>`).join('');
+  const locOptions = LOCATIONS.map(l=>`<option value="${l.id}" ${f.locationId===l.id?'selected':''}>${esc(l.name)}</option>`).join('') + (state.assets.some(a=>isExtLoc(a.locationId)) ? `<option value="__ext" ${f.locationId==='__ext'?'selected':''}>↗ Outside the corporation</option>` : '');
 
   const rows = list.map(a=>{
     const loc = getLocation(a.locationId);
@@ -19349,7 +19505,7 @@ function viewAssets(){
 function getFilteredAssetTransactions(){
   const f = ui.assetTransactionsFilter;
   let list = [...state.assetTransfers];
-  if(f.locationId) list = list.filter(t=> t.fromLocationId===f.locationId || t.toLocationId===f.locationId);
+  if(f.locationId) list = list.filter(t=> f.locationId === '__ext' ? (isExtLoc(t.fromLocationId) || isExtLoc(t.toLocationId)) : (t.fromLocationId===f.locationId || t.toLocationId===f.locationId));
   if(f.dateFrom) list = list.filter(t=>t.date >= f.dateFrom);
   if(f.dateTo) list = list.filter(t=>t.date <= f.dateTo);
   if(f.search){
@@ -21777,7 +21933,7 @@ function viewAssetTransactions(){
   const f = ui.assetTransactionsFilter;
   let list = getFilteredAssetTransactions();
   list.sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt));
-  const locOptions = LOCATIONS.map(l=>`<option value="${l.id}" ${f.locationId===l.id?'selected':''}>${esc(l.name)}</option>`).join('');
+  const locOptions = LOCATIONS.map(l=>`<option value="${l.id}" ${f.locationId===l.id?'selected':''}>${esc(l.name)}</option>`).join('') + (state.assetTransfers.some(t=>isExtLoc(t.toLocationId)||isExtLoc(t.fromLocationId)) ? `<option value="__ext" ${f.locationId==='__ext'?'selected':''}>↗ Outside the corporation</option>` : '');
 
   const rows = list.map(t=>{
     const a = getAsset(t.assetId);
@@ -22242,7 +22398,7 @@ function openAssetForm(id){
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5">Location *</label>
         <select id="af-location" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
-          ${LOCATIONS.map(l=>`<option value="${l.id}" ${editing&&editing.locationId===l.id?'selected':''}>${esc(l.name)} (${esc(l.code)})</option>`).join('')}
+          ${editing && isExtLoc(editing.locationId) ? `<option value="${esc(editing.locationId)}" selected>↗ ${esc(getLocation(editing.locationId).name)} (outside the corporation)</option>` : ''}${LOCATIONS.map(l=>`<option value="${l.id}" ${editing&&editing.locationId===l.id?'selected':''}>${esc(l.name)} (${esc(l.code)})</option>`).join('')}
         </select>
       </div>
     </div>
@@ -22348,9 +22504,16 @@ function openTransferForm(assetId){
     <div class="grid grid-cols-2 gap-4 mb-4">
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5">Transfer to location *</label>
-        <select id="tf-location" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
+        <select id="tf-location" onchange="tfLocChanged(this)" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
           ${LOCATIONS.map(l=>`<option value="${l.id}" ${asset.locationId===l.id?'selected':''}>${esc(l.name)} (${esc(l.code)})</option>`).join('')}
+          <option value="__ext" ${isExtLoc(asset.locationId)?'selected':''}>↗ Outside the corporation…</option>
         </select>
+      </div>
+      <div id="tf-ext-box" class="col-span-2 ${isExtLoc(asset.locationId)?'':'hidden'}">
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Location outside the corporation *</label>
+        <input type="text" id="tf-ext" value="${isExtLoc(asset.locationId)?esc(getLocation(asset.locationId).name):''}" list="tf-ext-list" placeholder="e.g. Ministry of Housing, Malé — or the supplier for repair" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <datalist id="tf-ext-list">${[...new Set(state.assets.map(a=>a.locationId).concat(state.assetTransfers.map(t=>t.toLocationId)).filter(isExtLoc).map(x=>getLocation(x).name))].map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>
+        <div class="text-[11px] text-slate-400 mt-1">The asset is shown as "Outside" until it is transferred back to one of the corporation's locations.</div>
       </div>
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5">New department</label>
@@ -22378,12 +22541,16 @@ function openTransferForm(assetId){
   `;
   openModal('Transfer / Handover', body);
 }
+function tfLocChanged(sel){ const b = document.getElementById('tf-ext-box'); if(!b) return; b.classList.toggle('hidden', sel.value !== '__ext'); if(sel.value === '__ext'){ const i = document.getElementById('tf-ext'); if(i) i.focus(); } }
 function saveTransfer(assetId){
   const errEl = document.getElementById('tf-error');
   errEl.classList.add('hidden');
   const asset = getAsset(assetId);
   if(!asset){ errEl.textContent='Asset not found.'; errEl.classList.remove('hidden'); return; }
-  const toLocationId = document.getElementById('tf-location').value;
+  let toLocationId = document.getElementById('tf-location').value;
+  if(toLocationId === '__ext'){ const ext = String((document.getElementById('tf-ext') || {}).value || '').replace(/\s+/g, ' ').trim();
+    if(!ext){ errEl.textContent='Type the location outside the corporation.'; errEl.classList.remove('hidden'); return; }
+    toLocationId = LOC_EXT + ext; }
   const toDepartment = document.getElementById('tf-department').value.trim();
   const toAssignedTo = document.getElementById('tf-assignedto').value.trim();
   const date = document.getElementById('tf-date').value;

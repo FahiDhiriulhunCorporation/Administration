@@ -1970,7 +1970,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.315';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.317';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -13534,6 +13534,8 @@ function clWeekPanel(loc, week){
       <div class="flex items-center gap-x-4 gap-y-2 flex-wrap text-xs font-semibold">
         <button onclick="clPdf('${esc(loc.id)}', '${week}', false, this)" class="text-brand-600 hover:underline">Download blank (PDF)</button>
         <button onclick="clPdf('${esc(loc.id)}', '${week}', true, this)" class="text-brand-600 hover:underline">Download filled (PDF)</button>
+        <button onclick="clDocx('${esc(loc.id)}', '${week}', false, this)" class="text-brand-600 hover:underline">Blank (Word)</button>
+        <button onclick="clDocx('${esc(loc.id)}', '${week}', true, this)" class="text-brand-600 hover:underline">Filled (Word)</button>
         <button onclick="openClLink('${esc(loc.id)}', '${week}')" class="text-brand-600 hover:underline">${clSigned(sh) ? 'Change signed copy' : '📎 Attach signed copy'}</button>
         <button onclick="clSetComplete('${esc(loc.id)}', '${week}', ${sh && sh.complete ? 'false' : 'true'})" class="${sh && sh.complete ? 'text-slate-500' : 'text-emerald-600'} hover:underline">${sh && sh.complete ? 'Reopen week' : 'Mark week complete'}</button>
         ${canManageInventory() ? `<button onclick="openClSetup('${esc(loc.id)}')" class="text-slate-500 hover:text-brand-600 hover:underline">Rooms & tasks</button>` : ''}</div></div>
@@ -13715,6 +13717,45 @@ async function clPdf(locId, week, filled, btn){
   const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
   try{ const loc = getLocation(locId); downloadBlob(await buildCleaningPdf(locId, week, filled), 'Cleaning_Checklist_' + String(loc ? loc.code || loc.name : 'location').replace(/[^A-Za-z0-9-]+/g, '_') + '_' + week + (filled ? '' : '_blank') + '.pdf'); }
   catch(e){ console.error(e); toast('Could not create the PDF: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+
+/* ---------- the checklist as a Word file (same layout as the PDF): blank to print, or filled from what was ticked ---------- */
+async function buildCleaningDocx(locId, week, filled){
+  const S = clStruct(locId, week), sh = clSheet(locId, week), ch = filled && sh ? sh.checks || {} : {}, att = filled && sh ? sh.attendance || {} : {};
+  const LIME = 'C9DB33', GRAY = 'D1D1D1', FONT = 'Aptos', TW = 10546, W1 = 700, W2 = 2760, nD = Math.max(1, S.days.length), WD = Math.floor((TW - W1 - W2) / nD), TT = W1 + W2 + WD * nD;
+  const T = (t, o) => wR(String(t == null ? '' : t), Object.assign({ font:FONT, sz:16 }, o || {}));
+  const P = (inner, o) => wP(inner, Object.assign({ line:240 }, o || {}));
+  const yr = week.slice(0, 4), dd = d => { const x = clDayDate(week, d); return x.slice(8, 10) + '/' + x.slice(5, 7); }, TICK = T('✓', { b:true, sz:20 });
+  const tc = (inner, w, o) => { o = o || {}; return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${o.span ? `<w:gridSpan w:val="${o.span}"/>` : ''}${o.vm ? `<w:vMerge${o.vm === 'restart' ? ' w:val="restart"' : ''}/>` : ''}${o.fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${o.fill}"/>` : ''}${o.dir ? `<w:textDirection w:val="${o.dir}"/>` : ''}<w:vAlign w:val="center"/></w:tcPr>${inner || P('')}</w:tc>`; };
+  const tr = (cells, o) => { o = o || {}; return `<w:tr><w:trPr><w:cantSplit/>${o.h ? `<w:trHeight w:val="${o.h}"/>` : ''}${o.head ? '<w:tblHeader/>' : ''}</w:trPr>${cells}</w:tr>`; };
+  const days = (fn, o) => S.days.map(d => tc(P(fn(d) || '', { jc:'center' }), WD, o)).join('');
+  const rows = [];
+  // heading (repeats on every page) and attendance
+  rows.push(tr(tc(P(T(yr, { b:true, sz:15 }), { jc:'center' }), W1, { fill:LIME }) + tc(P(T(S.address, { b:true, sz:14 })), W2, { fill:LIME }) + days(d => T(d, { b:true, sz:15 }), { fill:LIME }), { h:560, head:true }));
+  [['Date', d => T(dd(d), { sz:15 })], ['Time In', d => (att[d] || {}).in ? T(att[d].in, { sz:15 }) : ''], ['Time Out', d => (att[d] || {}).out ? T(att[d].out, { sz:15 }) : '']].forEach(([lab, fn], i) =>
+    rows.push(tr(tc(i ? '' : P(T('Attendance', { b:true, sz:13 }), { jc:'center' }), W1, { vm:i ? 'cont' : 'restart', dir:'btLr' }) + tc(P(T(lab, { b:true, sz:15 })), W2, { fill:GRAY }) + days(fn), { h:380 })));
+  // rooms and their tasks; the room name runs up the side
+  S.rooms.forEach(r => r.tasks.forEach((t, i) => rows.push(tr(
+    tc(i ? '' : P(T(r.name, { b:true, sz:15 }), { jc:'center' }), W1, { vm:i ? 'cont' : 'restart', dir:'btLr' }) + tc(i < r.tasks.length - 1 && r.tasks.length <= 30 ? P(T(t)).replace('<w:pPr>', '<w:pPr><w:keepNext/>') : P(T(t)), W2) + days(d => ch[clK('t', r.name, t, d)] ? TICK : ''), { h:300 }))));        // a room's rows stay on one page
+  // cleaned by / supervised by
+  const lime = t => rows.push(tr(tc(P(T(t, { b:true })), TT, { fill:LIME, span:nD + 2 }), { h:340 }));
+  const person = (kind, n) => {
+    rows.push(tr(tc(P(T('Name', { b:true, sz:15 })), W1 + W2, { fill:GRAY, span:2 }) + tc(P(n ? T(n, { sz:15 }) : '', { jc:'center' }), WD * nD, { span:nD }), { h:380 }));
+    rows.push(tr(tc(P(T('Signature', { b:true, sz:15 })), W1 + W2, { fill:GRAY, span:2 }) + days(d => ch[kind === 's' ? clK('s', d) : clK('c', n, d)] ? TICK : ''), { h:480 }));
+  };
+  lime('Cleaned By'); (S.cleaners.length ? S.cleaners : ['', '']).forEach(n => person('c', n));
+  lime('Supervised By'); person('s', S.supervisor);
+  const B = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(k => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join('') + '</w:tblBorders>';
+  const tbl = `<w:tbl><w:tblPr><w:tblW w:w="${TT}" w:type="dxa"/>${B}<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${W1}"/><w:gridCol w:w="${W2}"/>${S.days.map(() => `<w:gridCol w:w="${WD}"/>`).join('')}</w:tblGrid>${rows.join('')}</w:tbl>`;
+  const done = filled && sh && sh.complete ? P(T('Week marked complete' + (sh.completedBy ? ' by ' + sh.completedBy : '') + (sh.completedAt ? ' on ' + localDateStr(new Date(sh.completedAt)) : '') + '.', { sz:15, color:'595959' }), { before:160 }) : '';
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${P(T('Cleaning Checklist', { b:true, sz:28 }), { after:120 })}${tbl}${done}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="680" w:bottom="1700" w:left="680" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
+  return lhDocx(doc, LH_NS);
+}
+async function clDocx(locId, week, filled, btn){
+  const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ const loc = getLocation(locId); downloadBlob(await buildCleaningDocx(locId, week, filled), 'Cleaning_Checklist_' + String(loc ? loc.code || loc.name : 'location').replace(/[^A-Za-z0-9-]+/g, '_') + '_' + week + (filled ? '' : '_blank') + '.docx'); }
+  catch(e){ console.error(e); toast('Could not create the Word file: ' + (e && e.message ? e.message : e), true); }
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
 
@@ -15919,6 +15960,7 @@ try{ window.addEventListener('resize', () => { clearTimeout(window._dashFitT); w
 function render(){
   try{ setTimeout(dashFitValues, 0); setTimeout(fitAppTitle, 0); }catch(e){}
   try{ setTimeout(() => { try{ anyaSync(); }catch(e){} }, 0); }catch(e){}
+  try{ stkAlertSoon(); }catch(e){}
   const activeEl = document.activeElement;
   const activeId = (activeEl && activeEl.id && el_contains_main(activeEl)) ? activeEl.id : null;
   const selStart = (activeId && typeof activeEl.selectionStart === 'number') ? activeEl.selectionStart : null;
@@ -16743,10 +16785,83 @@ function statCard(label, value, sub, color){
 /* =====================================================================
    VIEW: STOCK LEVELS
 ===================================================================== */
+/* ---------- Stock reminders on the desktop: the custodian of a location is told when an item there reaches its re-order level
+   or runs out (at once when it happens, and a summary once a day while it stays so). Admins get the locations that have no custodian. ---------- */
+const STK_NOTIFY_KEY = 'fdc_stock_notify';
+const stkNotifyOn = () => { try{ return localStorage.getItem(STK_NOTIFY_KEY) !== '0'; }catch(e){ return true; } };
+// the locations whose stock this user looks after
+function stkMyLocations(){
+  if(!authUser) return [];
+  const admin = canManageInventory();
+  return LOCATIONS.filter(l => l.stockValuation !== false && ((l.custodianUid && l.custodianUid === authUser.uid) || (admin && !l.custodianUid)));     // only stores that keep stock
+}
+// 'out' (none left), 'low' (at or below the re-order level) or 'ok' — only for items that are kept at the location
+function stkState(p, locId, known){
+  const q = qtyAt(p, locId), lvl = reorderLevelAtForNotify(p, locId);
+  if(q <= 0) return (lvl > 0 || (known && known !== 'none')) ? 'out' : 'none';
+  return lvl > 0 && q <= lvl ? 'low' : 'ok';
+}
+function stkAlertList(){
+  const out = []; stkMyLocations().forEach(l => state.products.forEach(p => { const s = stkState(p, l.id); if(s === 'out' || s === 'low') out.push({ p, l, s, q:qtyAt(p, l.id), lvl:reorderLevelAtForNotify(p, l.id) }); }));
+  return out;
+}
+function stkDesktop(title, body, tag){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return false;
+  try{ const n = new Notification(title, { body, tag, requireInteraction:true }); n.onclick = () => { try{ window.focus(); }catch(e){} vehUi.slLow = 'low'; goTo('levels'); n.close(); }; return true; }catch(e){ return false; }
+}
+let stkTimer = 0;
+function stkAlertSoon(){ clearTimeout(stkTimer); stkTimer = setTimeout(stkAlertCheck, 1500); }
+function stkAlertCheck(){
+  if(!authUser || !stkNotifyOn() || !state.products.length || !LOCATIONS.length) return;
+  const locs = stkMyLocations(); if(!locs.length) return;
+  const skey = 'fdc_stock_state_' + authUser.uid, dkey = 'fdc_stock_daily_' + authUser.uid;
+  let prev = null; try{ prev = JSON.parse(localStorage.getItem(skey) || 'null'); }catch(e){}
+  const now = {}, worse = [];
+  locs.forEach(l => state.products.forEach(p => { const k = p.id + '::' + l.id, was = prev ? prev[k] : undefined, s = stkState(p, l.id, was);
+    now[k] = s; if(prev && was !== undefined && (s === 'out' && was !== 'out' || s === 'low' && (was === 'ok'))) worse.push({ p, l, s, q:qtyAt(p, l.id), lvl:reorderLevelAtForNotify(p, l.id) }); }));
+  try{ localStorage.setItem(skey, JSON.stringify(now)); }catch(e){}
+  // the moment an item reaches its re-order level or runs out
+  if(worse.length){
+    const line = a => displayName(a.p) + ' — ' + (a.l.code || a.l.name) + ': ' + (a.s === 'out' ? 'out of stock' : fmtNum(a.q) + ' left (re-order at ' + fmtNum(a.lvl) + ')');
+    const outN = worse.filter(a => a.s === 'out').length, title = worse.length === 1 ? (worse[0].s === 'out' ? 'Out of stock: ' : 'Re-order: ') + displayName(worse[0].p) : 'Stock: ' + (outN ? outN + ' out of stock' : '') + (outN && worse.length - outN ? ', ' : '') + (worse.length - outN ? (worse.length - outN) + ' at re-order level' : '');
+    const body = worse.slice(0, 5).map(line).join('\n') + (worse.length > 5 ? '\n+' + (worse.length - 5) + ' more' : '');
+    stkDesktop(title, body, 'fdc-stock-now-' + Date.now());
+    toast((worse.length === 1 ? line(worse[0]) : title) + ' — see Stock Levels.', worse.some(a => a.s === 'out'));
+  }
+  // once a day: what is still low or out at my locations
+  let last = ''; try{ last = localStorage.getItem(dkey) || ''; }catch(e){}
+  if(last !== vToday() && 'Notification' in window && Notification.permission === 'granted'){
+    const list = stkAlertList();
+    if(list.length){ const outN = list.filter(a => a.s === 'out').length;
+      stkDesktop('Stock reminder — ' + locs.map(l => l.code || l.name).slice(0, 4).join(', ') + (locs.length > 4 ? '…' : ''), (outN ? outN + ' item' + (outN === 1 ? '' : 's') + ' out of stock' : '') + (outN && list.length - outN ? ', ' : '') + (list.length - outN ? (list.length - outN) + ' at or below the re-order level' : '') + '.\n' + list.slice(0, 4).map(a => displayName(a.p) + ' (' + (a.l.code || a.l.name) + ': ' + fmtNum(a.q) + ')').join(', ') + (list.length > 4 ? '…' : '') + '\nClick to open Stock Levels.', 'fdc-stock-daily'); }
+    try{ localStorage.setItem(dkey, vToday()); }catch(e){}
+  }
+}
+function stkNotifySet(on){
+  try{ localStorage.setItem(STK_NOTIFY_KEY, on ? '1' : '0'); }catch(e){}
+  if(on && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(() => { rerenderMain(); stkAlertCheck(); });
+  else { toast(on ? 'Stock reminders are on.' : 'Stock reminders are off on this device.'); rerenderMain(); if(on){ try{ localStorage.removeItem('fdc_stock_daily_' + (authUser ? authUser.uid : '')); }catch(e){} stkAlertCheck(); } }
+}
+// the switch on the Stock Levels page
+function stkNotifyBar(){
+  const locs = stkMyLocations(); if(!authUser || !locs.length) return '';
+  const on = stkNotifyOn(), perm = ('Notification' in window) ? Notification.permission : 'unsupported', n = stkAlertList().length;
+  const st = !on ? 'Off' : perm === 'granted' ? 'On' : perm === 'denied' ? 'Blocked by the browser' : perm === 'unsupported' ? 'Not supported here' : 'Not allowed yet';
+  return `<div class="flex items-center gap-3 flex-wrap rounded-lg border border-slate-200 bg-white px-4 py-2.5 mb-4 text-sm">
+    <span>🔔 <b class="text-slate-800">Desktop reminders</b> <span class="text-slate-500">for ${esc(locs.map(l => l.code || l.name).join(', '))}:</span> <b class="${on && perm === 'granted' ? 'text-emerald-600' : 'text-slate-500'}">${st}</b></span>
+    ${n ? `<span class="text-xs text-amber-700 font-semibold">${n} item${n === 1 ? '' : 's'} low or out now</span>` : ''}
+    <span class="flex-1"></span>
+    ${on && perm === 'default' ? `<button type="button" onclick="stkNotifySet(true)" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white">Allow notifications</button>` : ''}
+    ${perm === 'denied' && on ? '<span class="text-[11px] text-slate-400">Allow notifications for this site in the browser settings.</span>' : ''}
+    <button type="button" onclick="stkNotifySet(${on ? 'false' : 'true'})" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">${on ? 'Turn off' : 'Turn on'}</button></div>`;
+}
 function viewStockLevels(){
   const valuationLocations = LOCATIONS.filter(l=>l.stockValuation!==false);
   const hiddenCount = LOCATIONS.length - valuationLocations.length;
-  const list = [...state.products].sort(byDisplayName);
+  const all = [...state.products].sort(byDisplayName), slq = String(vehUi.slQ || '').toLowerCase().trim(), slc = vehUi.slCat || '', sll = vehUi.slLow || '';
+  const cats = [...new Set(all.map(p => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const list = all.filter(p => (!slc || p.category === slc) && (!sll || (sll === 'low' ? isLowStock(p) : sll === 'out' ? !productTotalQty(p) : productTotalQty(p) > 0))
+    && (!slq || [displayName(p), p.name, p.sku, p.category, p.description].join(' ').toLowerCase().includes(slq)));
   const rows = list.map(p=>{
     const total = productTotalQty(p);
     const low = isLowStock(p);
@@ -16775,6 +16890,8 @@ function viewStockLevels(){
       </div>
     </div>
 
+    ${stkNotifyBar()}
+    ${all.length ? `<div class="flex flex-wrap items-center gap-2.5 mb-4">${vSearch('sl-q', 'slQ', 'Search item, SKU or category…')}${cats.length ? vSelect('slCat', cats, slc, 'All categories') : ''}${vSelect('slLow', [['low', 'Low stock'], ['in', 'In stock'], ['out', 'Out of stock (0)']], sll, 'All stock')}${(slq || slc || sll) ? `<span class="text-xs text-slate-500">${fmtNum(list.length)} of ${fmtNum(all.length)} items</span>` : ''}</div>` : ''}
     <div class="bg-white rounded-xl border border-slate-200">
       ${list.length ? `
       <div class="w-full">
@@ -16786,7 +16903,7 @@ function viewStockLevels(){
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
-      </div>` : `
+      </div>` : all.length ? `<div class="text-center py-12 px-6 text-sm text-slate-500">No items match the search.</div>` : `
       <div class="text-center py-16 px-6">
         <h3 class="text-base font-semibold text-slate-800 mb-1">No items yet</h3>
         <p class="text-sm text-slate-500 max-w-sm mx-auto mb-4">Add items to see stock levels across all ${LOCATIONS.length} location${LOCATIONS.length===1?'':'s'}.</p>

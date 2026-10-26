@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.323';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.324';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2671,7 +2671,7 @@ function vehMaybeNotify(alerts){
   const key = 'fdc_veh_notified_' + vToday();
   try{ if(localStorage.getItem(key)) return; }catch(e){}
   const exp = alerts.filter(a => a.st.k === 'crit').length, dep = alerts.filter(a => a.reqId && a.st.k === 'crit').length;
-  new Notification('FDC — Vehicles', { body:(dep ? dep + ' PR / petty cash balance' + (dep > 1 ? 's' : '') + ' depleted. ' : '') + (exp ? exp + ' expired / overdue, ' : '') + (alerts.length - exp) + ' expiring within ' + vehSettings.remindDays + ' days. Open the app to review.' });
+  ndPost('FDC — Vehicles', { body:(dep ? dep + ' PR / petty cash balance' + (dep > 1 ? 's' : '') + ' depleted. ' : '') + (exp ? exp + ' expired / overdue, ' : '') + (alerts.length - exp) + ' expiring within ' + vehSettings.remindDays + ' days. Open the app to review.' });
   try{ localStorage.setItem(key, '1'); }catch(e){}
 }
 let vehNotifiedOnce = false;
@@ -8452,13 +8452,24 @@ function ndQuietNow(o){
 let ndAudio = null;
 function ndBeep(){ try{ ndAudio = ndAudio || new (window.AudioContext || window.webkitAudioContext)(); const t = ndAudio.currentTime;
   [[880, 0], [1320, 0.13]].forEach(([f, s]) => { const o = ndAudio.createOscillator(), g = ndAudio.createGain(); o.frequency.value = f; o.type = 'sine'; g.gain.setValueAtTime(0.0001, t + s); g.gain.exponentialRampToValueAtTime(0.18, t + s + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + s + 0.22); o.connect(g).connect(ndAudio.destination); o.start(t + s); o.stop(t + s + 0.25); }); }catch(e){} }
-// shows one desktop notification if this user's settings allow it; go = code run when it is clicked
+// puts up one notification. Computers allow it straight from the page; phones (Chrome on Android) only through the app's
+// service worker (sw.js) — so when the direct way is refused, it goes through the service worker. Resolves true when shown.
+function ndPost(title, opts, go){
+  opts = Object.assign({ silent:true }, opts || {});
+  const viaSw = () => {
+    if(!('serviceWorker' in navigator)) return Promise.resolve(false);
+    const reg = navigator.serviceWorker.getRegistration().then(r => r || Promise.race([navigator.serviceWorker.ready, new Promise(res => setTimeout(() => res(null), 4000))]));
+    return reg.then(r => r ? r.showNotification(title, Object.assign({ data:{ go:go || '', url:location.href.split('#')[0] } }, opts)).then(() => true) : false).catch(() => false);
+  };
+  try{ const n = new Notification(title, opts); n.onclick = () => { try{ window.focus(); }catch(e){} try{ (new Function(go || ''))(); }catch(e){} n.close(); }; return Promise.resolve(true); }
+  catch(e){ return viaSw(); }
+}
+// shows one reminder if this user's settings allow it; go = code run when it is clicked
 function ndShow(title, body, tag, go, cat, force){
   if(!('Notification' in window) || Notification.permission !== 'granted') return false;
   const o = ndPrefs(); if(!force && (!o.on || (cat && o.cats[cat] === false) || ndQuietNow(o))) return false;
-  try{ const n = new Notification(title, { body, tag, requireInteraction:!!o.stay, silent:true });
-    n.onclick = () => { try{ window.focus(); }catch(e){} try{ (new Function(go || ''))(); }catch(e){} n.close(); };
-    if(o.sound) ndBeep(); return true; }catch(e){ return false; }
+  ndPost(title, { body, tag, requireInteraction:!!o.stay }, go).then(ok => { if(ok && o.sound) ndBeep(); });
+  return true;
 }
 function ndCheck(){
   if(!authUser || !('Notification' in window) || Notification.permission !== 'granted') return;
@@ -8499,7 +8510,7 @@ function ndSettingsHtml(){
   return `
     <div class="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 mb-4 text-sm flex items-center justify-between gap-3 flex-wrap"><span>Notifications on this device: ${permTxt}</span>
       <span class="flex gap-2">${perm === 'default' ? `<button type="button" onclick="ndAllow()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white">Allow notifications</button>` : ''}${perm === 'granted' ? `<button type="button" onclick="ndTest()" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Send a test</button>` : ''}</span></div>
-    ${tg('nd-on', o.on, '<b>Show desktop reminders</b>', 'Pop-up notices on this computer while the app is open in a browser tab (it can be in the background).')}
+    ${tg('nd-on', o.on, '<b>Show desktop reminders</b>', 'Pop-up notices on this device (computer or phone) while the app is open — it can be in the background.')}
     <div class="text-xs font-bold uppercase tracking-wide text-slate-500 mt-3 mb-1">Remind me about</div>
     <div class="grid sm:grid-cols-2 gap-x-4 rounded-lg border border-slate-200 px-3 py-1">${ND_CATS.map(([k, ic, l]) => `<label class="flex items-center gap-2.5 py-1.5 cursor-pointer text-sm text-slate-700"><input type="checkbox" class="nd-cat w-4 h-4" value="${k}" ${o.cats[k] !== false ? 'checked' : ''}> <span>${ic}</span> ${l}</label>`).join('')}</div>
     <div class="grid sm:grid-cols-2 gap-4 mt-4">
@@ -8517,7 +8528,7 @@ function ndSettingsHtml(){
 function openNdSettings(){ goTo('notifications'); }
 // Settings → Notifications: the only place to change reminders
 function viewNotifSettings(){
-  return vHead('Notifications', 'Desktop reminders on this computer: what you are reminded about, when, and how. Each person sets their own; the settings are kept on this device.', '') +
+  return vHead('Notifications', 'Reminders on this device: what you are reminded about, when, and how. Each person sets their own; the settings are kept on this device.', '') +
     `<div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 max-w-3xl">${ndSettingsHtml()}</div>`;
 }
 function ndReadForm(){
@@ -8529,7 +8540,11 @@ function ndReadForm(){
 }
 function ndSaveForm(){ const o = ndReadForm(); ndSave(o); try{ localStorage.setItem(STK_NOTIFY_KEY, o.on && o.cats.stock ? '1' : '0'); }catch(e){} toast('Reminder settings saved.'); rerenderMain(); ndSoon(); }
 function ndAllow(){ if(!('Notification' in window)) return; Notification.requestPermission().then(() => { const o = document.getElementById('nd-on') ? ndReadForm() : null; if(o) ndSave(o); rerenderMain(); ndSoon(); }); }
-function ndTest(){ const o = document.getElementById('nd-on') ? ndReadForm() : ndPrefs(); ndSave(o); const ok = ndShow('🔔 Test reminder', 'This is how your reminders will look.' + (ndQuietNow(o) ? '\n(Quiet hours are on now — real reminders wait until they end.)' : ''), 'fdc-nt-test', "ntOpenPanel()", null, true); if(!ok) toast('Could not show a notification — check the browser settings.', true); }
+async function ndTest(){ const o = document.getElementById('nd-on') ? ndReadForm() : ndPrefs(); ndSave(o);
+  if(!('Notification' in window) || Notification.permission !== 'granted'){ toast('Allow notifications first.', true); return; }
+  const ok = await ndPost('🔔 Test reminder', { body:'This is how your reminders will look.' + (ndQuietNow(o) ? '\n(Quiet hours are on now — real reminders wait until they end.)' : ''), tag:'fdc-nt-test', requireInteraction:!!o.stay }, "ntOpenPanel()");
+  if(ok){ if(o.sound) ndBeep(); toast('Test reminder sent.'); }
+  else toast('Could not show a notification on this device. ' + (/android|iphone|ipad/i.test(navigator.userAgent) ? 'On a phone, open the app from its installed icon (Add to Home screen) or reload the page once, then try again.' : 'Check the browser settings.'), true); }
 
 /* ---------- daily summary email (first person to open the app each day sends it, through EmailJS) ---------- */
 async function dailyDigest(){
@@ -16968,7 +16983,7 @@ function stkAlertList(){
 function stkDesktop(title, body, tag){
   if(typeof ndShow === 'function') return ndShow(title, body, tag, "vehUi.slLow = 'low'; goTo('levels')", 'stock');
   if(!('Notification' in window) || Notification.permission !== 'granted') return false;
-  try{ const n = new Notification(title, { body, tag, requireInteraction:true }); n.onclick = () => { try{ window.focus(); }catch(e){} vehUi.slLow = 'low'; goTo('levels'); n.close(); }; return true; }catch(e){ return false; }
+  try{ ndPost(title, { body, tag, requireInteraction:true }, "vehUi.slLow = 'low'; goTo('levels')"); return true; }catch(e){ return false; }
 }
 let stkTimer = 0;
 function stkAlertSoon(){ clearTimeout(stkTimer); stkTimer = setTimeout(stkAlertCheck, 1500); }

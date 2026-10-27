@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.324';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.325';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -16280,6 +16280,7 @@ function openItemTransferForm(productId){
   const fromId = LOCATIONS[0].id;
   const body = `
     <div id="xf-error" class="hidden bg-rose-50 text-rose-700 text-sm rounded-lg px-3.5 py-2.5 mb-4"></div>
+    ${srToggleHtml('xf')}
     <div class="grid grid-cols-2 gap-4 mb-4">
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5">From location *</label>
@@ -16361,7 +16362,7 @@ function saveItemTransfer(){
     }
   }
 
-  if(!canFinalizeStock(fromLocationId)){                         // not the source location's custodian: send it for approval, nothing leaves yet
+  if(!canFinalizeStock(fromLocationId) || srAsRequest('xf')){     // not the source location's custodian: send it for approval, nothing leaves yet
     submitStockRequest({ kind:'transfer', locationId:fromLocationId, toLocationId, date, reason, lines: lines.map(l=>({ productId:l.p.id, qty:l.qty })) });
     return;
   }
@@ -18472,7 +18473,8 @@ function viewMovements(mode){
         ${!report ? `<button onclick="exportMovementsCSV()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export report (CSV)</button>` : ''}
         ${report ? '' : `<button onclick="openMovementForm('in')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">+ Stock In</button>
         <button onclick="openMovementForm('out')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-rose-600 text-white hover:bg-rose-700 shadow-sm">+ Stock Out</button>
-        <button onclick="openItemTransferForm()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Stock Transfer</button>`}
+        <button onclick="openItemTransferForm()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Stock Transfer</button>
+        ${canManageInventory() || LOCATIONS.some(l => canFinalizeStock(l.id)) ? `<button onclick="srNewRequest()" title="Send a stock out or transfer for approval instead of logging it" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">+ Request</button>` : ''}`}
       </div>
     </div>
 
@@ -19034,6 +19036,7 @@ function openMovementForm(type){
       <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${isIn?'bg-emerald-100 text-emerald-700':'bg-rose-100 text-rose-700'}">${isIn?'Stock In':'Stock Out'}</span>
       <button type="button" onclick="openItemScanner()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">📷 Scan item QR code</button>
     </div>
+    ${isIn ? '' : srToggleHtml('mf')}
     <div class="mb-4">
       <label class="block text-xs font-semibold text-slate-600 mb-1.5">Location *</label>
       <select id="mf-location" onchange="updateAllMovementHints()" class="w-full sm:w-1/2 px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
@@ -19176,7 +19179,7 @@ function saveMovement(type){
     }
   }
 
-  if(type==='out' && !canFinalizeStock(locationId)){          // not the location's custodian: send it for approval, nothing is deducted yet
+  if(type==='out' && (!canFinalizeStock(locationId) || srAsRequest('mf'))){          // not the location's custodian: send it for approval, nothing is deducted yet
     submitStockRequest({ kind:'out', locationId, date, reason, department, staffName, lines: lines.map(l=>({ productId:l.p.id, qty:l.qty, acquisition:l.acquisition })) });
     return;
   }
@@ -19210,7 +19213,25 @@ function saveMovement(type){
    entered it. The custodian can also reject it with a note, and the requester can cancel it while pending.
 ===================================================================== */
 function canFinalizeStock(locationId){ return canAcceptTransferForLocation(locationId); }     // an admin, or the location's custodian
-function stockRequestsAwaitingMe(){ return (state.stockRequests || []).filter(r => r.status === 'pending' && canFinalizeStock(r.locationId)); }
+// an admin / custodian can also send a request instead of logging it: someone else then approves it
+// (the location's custodian, or another admin) — they approve it themselves only when nobody else could
+function srOtherApprover(r){
+  const me = authUser ? authUser.uid : '', loc = getLocation(r.locationId);
+  return !!((loc && loc.custodianUid && loc.custodianUid !== me) || (state.profiles || []).some(p => p.role === 'admin' && p.uid !== me));
+}
+function srCanDecide(r){ return canFinalizeStock(r.locationId) && !(authUser && r.requestedByUid === authUser.uid && srOtherApprover(r)); }
+function srToggleHtml(pref){
+  if(!(canManageInventory() || LOCATIONS.some(l => canFinalizeStock(l.id)))) return '';
+  return `<label class="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 mb-4 cursor-pointer"><input type="checkbox" id="${pref}-asreq" class="mt-0.5 w-4 h-4"><span><span class="text-sm font-semibold text-slate-800">Send as a request</span><span class="block text-[11.5px] text-slate-500">Nothing is ${pref === 'xf' ? 'moved' : 'deducted'} now — it goes to the location's custodian (or another admin) to approve, like a staff request.</span></span></label>`;
+}
+// "+ Request": choose stock out or transfer, the form opens with "Send as a request" ticked
+function srNewRequest(){
+  openModal('New stock request', `<p class="text-sm text-slate-500 mb-4">The request goes to the location's custodian (or another admin) to approve. Nothing is deducted or moved until it is approved.</p>
+    <div class="grid sm:grid-cols-2 gap-3"><button onclick="openMovementForm('out'); setTimeout(() => { const c = document.getElementById('mf-asreq'); if(c) c.checked = true; }, 0)" class="text-left rounded-xl border border-slate-200 hover:border-brand-400 px-4 py-3"><div class="font-semibold text-slate-800">Stock out request</div><div class="text-xs text-slate-500">Items to be issued from a location</div></button>
+    <button onclick="openItemTransferForm(); setTimeout(() => { const c = document.getElementById('xf-asreq'); if(c) c.checked = true; }, 0)" class="text-left rounded-xl border border-slate-200 hover:border-brand-400 px-4 py-3"><div class="font-semibold text-slate-800">Transfer request</div><div class="text-xs text-slate-500">Items to be moved to another location</div></button></div>`);
+}
+const srAsRequest = pref => !!(document.getElementById(pref + '-asreq') || {}).checked;
+function stockRequestsAwaitingMe(){ return (state.stockRequests || []).filter(r => r.status === 'pending' && srCanDecide(r)); }
 function stockRequestLocName(id){ const l = getLocation(id); return l ? l.name : '(removed location)'; }
 async function submitStockRequest(o){
   const loc = getLocation(o.locationId);
@@ -19222,7 +19243,8 @@ async function submitStockRequest(o){
   });
   closeModal();
   await vehSave('stockRequests', rec);
-  toast(`${o.kind === 'transfer' ? 'Transfer' : 'Stock out'} request sent — ${loc && loc.custodianName ? loc.custodianName + ' (custodian of ' + loc.name + ')' : 'an admin'} has to approve it before stock is deducted.`);
+  const mine = loc && authUser && loc.custodianUid === authUser.uid;
+  toast(`${o.kind === 'transfer' ? 'Transfer' : 'Stock out'} request ${rec.number} sent — ${loc && loc.custodianName && !mine ? loc.custodianName + ' (custodian of ' + loc.name + ')' : canManageInventory() || mine ? 'another admin' : 'an admin'} has to approve it before stock is ${o.kind === 'transfer' ? 'moved' : 'deducted'}.`);
   ui.movementsView = 'requests';
   rerenderMain();
 }
@@ -19247,7 +19269,7 @@ function stockRequestProblems(r){
 async function approveStockRequest(id){
   const r = (state.stockRequests || []).find(x => x.id === id);
   if(!r || r.status !== 'pending') return;
-  if(!canFinalizeStock(r.locationId)){ toast("Only the location's custodian (or an admin) can approve this request.", true); return; }
+  if(!srCanDecide(r)){ toast(canFinalizeStock(r.locationId) ? 'This is your own request — the location\'s custodian or another admin approves it.' : "Only the location's custodian (or an admin) can approve this request.", true); return; }
   const problems = stockRequestProblems(r);
   if(problems.length){ toast('Cannot approve: ' + problems[0], true); return; }
   const me = authUser ? authUser.name : null, touched = new Map(), movementIds = [], transferIds = [];
@@ -19284,7 +19306,7 @@ function openRejectStockRequest(id){
 }
 async function rejectStockRequest(id){
   const r = (state.stockRequests || []).find(x => x.id === id);
-  if(!r || r.status !== 'pending' || !canFinalizeStock(r.locationId)) return;
+  if(!r || r.status !== 'pending' || !srCanDecide(r)) return;
   const note = (document.getElementById('sr-reject-note') || {}).value || '';
   closeModal();
   await vehSave('stockRequests', { id, status:'rejected', decisionNote: note.trim(), decidedByName: authUser ? authUser.name : '', decidedByUid: authUser ? authUser.uid : '', decidedAt: Date.now() });
@@ -19300,7 +19322,7 @@ function cancelStockRequest(id){
   });
 }
 function stockRequestCard(r){
-  const mine = authUser && r.requestedByUid === authUser.uid, canDecide = r.status === 'pending' && canFinalizeStock(r.locationId);
+  const mine = authUser && r.requestedByUid === authUser.uid, canDecide = r.status === 'pending' && srCanDecide(r);
   const problems = r.status === 'pending' ? stockRequestProblems(r) : [];
   const loc = getLocation(r.locationId);
   const badge = { pending:'bg-amber-100 text-amber-700', approved:'bg-emerald-100 text-emerald-700', rejected:'bg-rose-100 text-rose-700', cancelled:'bg-slate-200 text-slate-600' }[r.status] || 'bg-slate-200 text-slate-600';
@@ -19339,15 +19361,15 @@ function stockRequestCard(r){
 }
 function viewStockRequestsTab(){
   const all = [...(state.stockRequests || [])].sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0));
-  const toMe = all.filter(r => r.status === 'pending' && canFinalizeStock(r.locationId));
-  const myPending = all.filter(r => r.status === 'pending' && !canFinalizeStock(r.locationId) && authUser && r.requestedByUid === authUser.uid);
+  const toMe = all.filter(r => r.status === 'pending' && srCanDecide(r));
+  const myPending = all.filter(r => r.status === 'pending' && !srCanDecide(r) && authUser && r.requestedByUid === authUser.uid);
   const otherPending = all.filter(r => r.status === 'pending' && !toMe.includes(r) && !myPending.includes(r));
   const history = all.filter(r => r.status !== 'pending').slice(0, 40);
   const section = (title, hint, list, empty) => `
     <div class="mb-7"><div class="flex items-baseline justify-between gap-3 mb-3"><h2 class="text-sm font-bold text-slate-900">${title} <span class="text-slate-400 font-semibold">${list.length}</span></h2><span class="text-xs text-slate-400">${hint}</span></div>
     ${list.length ? `<div class="space-y-3">${list.map(stockRequestCard).join('')}</div>` : `<div class="bg-white rounded-xl border border-slate-200 text-center py-8 text-sm text-slate-400">${empty}</div>`}</div>`;
   return `
-    <div class="text-xs text-slate-500 mb-5">A stock out or transfer entered by someone other than the location's custodian comes here first. Stock is only deducted when the custodian (or an admin) approves it.</div>
+    <div class="text-xs text-slate-500 mb-5">A stock out or transfer entered by someone other than the location's custodian — or sent with "+ Request" by an admin or custodian — comes here first. Stock is only deducted when the custodian (or an admin) approves it.</div>
     ${section('Awaiting your approval', 'You are the custodian (or an admin)', toMe, 'Nothing waiting for you.')}
     ${myPending.length ? section('Your requests', 'Waiting for the custodian', myPending, '') : ''}
     ${otherPending.length ? section('Other pending requests', '', otherPending, '') : ''}

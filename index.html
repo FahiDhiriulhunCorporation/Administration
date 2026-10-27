@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.325';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.328';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2381,7 +2381,43 @@ function openModal(title, bodyHtml, wide){
   overlay.classList.remove('hidden');
   overlay.classList.add('flex');
   if(!sameDialog) overlay.scrollTop = 0;
+  try{ const old = document.getElementById('modal-share'); if(old) old.remove(); const sh = shareNext; shareNext = null;
+    if(sh){ const b = document.createElement('button'); b.id = 'modal-share'; b.type = 'button'; b.title = 'Share a link to this request'; b.style.cssText = 'margin-left:auto;margin-right:10px'; b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 align-middle';
+      b.textContent = '🔗 Share'; b.onclick = () => openShare(sh.kind, sh.id); titleEl.after(b); } }catch(e){}
 }
+/* ---------- share links: every request has a link that opens it in the app (after signing in) ---------- */
+let shareNext = null;                                 // set just before a request's window opens: it gets a "Share" button
+const shareFor = (kind, id) => { if(id) shareNext = { kind, id }; };
+const SHARE_KINDS = {
+  pc:{ label:'Petty cash request', rec:id => state.pettyCash.find(x => x.id === id), title:r => [r.number, r.purpose].filter(Boolean).join(' — '), open:id => { goTo('petty-cash'); openPcDetails(id); } },
+  pr:{ label:'Purchase requisition', rec:id => (state.purchaseRequisitions || []).find(x => x.id === id), title:r => [r.prNumber, (r.lineItems || []).map(l => l.itemName).filter(Boolean).slice(0, 2).join(', ')].filter(Boolean).join(' — '), open:id => { goTo('purchase-requisitions'); openPurchaseRequisitionForm(id); } },
+  tr:{ label:'Travel request', rec:id => (state.travelRequests || []).find(x => x.id === id), title:r => [r.formNumber, r.destination, r.purpose].filter(Boolean).join(' — '), open:id => { const t = trById(id); goTo('travel-' + (t && t.scope === 'foreign' ? 'foreign' : 'local')); openTravelDetail(id); } },
+  sr:{ label:'Stock request', rec:id => (state.stockRequests || []).find(x => x.id === id), title:r => [r.number, (r.lines || []).map(l => { const p = getProduct(l.productId); return p ? l.qty + ' × ' + displayName(p) : ''; }).filter(Boolean).slice(0, 2).join(', ')].filter(Boolean).join(' — '),
+    open:id => { goTo('movements'); ui.movementsView = 'requests'; rerenderMain(); setTimeout(() => { const el = document.getElementById('sr-card-' + id); if(el){ el.scrollIntoView({ block:'center', behavior:'smooth' }); el.classList.add('ring-2', 'ring-brand-500'); setTimeout(() => el.classList.remove('ring-2', 'ring-brand-500'), 4000); } }, 300); } },
+  cp:{ label:'Complaint', rec:id => (state.complaints || []).find(x => x.id === id), title:r => [r.no, r.title].filter(Boolean).join(' — '), open:id => { goTo('complaints'); openCpView(id); } },
+};
+const shareUrl = (kind, id) => location.origin + location.pathname + '?open=' + encodeURIComponent(kind + ':' + id);
+function openShare(kind, id){
+  const K = SHARE_KINDS[kind], r = K && K.rec(id); if(!r){ toast('This request is no longer in the app.', true); return; }
+  const url = shareUrl(kind, id), title = K.label + ' ' + K.title(r), msg = title + '\nOpen it in the Administration app: ' + url;
+  const prev = document.getElementById('modal-title').textContent, back = document.getElementById('modal-overlay').classList.contains('hidden') ? null : { kind, id };
+  openModal('Share — ' + K.label, `<div class="text-sm font-semibold text-slate-800 mb-1">${esc(K.title(r))}</div>
+    <p class="text-xs text-slate-500 mb-3">Anyone with an account opens this ${esc(K.label.toLowerCase())} straight from the link (they sign in first if needed). People without access to it will not see it.</p>
+    <div class="flex gap-2 mb-3"><input id="share-url" readonly value="${esc(url)}" onclick="this.select()" class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-300 text-sm"><button type="button" class="px-3 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="shareCopy()">Copy link</button></div>
+    <div class="flex flex-wrap gap-2.5">${navigator.share ? `<button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick='navigator.share({ title:${esc(JSON.stringify(title))}, text:${esc(JSON.stringify(title))}, url:${esc(JSON.stringify(url))} }).catch(() => {})'>Share…</button>` : ''}
+      <a target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">WhatsApp</a>
+      <a href="mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(msg)}" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" title="Opens a draft in your mail app — nothing is sent until you send it">Email draft</a>
+      <span class="flex-1"></span><button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="${back ? `SHARE_KINDS['${kind}'].open('${esc(id)}')` : 'closeModal()'}">${back ? 'Back' : 'Close'}</button></div>`);
+  setTimeout(() => { const i = document.getElementById('share-url'); if(i){ i.focus(); i.select(); } }, 50);
+}
+function shareCopy(){ const i = document.getElementById('share-url'); if(!i) return; const done = () => toast('Link copied.');
+  if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(i.value).then(done).catch(() => { i.select(); document.execCommand('copy'); done(); }); else { i.select(); document.execCommand('copy'); done(); } }
+// a shared link (?open=pc:<id>): once signed in and the data has arrived, the request opens
+(function(){ try{ const v = new URLSearchParams(location.search).get('open'); if(!v) return; const i = v.indexOf(':'), kind = v.slice(0, i), id = v.slice(i + 1), K = SHARE_KINDS[kind]; if(!K || !id) return;
+  let n = 0; const tm = setInterval(() => { n++; let r = null; try{ r = authUser && K.rec(id); }catch(e){}
+    if(r){ clearInterval(tm); history.replaceState(null, '', location.pathname + location.hash); try{ K.open(id); }catch(e){ console.warn(e); } }
+    else if(authUser && n > 45){ clearInterval(tm); history.replaceState(null, '', location.pathname + location.hash); toast('The shared ' + K.label.toLowerCase() + ' was not found — it may have been deleted, or you may not have access to it.', true); }
+    else if(n > 900) clearInterval(tm); }, 1000); }catch(e){} })();
 function closeModal(){
   const overlay = document.getElementById('modal-overlay');
   overlay.scrollTop = 0;            // the next dialog must not inherit this one's scroll position
@@ -4280,6 +4316,7 @@ function openPcDetails(id){
   const itemsHtml = items.length ? `<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-left text-slate-400"><th class="py-1.5 pr-3 font-semibold">Item / service</th><th class="py-1.5 pr-3 font-semibold">Description</th><th class="py-1.5 pr-3 font-semibold text-right">Qty</th><th class="py-1.5 pr-3 font-semibold text-right">Price</th><th class="py-1.5 font-semibold text-right">Total</th></tr></thead><tbody>${items.map(i => `<tr class="border-t border-slate-100"><td class="py-1.5 pr-3 text-slate-800">${esc(i.name)}</td><td class="py-1.5 pr-3 text-slate-500">${esc(i.description || '')}</td><td class="py-1.5 pr-3 text-right num">${esc(String(i.qty))}</td><td class="py-1.5 pr-3 text-right num">${pcMoneyPlain(i.unitPrice)}</td><td class="py-1.5 text-right num">${pcMoneyPlain(pcItemTotal(i))}</td></tr>`).join('')}<tr class="border-t border-slate-200"><td colspan="4" class="py-2 text-right font-bold text-slate-700 pr-3">Requested total</td><td class="py-2 text-right num font-bold">${fmtMVR(pcTotal(r))}</td></tr></tbody></table></div>` : '<div class="text-sm text-slate-400">No items.</div>';
   const invHtml = inv.length ? inv.map((i, invIdx) => `<div class="flex items-start justify-between gap-3 py-2 border-t border-slate-100 first:border-0"><div class="min-w-0"><div class="text-sm font-semibold text-slate-800">${esc(i.supplier)}</div><div class="text-xs text-slate-500">${i.number ? 'Invoice ' + esc(i.number) + ' · ' : ''}${i.date ? vDate(i.date) : ''}${i.link && vSafeUrl(i.link) ? ` · <a href="${esc(vSafeUrl(i.link))}" target="_blank" rel="noopener" class="text-brand-600 hover:underline">Open document ↗</a>` : ''}${i.fileId ? ` · <button type="button" onclick="openPcInvoiceView('${id}', ${invIdx})" class="text-brand-600 hover:underline">📎 View file (${esc(String(i.filePages || 1))} page${(i.filePages || 1) === 1 ? '' : 's'})</button>` : ''}</div></div><div class="text-sm font-bold num whitespace-nowrap">${fmtMVR(i.amount)}</div></div>`).join('') + (inv.length > 1 ? `<div class="flex justify-between border-t border-slate-200 pt-2 text-sm font-bold"><span>Invoice total</span><span class="num">${fmtMVR(pcInvoiceTotal(r))}</span></div>` : '') : '<div class="text-sm text-slate-400">No invoice yet.</div>';
   const btn = 'px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50';
+  shareFor('pc', id);
   openModal('Petty cash request', `
     <div class="flex items-start justify-between gap-3 flex-wrap mb-1"><div><div class="text-lg font-extrabold text-slate-900 num">${esc(r.number)}</div><div class="text-sm text-slate-600">${esc(r.purpose || '')}</div></div>
       <div class="flex items-center gap-1.5 flex-wrap justify-end">${vPill(reimb ? 'warn' : 'acc', esc(r.option))}${vPill(st.kind, esc(st.label))}</div></div>
@@ -5888,10 +5925,13 @@ function pcStmtInsertCol(xml, after, header, amounts){
   });
   return xml;
 }
-// one workbook for every statement: one sheet per statement, for every location and the Fueling fund, all years
-async function buildPettyCashStatementXlsx(focusNo){
+// the workbook of one location (or the Fueling fund): one sheet per statement of that location, all years —
+// each new statement of the location becomes a new sheet. all = every location in one workbook.
+const pcFundOfStatement = no => (pcFundList().find(f => pcStatements(f.id).some(s => s.no === no)) || null);
+async function buildPettyCashStatementXlsx(focusNo, all){
   try{ await loadScriptOnce(JSZIP_URL); }catch(e){ throw new Error('The document builder could not be loaded. Check your internet connection and try again.'); }
-  const groups = pcFundList().map(f => ({ fund:f, sts:pcStatements(f.id) })).filter(g => g.sts.length);
+  const only = all ? null : pcFundOfStatement(focusNo);
+  const groups = pcFundList().filter(f => !only || f.id === only.id).map(f => ({ fund:f, sts:pcStatements(f.id) })).filter(g => g.sts.length);
   if(!groups.length) throw new Error('There are no statements yet.');
   const tpl = await JSZip.loadAsync(PC_STATEMENT_TEMPLATE_B64, { base64:true });
   let stylesXml = await tpl.file('xl/styles.xml').async('string');
@@ -5983,10 +6023,11 @@ async function pcStWorkbookPreview(no, fromDetail){
     document.getElementById('modal-box').style.maxWidth = 'min(96vw, 1500px)';
   }catch(e){ console.error(e); openModal('Preview — ' + no, vEmpty('The preview could not be built: ' + esc(e && e.message ? e.message : String(e))), true); }
 }
-async function pcDownloadStatements(focusNo, btn){
+async function pcDownloadStatements(focusNo, btn, all){
   const label = btn ? btn.innerHTML : '';
   if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
-  try{ downloadBlob(await buildPettyCashStatementXlsx(focusNo), 'Petty_Cash_Statements_' + vToday() + '.xlsx'); return true; }
+  const f = all ? null : pcFundOfStatement(focusNo), tag = f ? '_' + String(f.code || f.name || '').replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '') : '_All_Locations';
+  try{ downloadBlob(await buildPettyCashStatementXlsx(focusNo, all), 'Petty_Cash_Statements' + tag + '_' + vToday() + '.xlsx'); return true; }
   catch(e){ console.error(e); toast('Could not create the workbook: ' + (e && e.message ? e.message : e), true); return false; }
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
@@ -6622,7 +6663,7 @@ function openPcStatementDetail(no){
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Total', fmtMVR(s.total))}${item('Vouchers', s.list.length)}${item('Invoice dates', s.from ? vDate(s.from) + (s.to !== s.from ? ' – ' + vDate(s.to) : '') : '—')}${item('Closed', s.closedDate ? vDate(s.closedDate) : '—')}</div>
     <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Download</div>
     <div class="grid sm:grid-cols-2 gap-2 mb-5">
-      ${dl('Statement', 'PDF', `pcStatementPdf('${esc(no)}', this)`)}${dl('Statement workbook (all statements)', 'Excel', `pcDownloadStatements('${esc(no)}', this)`)}${dl('Preview the statement sheet', 'View', `pcStWorkbookPreview('${esc(no)}', true)`)}${dl('All petty cash requests and invoices', 'ZIP', `pcStatementZip('${esc(no)}', this)`)}
+      ${dl('Statement', 'PDF', `pcStatementPdf('${esc(no)}', this)`)}${dl('Statement workbook — ' + esc((pcFundOfStatement(no) || {}).name || 'this location') + ' (a sheet per statement)', 'Excel', `pcDownloadStatements('${esc(no)}', this)`)}${dl('Workbook of all locations', 'Excel', `pcDownloadStatements('${esc(no)}', this, true)`)}${dl('Preview the statement sheet', 'View', `pcStWorkbookPreview('${esc(no)}', true)`)}${dl('All petty cash requests and invoices', 'ZIP', `pcStatementZip('${esc(no)}', this)`)}
       ${rr ? dl('Replenishment form', 'PDF', `pcReplFormPdf('${esc(no)}', this)`) + dl('Replenishment form', 'Word', `pcReplForm('${esc(no)}', this)`) : ''}
     </div>
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
@@ -8396,7 +8437,7 @@ function ntList(){
     try{ state.documents.filter(d => d.status === 'Pending approval').forEach(d => add('doc-ap-' + d.id, '✍️', (d.title || 'A document') + ' is waiting for your approval', d.refNo || '', d.updatedAt || d.createdAt, `goTo('docs-${d.type}'); openDocView('${d.id}')`)); }catch(e){}
   }
   if(authUser){
-    try{ (state.stockRequests || []).filter(r => r.requestedByUid === authUser.uid && r.decidedAt && r.decidedAt > now - 14 * 864e5).forEach(r => add('sr-' + r.id + r.status, r.status === 'approved' ? '✅' : '⛔', 'Your stock request was ' + r.status, r.decidedByName ? 'by ' + r.decidedByName : '', r.decidedAt, `ui.movementsView='requests'; goTo('movements')`)); }catch(e){}
+    try{ (state.stockRequests || []).filter(r => r.requestedByUid === authUser.uid && r.decidedAt && r.decidedAt > now - 14 * 864e5).forEach(r => add('sr-' + r.id + r.status, r.status === 'approved' ? '✅' : '⛔', 'Your stock request was ' + r.status, r.decidedByName ? 'by ' + r.decidedByName : '', r.decidedAt, `goTo('movements'); ui.movementsView='requests'; rerenderMain()`)); }catch(e){}
     try{ (state.pettyCash || []).filter(r => r.requesterUid === authUser.uid).forEach(r => {
       if(pcCanSign(r) && !pcSigned(r)) add('pc-sign-' + r.id, '🖊️', 'Sign your petty cash request ' + (r.number || ''), '', r.createdAt, `goTo('petty-cash'); openPcDetails('${r.id}')`);
       if(r.processedAt && r.processedAt > now - 14 * 864e5) add('pc-proc-' + r.id, '💵', 'Your petty cash request ' + (r.number || '') + ' was processed', '', r.processedAt, `goTo('petty-cash'); openPcDetails('${r.id}')`);
@@ -9435,6 +9476,82 @@ function anyaDownload(t){
   anyaSay('What should I download? For example: "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "voucher PTC-V-HO-26-01", "weekly report week 42", "staff list CSV" or "backup".');
   anyaDraw(); return true;
 }
+/* ---------- Anya: "I want to request A4 paper", "request for 5 air freshener from APT" → a stock request (approved by the custodian) ---------- */
+const ANYA_SR_RX = /^(?:i (?:want|need|would like|wish) to (?:request|order|get)|i(?:d| would) like to request|(?:can|could|may) i (?:request|get|have)|request(?:ing)?(?: for)?|(?:raise|make|send|create|submit|put in) (?:a |an )?(?:stock |inventory |item )?request(?: for| of)?|stock request(?: for)?|inventory request(?: for)?|i (?:want|need))\s+(.+)$/;
+const ANYA_NUMW = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10, eleven:11, twelve:12, fifteen:15, twenty:20, a:1, an:1 };
+function anyaSrMatch(phrase){
+  const w = anyaNorm(phrase).split(' ').filter(x => x && !/^(some|the|of|pcs|pc|pieces|units|unit|nos|no|qty|x|for|me|please|item|items|more|new)$/.test(x)); if(!w.length) return [];
+  const scored = state.products.map(p => { const k = anyaNorm(displayName(p) + ' ' + (p.name || '') + ' ' + (p.variant || '') + ' ' + (p.sku || '')), kw = k.split(' ');
+    let s = 0; w.forEach(x => { if(kw.includes(x)) s += x.length > 2 ? 3 : 2; else if(x.length > 3 && kw.some(y => y.startsWith(x) || x.startsWith(y) && y.length > 3)) s += 1.5; else if(x.length > 3 && k.includes(x)) s += 1; });
+    if(anyaNorm(displayName(p)) === w.join(' ')) s += 10; return { p, s: s / Math.max(1, w.length) }; }).filter(x => x.s >= 1.4).sort((a, b) => b.s - a.s);
+  if(!scored.length) return [];
+  const best = scored[0].s; return scored.filter(x => x.s >= best - 0.01).map(x => x.p).slice(0, 6);
+}
+// one wanted item: "5 a4 paper", "a4 paper x 5", "two air fresheners"
+function anyaSrPart(part){
+  let s = ' ' + anyaNorm(part) + ' ', qty = 0;
+  const m = /\s(\d+(?:\.\d+)?)\s/.exec(s) || /\sx\s?(\d+)\s/.exec(s);
+  if(m){ qty = +m[1]; s = s.replace(m[0], ' '); }
+  else { const n = /^\s(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|an?)\s/.exec(s); if(n){ qty = ANYA_NUMW[n[1]]; s = s.replace(n[0], ' '); } }
+  s = s.replace(/\s(pcs|pc|pieces|units|nos|reams?|boxes|box|packs?|packets?|bottles?|rolls?|cartons?|of)\s/g, ' ').trim();
+  return { phrase:s, qty };
+}
+function anyaSrLoc(t){
+  const m = /\b(?:from|at|in)\s+(.+)$/.exec(t); if(!m) return { loc:null, rest:t };
+  const tail = m[1], locs = LOCATIONS.filter(l => l.stockValuation !== false);
+  const hit = locs.find(l => anyaNorm(l.code) === tail.split(' ')[0]) || locs.find(l => tail.startsWith(anyaNorm(l.name))) || locs.find(l => anyaNorm(l.name).split(' ')[0] === tail.split(' ')[0] && tail.split(' ')[0].length > 2);
+  return hit ? { loc:hit, rest:t.slice(0, m.index).trim() } : { loc:null, rest:t };
+}
+function anyaSrBestLoc(p, want){
+  const locs = LOCATIONS.filter(l => l.stockValuation !== false), mine = locs.filter(l => authUser && l.custodianUid === authUser.uid);
+  const ranked = locs.map(l => ({ l, q:qtyAt(p, l.id) })).filter(x => x.q > 0).sort((a, b) => (b.q >= want) - (a.q >= want) || b.q - a.q);
+  return (ranked.find(x => !mine.includes(x.l)) || ranked[0] || { l:locs[0] }).l;
+}
+const anyaSrSource = (p, qty) => ['Purchase Order', 'CSR', 'Petty Cash'].map(a => ({ a, b:acquisitionBalance(p.id, a) })).sort((x, y) => y.b - x.b)[0].a;
+// returns true when the message was a stock request (handled), false to let other answers try
+function anyaStockRequest(t, raw){
+  const m = ANYA_SR_RX.exec(t); if(!m || !state.products.length) return false;
+  if(/\b(leave|letter|petty cash|travel|dsa|advance|vehicle|car|fuel|meeting|holiday|day off|help|to know|information)\b/.test(m[1])) return false;
+  const rm = ANYA_SR_RX.exec(anyaNorm(raw)), body = rm ? rm[1] : m[1];
+  const { loc, rest } = anyaSrLoc(body);
+  const parts = rest.split(/\s*(?:,|\band\b|&|\+)\s*/).map(anyaSrPart).filter(x => x.phrase);
+  const lines = [], amb = [], missing = [];
+  parts.forEach(pt => { const c = anyaSrMatch(pt.phrase); if(!c.length) missing.push(pt.phrase); else if(c.length === 1) lines.push({ p:c[0], qty:pt.qty }); else amb.push({ pt, c }); });
+  if(!lines.length && !amb.length){ if(/^(i want|i need|request)/.test(t) && !/^i (want|need) to\b/.test(t) || /request/.test(t)){ anyaSay(`I couldn't find **${esc(missing.join(', '))}** in the items list. Try the name as it is in **Items** (e.g. "request 5 A4 paper"), or check the spelling.`, [['Open Items', "goTo('products')"]]); anyaDraw(); return true; } return false; }
+  if(amb.length){ const a = amb[0];
+    anyaSay(`Which **${esc(a.pt.phrase)}** do you mean?`, a.c.map(p => [displayName(p) + ' (' + fmtNum(productTotalQty(p)) + ' in stock)', () => anyaSrConfirm(lines.concat([{ p, qty:a.pt.qty }]).concat(amb.slice(1).map(x => ({ p:x.c[0], qty:x.pt.qty }))), loc)]));
+    anyaDraw(); return true; }
+  anyaSrConfirm(lines, loc, missing); return true;
+}
+function anyaSrConfirm(lines, loc, missing){
+  const rows = lines.map(x => { const qty = x.qty > 0 ? x.qty : 1, l = loc || anyaSrBestLoc(x.p, qty), have = qtyAt(x.p, l.id); return { p:x.p, qty, l, have, given:x.qty > 0 }; });
+  const short = rows.filter(r => r.qty > r.have);
+  const html = `<ul class="anya-list">${rows.map(r => `<li><b>${fmtNum(r.qty)}</b> × ${esc(displayName(r.p))} — from <b>${esc(r.l.name)}</b> <span style="opacity:.7">(${fmtNum(r.have)} in stock${r.l.custodianName ? ', custodian ' + esc(r.l.custodianName) : ''})</span>${r.given ? '' : ' <i style="opacity:.7">— quantity not given, 1 assumed</i>'}</li>`).join('')}</ul>` +
+    (short.length ? `<div style="color:#d97706;margin-top:4px">Not enough stock for ${short.map(r => esc(displayName(r.p))).join(', ')} — the request can still be sent; it is checked again when approved.</div>` : '') +
+    (missing && missing.length ? `<div style="opacity:.75;margin-top:4px">Not found: ${esc(missing.join(', '))}</div>` : '');
+  anyaSay('Here is your stock request — send it for approval?', [['Send request', () => anyaSrSend(rows)], ['Change in the form', () => anyaSrForm(rows)], ['Cancel', () => { anyaSay('OK — nothing was sent.'); anyaDraw(); }]], html);
+  anyaDraw();
+}
+async function anyaSrSend(rows){
+  const byLoc = {}; rows.forEach(r => (byLoc[r.l.id] = byLoc[r.l.id] || []).push(r)); const sent = [];
+  for(const [lid, rs] of Object.entries(byLoc)){
+    await submitStockRequest({ kind:'out', locationId:lid, date:todayStr(), reason:'Requested through Anya', department:(authUser && authUser.department) || '', staffName:(authUser && authUser.name) || '',
+      lines:rs.map(r => ({ productId:r.p.id, qty:r.qty, acquisition:anyaSrSource(r.p, r.qty) })) });
+    const last = (state.stockRequests || []).filter(r => r.requestedByUid === (authUser && authUser.uid)).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))[0];
+    const l = getLocation(lid); sent.push((last ? last.number + ' — ' : '') + (l ? l.name : '') + (l && l.custodianName ? ' (' + l.custodianName + ' approves)' : ''));
+  }
+  anyaSay(`Sent ✓ ${sent.length === 1 ? 'Request ' + sent[0] : sent.length + ' requests: ' + sent.join('; ')}. Nothing is deducted until it is approved — I'll let you know in the notifications when it's decided.`, [['Open my requests', "goTo('movements'); ui.movementsView='requests'; rerenderMain()"]]);
+  anyaDraw();
+}
+async function anyaSrForm(rows){
+  const r0 = rows[0]; anyaToggleSmall(); goTo('movements'); openMovementForm('out'); await anyaWaitForm(1500);
+  const c = document.getElementById('mf-asreq'); if(c) c.checked = true;
+  const ls = document.getElementById('mf-location'); if(ls){ ls.value = r0.l.id; try{ updateAllMovementHints(); }catch(e){} }
+  rows.filter(r => r.l.id === r0.l.id).forEach((r, i) => { if(i) try{ addMovementLine(); }catch(e){} try{ selectMovementProduct(r.p.id, i); }catch(e){}
+    const wrap = document.querySelectorAll('.mf-line-wrap')[i], q = wrap && wrap.querySelector('input[type=number]'); if(q){ q.value = r.qty; q.dispatchEvent(new Event('input', { bubbles:true })); }
+    const a = wrap && wrap.querySelector('select[id^="mf-acq"]'); if(a){ a.value = anyaSrSource(r.p, r.qty); a.dispatchEvent(new Event('change', { bubbles:true })); } });
+  anyaSay('Opened the request form with your items — check it and press the save button' + (rows.some(r => r.l.id !== r0.l.id) ? ' (items from other locations need their own request)' : '') + '.'); anyaDraw();
+}
 /* ---------- Anya checks the app for mistakes and suggests (or applies) the fix ---------- */
 const anyaDays = iso => { if(!iso) return 0; const d = new Date(String(iso).slice(0, 10) + 'T00:00:00'); return Math.floor((new Date(vToday() + 'T00:00:00') - d) / 864e5); };
 const anyaTsDays = ms => ms ? Math.floor((Date.now() - ms) / 864e5) : 0;
@@ -10287,6 +10404,7 @@ async function anyaReply(q){
   if(/\b(stop listening|hands? ?free off|don'?t listen|turn off (the )?(mic|microphone|listening))\b/.test(t)){ anyaSetHands(false); return; }
   if(!/\bdownload\b/.test(t) && (/\b(process|prepare|make|create|generate|do|issue|raise|calculate|work out)\b.{0,30}\bdsa\b|\bdsa memo\b.{0,20}\b(for|of)\b|\b(email|mail|send)\b.{0,25}\b(dsa|memo)\b/.test(t))){ await anyaProcessDsa(q); return; }
   if(/\b(submit|upload|attach|add|create|make|register|from)\b.{0,30}\b(travel|trip)\b.{0,25}\b(form|request form|file|pdf|scan|signed)\b|\btravel request form\b/.test(t) && !/\bhow\b/.test(t)){ anyaSay('Choose the signed travel request form (PDF or photo) — I\'ll read it, create the travel request and attach the form.', [['📎 Choose the form', () => trFormPick(true)]]); return; }
+  if(anyaStockRequest(t, q)) return;
   if(anyaDownload(t)) return;
   if(/^(show|list|view|see)\b/.test(t) && /\b(letters|agreements|contracts|memos|documents|leases|vouchers|vehicles|tasks|complaints|handovers)\b/.test(t) && anyaRecordAnswer(t)) return;
   if(/^(show|open|view|see|preview)\b/.test(t) && ANYA_FILEISH.test(t) && anyaGetFile(t)) return;
@@ -10494,7 +10612,7 @@ function viewMyWork(){
   const trs = (state.travelRequests || []).filter(t => t.staffKey ? t.staffKey === me : t.createdBy === authUser.name).filter(t => t.status !== 'Closed');
   const prs = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') !== 'closed' && (nm(p.requester) ? (myName && nm(p.requester) === myName) : (p.createdByEmail && p.createdByEmail === authUser.email))).sort((a, b) => prNumberCollator.compare(String(b.prNumber || ''), String(a.prNumber || '')));
   const reqBody = prs.map(p => { const st = prStatusMeta(p.status || 'open'); return row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requisitionDate ? vDate(p.requisitionDate) : ''].filter(Boolean).join(' · ')) + (p.status === 'pending_approval' ? ' · waiting for ' + esc(apNames()) : ''), vPill(p.status === 'released' ? 'good' : p.status === 'pending_approval' ? 'warn' : 'acc', esc(st.label)), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`); }).join('') +
-    srs.map(r => row('Stock request', esc([fmtD(r.requestedAt), (getLocation(r.locationId) || {}).name].filter(Boolean).join(' · ')), vPill(r.status === 'approved' ? 'good' : r.status === 'rejected' ? 'crit' : 'warn', esc(r.status || 'pending')), `ui.movementsView='requests'; goTo('movements')`)).join('') +
+    srs.map(r => row('Stock request', esc([fmtD(r.requestedAt), (getLocation(r.locationId) || {}).name].filter(Boolean).join(' · ')), vPill(r.status === 'approved' ? 'good' : r.status === 'rejected' ? 'crit' : 'warn', esc(r.status || 'pending')), `goTo('movements'); ui.movementsView='requests'; rerenderMain()`)).join('') +
     trs.map(t => row('Travel: ' + esc(t.destination || t.purpose || ''), esc(t.status || ''), vPill('acc', esc(t.status || 'Open')), `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelDetail('${t.id}')`)).join('');
   let leave = []; try{ leave = ((lvBetween(t0, clIsoAdd(t0, 60)).find(x => x.key === me) || {}).items || []); }catch(e){}
   const leaveBody = leave.slice(0, 10).map(x => row(esc(lvCodeLabel(x.code)), esc(x.from === x.to ? vDate(x.from) : vDate(x.from) + ' – ' + vDate(x.to)) + ' · ' + (tkDays(x.from, x.to) + 1) + ' day' + (x.from === x.to ? '' : 's'), '', `goTo('leave-plan')`)).join('');
@@ -10752,7 +10870,7 @@ async function saveCpEdit(id){
   const nid = await vehSave('complaints', rec); attSaveTo('complaints', nid || id, 'docFile', 'cpdoc', rec.no || (c && c.no) || 'Complaint'); closeModal(); rerenderMain(); toast(id ? 'Saved.' : 'Complaint ' + rec.no + ' recorded.'); openCpView(id || nid);
 }
 function openCpView(id, editIdx){
-  const c = cpById(id); if(!c) return; const sol = c.processing || [], res = c.resolution || {}, admin = canManageInventory();
+  const c = cpById(id); if(!c) return; shareFor('cp', id); const sol = c.processing || [], res = c.resolution || {}, admin = canManageInventory();
   const canEd = s => admin || !authUser || !s.by || s.by === authUser.name;                 // the person who wrote it, or an admin
   openModal((c.no ? c.no + ' · ' : '') + (c.title || ''), `<div class="flex items-center justify-between gap-3 flex-wrap mb-4"><div class="flex items-center gap-2 flex-wrap">${cpPill(c.status)}<span id="cp-view-level">${admin ? cpLevelSel(c) : cpLevelPill(c)}</span><span class="text-xs text-slate-400">Raised ${c.date ? vDate(c.date) : ''} by ${esc(c.department || '')}${c.raisedBy ? ' (' + esc(c.raisedBy) + ')' : ''}${c.location ? ' · ' + esc(c.location) : ''}</span></div>
       <div class="inline-flex rounded-lg bg-slate-100 p-1 gap-1">${CP_STATUS.filter(s => s !== 'Resolved').map(s => `<button onclick="${s === 'Implemented' ? `cpImplemented('${c.id}')` : `cpSetCpStatus('${c.id}', '${s}')`}" class="px-3 py-1 rounded-md text-xs font-semibold ${(c.status || 'Open') === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${s}</button>`).join('')}</div></div>
@@ -14702,7 +14820,7 @@ async function trSetTravelStatus(id, st){ const t = trById(id); if(!t) return; a
 
 /* ---------- one request in full ---------- */
 function openTravelDetail(id){
-  const t = trById(id); if(!t) return;
+  const t = trById(id); if(!t) return; shareFor('tr', id);
   const ps = trParts(t), tk = trTicketInfo(t), dsa = trDsaOn(t), d = t.dsa || {}, cur = trCur(t), n = trDays(t.fromDate, t.toDate), split = trCatsUsed(t);
   const groups = split ? TR_CATS.map(c => [c, ps.filter(p => trPCat(p) === c)]).filter(g => g[1].length) : [[ps.length ? trPCat(ps[0]) : TR_CATS[0], ps]];
   const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v}</div></div>`;
@@ -19336,10 +19454,10 @@ function stockRequestCard(r){
   }).join('');
   const decided = r.status !== 'pending' && r.decidedAt ? `<div class="text-xs text-slate-500 mt-3">${r.status === 'approved' ? 'Approved' : r.status === 'rejected' ? 'Rejected' : 'Cancelled'} by ${esc(r.decidedByName || '—')} on ${esc(fmtDT(r.decidedAt))}${r.decisionNote ? ` — “${esc(r.decisionNote)}”` : ''}</div>` : '';
   return `
-  <div class="bg-white rounded-xl border border-slate-200 p-5 ${r.status === 'pending' ? 'border-l-4 border-l-amber-500' : ''}">
+  <div id="sr-card-${esc(r.id)}" class="bg-white rounded-xl border border-slate-200 p-5 ${r.status === 'pending' ? 'border-l-4 border-l-amber-500' : ''}">
     <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
       <div>
-        <div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-extrabold text-slate-900">${esc(r.number || 'Request')}</span>${kindPill}<span class="text-xs font-semibold px-2 py-0.5 rounded-full ${badge} capitalize">${esc(r.status === 'pending' ? 'Awaiting approval' : r.status)}</span></div>
+        <div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-extrabold text-slate-900">${esc(r.number || 'Request')}</span>${kindPill}<button type="button" onclick="openShare('sr', '${esc(r.id)}')" title="Share a link to this request" class="text-[11px] font-semibold text-brand-600 hover:underline">🔗 Share</button><span class="text-xs font-semibold px-2 py-0.5 rounded-full ${badge} capitalize">${esc(r.status === 'pending' ? 'Awaiting approval' : r.status)}</span></div>
         <div class="text-xs text-slate-500 mt-1">${fmtDate(r.date)} · requested by <span class="font-semibold text-slate-700">${esc(r.requestedByName || '—')}</span> ${r.requestedAt ? 'on ' + esc(fmtDT(r.requestedAt)) : ''}</div>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
@@ -19922,6 +20040,7 @@ async function prBgUpload(id, att){
 }
 function openPurchaseRequisitionForm(id){ prReadApprovals = null;
   const editing = id ? state.purchaseRequisitions.find(x=>x.id===id) : null;
+  if(editing) shareFor('pr', id);
   const prNumber = editing ? editing.prNumber : '';
   const requester = editing ? editing.requester : (authUser ? authUser.name : '');
   const lines = editing && editing.lineItems && editing.lineItems.length

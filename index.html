@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.331';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.332';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -19563,10 +19563,11 @@ function acLayout(a){
   const rows = [['Asset code', a.tag], ['Dept. asset code', a.departmentAssetCode], ['Serial no.', a.serialNumber], ['Location', loc ? loc.name + (loc.external ? ' (outside the corporation)' : loc.code ? ' (' + loc.code + ')' : '') : ''], ['Department', a.department], ['Assigned to', a.assignedTo]];
   const step = Math.min(11.6, (AC_H - 23 - y) / rows.length);
   rows.forEach(([l, v]) => { y += step; T(L, y, l, 6.3, false, AC_GRAY); T(L + 64, y, acFit(v || '—', true, 7.4, LW - 64), 7.4, true, v ? AC_DARK : AC_GRAY); });
-  let q = null; try{ q = qrEncode(acQrText(a)); }catch(e){}
-  if(q){ R(QX - 3, 57, QS + 6, QS + 6, [1, 1, 1]); P.push({ k:'qr', x:QX, y:60, s:QS, q }); }
-  T(QX + QS / 2, 145, acFit(acQrText(a), true, 8, QS + 8), 8, true, AC_DARK, 'middle');
-  T(QX + QS / 2, 154, a.departmentAssetCode ? 'Department asset code' : a.tag ? 'Asset code' : 'Scan to identify', 5.6, false, AC_GRAY, 'middle');
+  // the asset's photo (in place of the QR code)
+  const PX = 190, PY = 58, PW = 78, PH = 106;
+  R(PX, PY, PW, PH, AC_LINE); R(PX + 0.6, PY + 0.6, PW - 1.2, PH - 1.2, [1, 1, 1]);
+  if(a.image) P.push({ k:'photo', x:PX + 3, y:PY + 3, w:PW - 6, h:PH - 6 });
+  else { T(PX + PW / 2, PY + PH / 2, 'No photo', 7, false, AC_GRAY, 'middle'); T(PX + PW / 2, PY + PH / 2 + 9, 'add one with Edit', 5.6, false, AC_GRAY, 'middle'); }
   R(0, AC_H - 15, AC_W, 0.6, AC_LINE);
   T(AC_W / 2, AC_H - 7, 'Property of Fahi Dhiriulhun Corporation · if found, please return to Administration', 5.4, false, AC_GRAY, 'middle');
   R(0, AC_H - 3, AC_W * 0.62, 3, AC_LIME); R(AC_W * 0.62, AC_H - 3, AC_W * 0.23, 3, [0.55, 0.55, 0.55]); R(AC_W * 0.85, AC_H - 3, AC_W * 0.15, 3, [0.2, 0.2, 0.2]);
@@ -19590,26 +19591,34 @@ function acSvg(a, logo){
     p.k === 'rect' ? `<rect x="${pdfN(p.x)}" y="${pdfN(p.y)}" width="${pdfN(p.w)}" height="${pdfN(p.h)}" fill="${acRgb(p.c)}"/>`
     : p.k === 'text' ? `<text x="${pdfN(p.x)}" y="${pdfN(p.y)}" font-size="${p.size}" font-weight="${p.bold ? 700 : 400}" fill="${acRgb(p.c)}" text-anchor="${p.anchor}">${esc(p.t)}</text>`
     : p.k === 'img' ? (logo ? `<image href="${logo}" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}"/>` : '')
-    : p.k === 'qr' ? `<path d="${qrSvgPath(p.q, p.x, p.y, p.s / p.q.size)}" fill="#111" shape-rendering="crispEdges"/>` : '').join('') + '</svg>';
+    : p.k === 'photo' ? `<image href="${esc(a.image)}" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" preserveAspectRatio="xMidYMid meet"/>` : '').join('') + '</svg>';
 }
-function acDraw(pg, a, ox, oy){
+function acDraw(pg, a, ox, oy, img, key){
   acLayout(a).forEach(p => {
     if(p.k === 'rect') pg.fill(ox + p.x, oy + p.y, p.w, p.h, p.c);
     else if(p.k === 'text'){ const w = pdfTextWidth(p.t, p.bold, p.size), x = p.anchor === 'end' ? p.x - w : p.anchor === 'middle' ? p.x - w / 2 : p.x; pg.text(ox + x, oy + p.y, p.t, { size:p.size, bold:p.bold, color:p.c }); }
     else if(p.k === 'img') pg.image('Hdr', ox + p.x, oy + p.y, p.w, p.h);
-    else if(p.k === 'qr'){ const s = p.s / p.q.size, rects = []; for(let y = 0; y < p.q.size; y++) for(let x = 0; x < p.q.size; x++) if(p.q.m[y][x]) rects.push(`${pdfN(ox + p.x + x * s)} ${pdfN(pg.h - (oy + p.y + (y + 1) * s))} ${pdfN(s)} ${pdfN(s)} re`); pg.ops.push(`0.067 0.067 0.067 rg ${rects.join(' ')} f`); }
+    else if(p.k === 'photo' && img){ const sc = Math.min(p.w / img.w, p.h / img.h), w = img.w * sc, h = img.h * sc; pg.image(key, ox + p.x + (p.w - w) / 2, oy + p.y + (p.h - h) / 2, w, h); }
   });
 }
 // sheet: false = one card per page (card size), true = A4 sheets of 8 cards with cut lines
+// the asset photo as a JPEG on white (any picture format), for the PDF
+async function acImage(src){
+  if(!src) return null;
+  try{ const im = new Image(); im.src = src; await im.decode(); const k = Math.min(1, 700 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k)); const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+    return { w:c.width, h:c.height, jpeg:pdfB64(c.toDataURL('image/jpeg', 0.88).split(',')[1]) }; }catch(e){ return null; }
+}
 async function buildAssetCardsPdf(list, sheet){
-  const pages = [];
-  if(!sheet) list.forEach(a => { const pg = new PdfPage(AC_H); acDraw(pg, a, 0, 0); pages.push({ ops:pg.ops, bare:true, mw:AC_W, mh:AC_H }); });
+  const pages = [], images = {}, imgs = [];
+  for(const [i, a] of list.entries()){ const im = await acImage(a.image); imgs.push(im); if(im) images['AcI' + i] = im; }
+  if(!sheet) list.forEach((a, i) => { const pg = new PdfPage(AC_H); acDraw(pg, a, 0, 0, imgs[i], 'AcI' + i); pages.push({ ops:pg.ops, bare:true, mw:AC_W, mh:AC_H }); });
   else { const mx = (PCA4_W - AC_W * 2) / 2, my = (PCA4_H - AC_H * 4) / 2;
     for(let i = 0; i < list.length; i += 8){ const pg = new PdfPage(PCA4_H);
-      list.slice(i, i + 8).forEach((a, j) => { const ox = mx + (j % 2) * AC_W, oy = my + Math.floor(j / 2) * AC_H; acDraw(pg, a, ox, oy); });
+      list.slice(i, i + 8).forEach((a, j) => { const ox = mx + (j % 2) * AC_W, oy = my + Math.floor(j / 2) * AC_H; acDraw(pg, a, ox, oy, imgs[i + j], 'AcI' + (i + j)); });
       const G = [0.7, 0.7, 0.7]; for(let c = 0; c <= 2; c++) pg.line(mx + c * AC_W, my - 10, mx + c * AC_W, my + AC_H * 4 + 10, G, 0.3); for(let r = 0; r <= 4; r++) pg.line(mx - 10, my + r * AC_H, mx + AC_W * 2 + 10, my + r * AC_H, G, 0.3);
       pages.push({ ops:pg.ops, bare:true }); } }
-  return pcPdfFinish(pages, { title:'', number:'', docTitle:list.length === 1 ? 'Asset card ' + (list[0].tag || list[0].name || '') : 'Asset cards', pageNumbers:false });
+  return pcPdfFinish(pages, { images, title:'', number:'', docTitle:list.length === 1 ? 'Asset card ' + (list[0].tag || list[0].name || '') : 'Asset cards', pageNumbers:false });
 }
 async function acDownload(ids, sheet, btn){
   const list = (Array.isArray(ids) ? ids : [ids]).map(getAsset).filter(Boolean); if(!list.length) return toast('No assets to print.', true);
@@ -19624,7 +19633,7 @@ function closeModalIf(title){ const t = document.getElementById('modal-title'); 
 function openAssetCardsPdf(){
   const ids = getFilteredAssets().sort(byTag).map(a => a.id); if(!ids.length) return toast('No assets in the list.', true);
   window._acIds = ids;
-  openModal('Asset cards', `<p class="text-sm text-slate-500 mb-4">Cards for the <b>${ids.length}</b> asset${ids.length === 1 ? '' : 's'} in the list${hasActiveAssetFilters() ? ' (as filtered)' : ''} — every code and detail with the QR code.</p>
+  openModal('Asset cards', `<p class="text-sm text-slate-500 mb-4">Cards for the <b>${ids.length}</b> asset${ids.length === 1 ? '' : 's'} in the list${hasActiveAssetFilters() ? ' (as filtered)' : ''} — every code and detail with the asset's photo.</p>
     <div class="grid sm:grid-cols-2 gap-3"><button onclick="acDownload(window._acIds, true, this)" class="text-left rounded-xl border border-slate-200 hover:border-brand-400 px-4 py-3"><div class="font-semibold text-slate-800">A4 sheets</div><div class="text-xs text-slate-500">8 cards a page with cut lines (${Math.ceil(ids.length / 8)} page${Math.ceil(ids.length / 8) === 1 ? '' : 's'})</div></button>
     <button onclick="acDownload(window._acIds, false, this)" class="text-left rounded-xl border border-slate-200 hover:border-brand-400 px-4 py-3"><div class="font-semibold text-slate-800">One card per page</div><div class="text-xs text-slate-500">99 × 67 mm pages — for a card or label printer</div></button></div>`);
 }
@@ -22522,7 +22531,7 @@ function viewAssetDetail(){
     </div>
 
     <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 mb-6">
-      <div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-sm font-bold text-slate-900 mb-1">Asset card</div><div class="text-xs text-slate-500">Every code and detail of this asset with its QR code — print it and keep it with the asset.</div></div>
+      <div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-sm font-bold text-slate-900 mb-1">Asset card</div><div class="text-xs text-slate-500">Every code and detail of this asset with its photo — print it and keep it with the asset.</div></div>
         <div class="flex gap-2.5 flex-wrap"><button onclick="acDownload('${asset.id}', false, this)" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700">Download card (PDF)</button><button onclick="acDownload('${asset.id}', true, this)" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">On an A4 page</button></div></div>
       <div id="ac-prev-${asset.id}" class="rounded-lg overflow-hidden ring-1 ring-slate-200 shadow-sm" style="background:#fff;max-width:440px">${acSvg(asset, _acLogo || '')}</div>
       <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" class="hidden" onload="acFillPreview('${asset.id}')" onerror="acFillPreview('${asset.id}')">

@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.337';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.338';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2005,7 +2005,7 @@ setInterval(() => updCheck(false), 30 * 60000);
    ASSETS — PDF fonts, letterhead images and Word/Excel templates live in assets.json (next to index.html),
    so the app itself opens faster. They load quietly in the background and, if needed sooner, on first use.
 ===================================================================== */
-const ASSETS_VER = 'lh60-1';
+const ASSETS_VER = 'pc35-1';
 let __ASSETS = null, __assetsLoading = null;
 function assetsLoadSync(){
   if(__ASSETS) return __ASSETS;
@@ -4411,7 +4411,7 @@ function pcFloatOf(f){
   return d ? d[1] : vNum(f.pettyCashFloat != null ? f.pettyCashFloat : 0);
 }
 const PC_OPTIONS = ['Prior Request', 'Reimbursement'];
-const PC_MIN_ROWS = 5;                                           // the printed form always shows at least five numbered rows
+const PC_MIN_ROWS = 4;                                           // the printed form (v3.5) always shows at least four numbered rows
 const pcRound = v => Math.round((Number(v) || 0) * 100) / 100;
 const pcItems = r => (r && r.kind === 'fuel' && Array.isArray(r.fuelRows) && r.fuelRows.length && typeof pcFuelItems === 'function') ? pcFuelItems(r.fuelRows) : (Array.isArray(r && r.items) ? r.items : []);       // fueling vouchers always print from their vehicle rows
 const pcItemTotal = it => pcRound(vNum(it.qty) * vNum(it.unitPrice));
@@ -5533,8 +5533,11 @@ function fillPettyCashXml(xml, r, drawings){
     return proto.replace('{{ITEM_NO}}', () => String(i + 1).padStart(2, '0')).replace('{{ITEM_NAME}}', () => xmlText(it.name)).replace('{{ITEM_DESC}}', () => xmlText(it.desc))
       .replace('{{ITEM_QTY}}', () => xmlText(it.qty)).replace('{{ITEM_PRICE}}', () => xmlText(it.price)).replace('{{ITEM_TOTAL}}', () => xmlText(it.total)); }).join('');
   xml = xml.slice(0, rowStart) + rows + xml.slice(rowEnd);
-  const values = { DEPARTMENT:F.department, PURPOSE:F.purpose, CB_PRIOR:F.option === 'Prior Request' ? '\u2713' : '', CB_REIMB:F.option === 'Reimbursement' ? '\u2713' : '', VOUCHER:F.no, TOTAL:F.total,
-    REQ_NAME:F.req.name, REQ_DESIG:F.req.desig, REQ_DATE:F.req.date, HOD_NAME:F.hod.name, HOD_DESIG:F.hod.desig, CUS_NAME:F.cus.name, CUS_DESIG:F.cus.desig, CR_NAME:F.cr.name, CR_DESIG:F.cr.desig, CR_DATE:F.cr.date, HANDED:F.handed, BALANCE:F.balance, NO:'' };
+  const dash = v => String(v || '').replace(/\//g, '-');                       // the v3.5 form writes dates as 20-07-2026
+  const values = { DEPARTMENT:F.department, PURPOSE:F.purpose, CB_PRIOR:F.option === 'Prior Request' ? '\u2713' : '', CB_REIMB:F.option === 'Reimbursement' ? '\u2713' : '',
+    CB_PRIOR_W:F.option === 'Prior Request' ? 'P' : ' ', CB_REIMB_W:F.option === 'Reimbursement' ? 'P' : ' ',     // a tick in the form's Wingdings 2 box
+    VOUCHER:F.no, TOTAL:F.total, REQ_NAME:F.req.name, REQ_DESIG:F.req.desig, REQ_DATE:dash(F.req.date), HOD_NAME:F.hod.name, HOD_DESIG:F.hod.desig, HOD_DATE:'',
+    CUS_NAME:F.cus.name, CUS_DESIG:F.cus.desig, CUS_DATE:dash(F.cr.date), CR_NAME:F.cr.name, CR_DESIG:F.cr.desig, CR_DATE:dash(F.cr.date), HANDED:F.handed, BALANCE:F.balance, NO:'' };
   return xml.replace(/\{\{([A-Z_]+)\}\}/g, (all, key) => {
     if(key === 'SIG_REQ') return (drawings && drawings[key]) ? '</w:t></w:r>' + drawings[key] + '<w:r><w:t xml:space="preserve">' : '';
     return (key in values) ? xmlText(values[key]) : all;
@@ -5726,8 +5729,9 @@ async function pcPdfFinish(pages, o){
 /* ---------- the Petty Cash Request Form ---------- */
 async function buildPettyCashPdf(r){
   const F = pcFormFields(r), sig = await pdfSignatureImage(r.requesterSignature && r.requesterSignature.image);
-  const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = PC_TOP;
-  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = PC_TOP; };
+  const TOP2 = PC_TOP + 14;                                               // below the letterhead (and the form's title on the first page)
+  const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = PC_TOP + 20;
+  const newPage = () => { pg = new PdfPage(PCA4_H); pages.push(pg); y = TOP2; };
 
   // ----- department / purpose / type
   const LX0 = 36.3, LX1 = 124.8, RX = 559.6, vw = RX - LX1 - 10.8;
@@ -5758,9 +5762,9 @@ async function buildPettyCashPdf(r){
   for(let i = 0; i < 6; i++) pg.fill(X[i], y, X[i + 1] - X[i], hdrH, PC_DARK);
   pg.fill(X[6], y, X[7] - X[6], hdrH, PC_DARK);
   const hdr = (i, lines) => pcCellLines(pg, 0, y, hdrH, lines, { bold:true, size:9, color:PC_WHITE, align:'c', x0:X[i], x1:X[i + 1], pitch:15.3, off:11.05 });
-  hdr(0, ['#']); hdr(1, ['Item / Service']); hdr(2, ['Description / Details']); hdr(3, ['Qty']); hdr(4, ['Expected', 'Price Per Unit']); hdr(5, ['Expected', 'Total', 'Amount']);
+  hdr(0, ['#']); hdr(1, ['Item / Service']); hdr(2, ['Description / Details']); hdr(3, ['Qty']); hdr(4, ['Expected', 'Price Per Unit', '(MVR)']); hdr(5, ['Expected', 'Total Amount', '(MVR)']);
   pcCellLines(pg, 0, y, 32, ['To be filled by', 'Custodian'], { bold:true, size:9, color:PC_WHITE, align:'c', x0:X[6], x1:X[7], pitch:15.3, off:11.05 });
-  pcCellLines(pg, 0, y + 32, 31, ['Actual Amount', 'Incurred'], { bold:true, size:9, color:PC_WHITE, align:'c', x0:X[6], x1:X[7], pitch:15.3, off:11.05 });
+  pcCellLines(pg, 0, y + 32, 31, ['Actual Amount', 'Incurred (MVR)'], { bold:true, size:9, color:PC_WHITE, align:'c', x0:X[6], x1:X[7], pitch:15.3, off:11.05 });
   pcHline(pg, y + 0.7, 35.8, 560, 1.5);
   drawRowVerticals(y, y + hdrH); y += hdrH; pcHline(pg, y + 0.8, 36.4, 558, 1.5);
   const n = Math.max(PC_MIN_ROWS, F.rows.length);
@@ -5799,7 +5803,7 @@ async function buildPettyCashPdf(r){
   pcCellLines(pg, 0, c0, ch1, ['TO BE FILLED BY CUSTODIAN'], { bold:true, color:PC_WHITE, x0:CX[0], x1:CX[2], off:11.9 });
   pcCellLines(pg, 0, c0, ch1, ['Petty Cash Voucher Number:'], { bold:true, x0:CX[2], x1:CX[3], off:11.9 });
   pcCellLines(pg, 0, c0, ch1, [F.no], { bold:true, align:'c', x0:CX[3], x1:CX[4], off:11.9 });
-  pcCellLines(pg, 0, c0 + ch1, ch2, ['Amount Handed Over:'], { x0:CX[0], x1:CX[1], off:11.9 }); pcCellLines(pg, 0, c0 + ch1, ch2, ['Balance Received:'], { x0:CX[2], x1:CX[3], off:11.9 });
+  pcCellLines(pg, 0, c0 + ch1, ch2, ['Amount Handed Over (MVR):'], { size:9, x0:CX[0], x1:CX[1], off:11.9 }); pcCellLines(pg, 0, c0 + ch1, ch2, ['Balance Received (MVR):'], { x0:CX[2], x1:CX[3], off:11.9 });
   pcCellLines(pg, 0, c0 + ch1, ch2, [F.handed], { align:'r', x0:CX[1], x1:CX[2], pad:5.2, off:11.9 }); pcCellLines(pg, 0, c0 + ch1, ch2, [F.balance], { align:'r', x0:CX[3], x1:CX[4], pad:5.2, off:11.9 });
   [c0, c0 + ch1, c0 + ch1 + ch2].forEach(yy => pcHline(pg, yy + 0.25, CX[0], CX[4], 0.5));
   [CX[0], CX[2], CX[3], CX[4]].forEach(xx => pcVline(pg, xx, c0, c0 + ch1 + ch2, 0.25)); pcVline(pg, CX[1], c0 + ch1, c0 + ch1 + ch2, 0.25);
@@ -5810,7 +5814,7 @@ async function buildPettyCashPdf(r){
   pg.fill(SX[0], ry, SX[5] - SX[0], sigH[0], PC_DARK); pg.fill(SX[0], ry + sigH[0], SX[1] - SX[0], sigTot - sigH[0], PC_GREY_B);
   [['Requested by:', 1], ['Approved by (HOD):', 2], ['Cash Received by:', 3], ['Custodian:', 4]].forEach(([t, k]) => pcCellLines(pg, 0, ry, sigH[0], [t], { bold:true, color:PC_WHITE, align:'c', x0:SX[k], x1:SX[k + 1] }));
   ry += sigH[0];
-  [['Name:', nameH, [reqN, hodN, crN, cusN]], ['Designation:', desH, [reqD, hodD, crD, cusD]], ['Date:', 22, [[F.req.date], [], [F.cr.date], []]]].forEach(([lab, h, cols]) => {
+  [['Name:', nameH, [reqN, hodN, crN, cusN]], ['Designation:', desH, [reqD, hodD, crD, cusD]], ['Date:', 22, [[String(F.req.date || '').replace(/\//g, '-')], [], [String(F.cr.date || '').replace(/\//g, '-')], [String(F.cr.date || '').replace(/\//g, '-')]]]].forEach(([lab, h, cols]) => {
     pcCellLines(pg, 0, ry, h, [lab], { bold:true, x0:SX[0], x1:SX[1] });
     cols.forEach((ls, k) => pcCellLines(pg, 0, ry, h, ls, { x0:SX[k + 1], x1:SX[k + 2] }));
     ry += h;
@@ -5826,7 +5830,7 @@ async function buildPettyCashPdf(r){
   // ----- notes
   const NOTE_W = 523.4, NOTE_FIT = 532.5, noteLines = PCPDF_NOTES.slice(1).map(p => pdfWrapRuns(p.map(([t, b]) => ({ t, bold:b })), 8, NOTE_FIT));   // a line may run a little long: the word spaces are squeezed to fit
   const notesH = 18.8 + 14.7 - 5 + noteLines.reduce((s, l) => s + l.length, 0) * 13.55;
-  if(y + notesH > PC_BOTTOM + 8){ newPage(); y = PC_TOP; }
+  if(y + notesH > PC_BOTTOM + 8){ newPage(); }
   const noteBase = y + 18.8;
   pg.text(36.1, noteBase, 'Note:', { bold:true, size:10 }); pcHline(pg, noteBase + 1.0, 36.1, 36.1 + pdfTextWidth('Note:', true, 10), 0.5);
   let by = y + 33.5;
@@ -5847,7 +5851,7 @@ async function buildPettyCashPdf(r){
     const s = Math.min((PCA4_W - 72) / ip.w, (PCA4_H - 72) / ip.h), dw = ip.w * s, dh = ip.h * s;
     pages.push({ bare:true, ops:[`q ${pdfN(dw)} 0 0 ${pdfN(dh)} ${pdfN((PCA4_W - dw) / 2)} ${pdfN((PCA4_H - dh) / 2)} cm /Inv${k} Do Q`] });
   });
-  return pcPdfFinish(pages, { title:'PETTY CASH REQUEST FORM', number: '', docTitle:'Petty Cash Request ' + (r.number || ''), images, pageNumbers:false, pcForm:true });
+  return pcPdfFinish(pages, { title:'PETTY CASH REQUEST FORM', number: '', docTitle:'Petty Cash Request ' + (r.number || ''), images, pageNumbers:false });          // v3.5 of the form is on the company letterhead, like the Word file
 }
 // the invoice files kept with a petty cash request, as JPEG pages for the PDF (invoices are attached as pages already)
 async function pcInvoicePages(r){

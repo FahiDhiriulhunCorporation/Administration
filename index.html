@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.328';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.331';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -14412,6 +14412,7 @@ function trTicketInfo(t){
   const k = t.ticket || {};
   if(k.via === 'pr'){ const p = k.prId && state.purchaseRequisitions.find(x => x.id === k.prId); return p ? { kind:'PR', label:p.prNumber || 'PR', amount:vNum(p.totalCost), sub:prFirstItem(p) || '', url:p.prUrl || '' } : { kind:'PR', label:k.ref || (k.prId ? 'PR not found' : 'PR (not linked)'), amount:0, sub:k.ref ? '' : 'Not linked in the app' }; }
   if(k.via === 'petty'){ const r = k.pettyId && state.pettyCash.find(x => x.id === k.pettyId); return r ? { kind:'Petty cash', label:r.number || 'Petty cash request', amount:pcTotal(r), sub:r.purpose || '' } : { kind:'Petty cash', label:k.ref || (k.pettyId ? 'Request not found' : 'Petty cash (not linked)'), amount:0, sub:k.ref ? '' : 'Not linked in the app' }; }
+  if(k.via === 'sponsor') return { kind:'Sponsored', label:'Sponsored by ' + (String(k.sponsor || '').trim() || 'the organizer'), amount:0, sub:'Ticket paid by the organizer' };
   if(k.via === 'none') return { kind:'none', label:'No ticket needed' };
   return null;
 }
@@ -14438,7 +14439,7 @@ function viewTravel(scope){
       ${vTd(`${t.fromDate ? vDate(t.fromDate) + (t.toDate && t.toDate !== t.fromDate ? ' – ' + vDate(t.toDate) : '') : '—'}<div class="text-[11.5px] text-slate-400">${trDays(t.fromDate, t.toDate) || '—'} day${trDays(t.fromDate, t.toDate) === 1 ? '' : 's'}</div>`, { cls:'whitespace-nowrap' })}
       ${vTd(!tk ? '<span class="text-amber-600 text-xs font-semibold">Not linked</span>' : tk.kind === 'none' ? '<span class="text-slate-400 text-xs">Not needed</span>' : `<span class="text-xs font-semibold text-slate-700">${esc(tk.label)}</span><div class="text-[11px] text-slate-400">${esc(tk.kind)}</div>`)}
       ${vTd(!dsa ? '<span class="text-slate-400 text-xs">No DSA</span>' : `<b>${trMoney(trCur(t), trDsaTotal(t))}</b><div class="mt-0.5">${trDsaPaid(t) ? vPill('good', 'DSA paid') : trMemoSigned(t) ? vPill('good', 'Memo signed') : memo.memoNo ? vPill('warn', 'Memo not signed') : vPill('', 'No memo yet')}</div>`, { cls:'whitespace-nowrap' })}
-      ${vTd(trStatusPill(t.status), { last:1 })}
+      ${vTd(trStatusPill(t.status) + `<div class="mt-1"><button type="button" onclick="event.stopPropagation(); openShare('tr', '${t.id}')" title="Share a link to this travel request" class="text-[11px] font-semibold text-brand-600 hover:underline">🔗 Share</button></div>`, { last:1 })}
     </tr>`; }).join('');
   return `
     ${vHead(S.label, scope === 'local' ? 'Trips within the country: the request, the ticket and the Daily Subsistence Allowance.' : 'Trips abroad: the request, the ticket and the Daily Subsistence Allowance.',
@@ -14465,7 +14466,7 @@ function trAddPerson(){ const box = document.getElementById('tr-people-box'); if
 function trProfileDesig(name){ const pr = hoFindProfile(name); return pr ? [pr.designation, pr.department].filter(Boolean).join(', ') : ''; }
 function trFillDesig(inp){ const row = inp.closest('.tr-person'), d = row.querySelector('.tr-pdesig'), c = row.querySelector('.tr-pcat'); if(d && !d.value.trim()){ const v = trProfileDesig(inp.value); if(v) d.value = v; } const k = trStaffCat(inp.value); if(c && k) c.value = k; trDsaPreview(); }
 function trFillOne(nameInp, desigName){ const f = document.getElementById('vform'); if(!f || !f[desigName]) return; const v = trProfileDesig(nameInp.value); if(v) f[desigName].value = v; }
-function trTicketVia(v){ ['pr', 'petty'].forEach(k => { const el = document.getElementById('tr-tk-' + k); if(el) el.style.display = v === k ? '' : 'none'; }); const r = document.getElementById('tr-tk-ref'); if(r) r.style.display = v === 'pr' || v === 'petty' ? '' : 'none'; }
+function trTicketVia(v){ ['pr', 'petty', 'sponsor'].forEach(k => { const el = document.getElementById('tr-tk-' + k); if(el) el.style.display = v === k ? '' : 'none'; }); const r = document.getElementById('tr-tk-ref'); if(r) r.style.display = v === 'pr' || v === 'petty' ? '' : 'none'; }
 function trDsaToggle(on){ const el = document.getElementById('tr-dsa'); if(el) el.style.display = on ? '' : 'none'; trDsaPreview(); }
 function trDatesChanged(){
   const f = document.getElementById('vform'); if(!f) return; const n = trDays(f.fromDate.value, f.toDate.value), out = document.getElementById('tr-days');
@@ -14592,6 +14593,7 @@ function trApplyUn(silentNote){
 }
 function openTravelForm(id, scope){
   const t = id ? trById(id) : null; if(id && !t) return;
+  if(t) shareFor('tr', id);
   scope = (t && t.scope) || scope || 'local';
   const S = trSettings(), country = t ? (t.country || (scope === 'local' ? TR_HOME : '')) : (scope === 'local' ? TR_HOME : ''), rloc = t ? t.rateLocation || '' : '';
   const r = trRateFor(scope, country, rloc) || { currency:scope === 'local' ? 'MVR' : 'USD', meal:'', pocket:'', accom:'', stop:'' }, days = t ? trDays(t.fromDate, t.toDate) : 0;
@@ -14618,8 +14620,9 @@ function openTravelForm(id, scope){
     ${vGrid(2, vF('Requested by', 'requestedBy', t ? t.requestedBy : me.name, 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'requestedDesig\')"' }) + vF('Designation', 'requestedDesig', t ? t.requestedDesig : (trProfileDesig(me.name) || me.designation || '')) +
       vF('Authorized by', 'authorizedBy', t ? t.authorizedBy : '', 'text', { attrs:' list="tr-people" onchange="trFillOne(this, \'authorizedDesig\')"' }) + vF('Designation', 'authorizedDesig', t ? t.authorizedDesig : ''))}
     ${vSec('Ticket')}
-    ${vGrid(2, vS('Ticket bought through', 'ticket.via', [['pr', 'Purchase Requisition (PR)'], ['petty', 'Petty Cash Request'], ['none', 'No ticket needed']], tk.via, 'Not decided yet', { attrs:' onchange="trTicketVia(this.value)"' }) +
+    ${vGrid(2, vS('Ticket bought through', 'ticket.via', [['pr', 'Purchase Requisition (PR)'], ['petty', 'Petty Cash Request'], ['sponsor', 'Sponsored by the organizer'], ['none', 'No ticket needed']], tk.via, 'Not decided yet', { attrs:' onchange="trTicketVia(this.value)"' }) +
       `<div id="tr-tk-pr" ${tk.via === 'pr' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Purchase Requisition</label><select name="ticket.prId" class="${VEH_FIELD} bg-white"><option value="">Not linked (optional)</option>${prs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.prId ? 'selected' : ''}>${esc(p.prNumber || '—')}${prFirstItem(p) ? ' — ' + esc(prFirstItem(p)) : ''} — ${esc(vMoney(p.totalCost))}</option>`).join('')}</select></div>` +
+      `<div id="tr-tk-sponsor" ${tk.via === 'sponsor' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Organizer / sponsor</label><input name="ticket.sponsor" value="${esc(tk.sponsor || '')}" placeholder="e.g. UNDP, Ministry of Tourism (optional)" class="${VEH_FIELD}"></div>` +
       `<div id="tr-tk-petty" ${tk.via === 'petty' ? '' : 'style="display:none"'}><label class="${VEH_LBL}">Petty Cash Request</label><select name="ticket.pettyId" class="${VEH_FIELD} bg-white"><option value="">Not linked (optional)</option>${pcs.map(p => `<option value="${esc(p.id)}" ${p.id === tk.pettyId ? 'selected' : ''}>${esc(p.number || '—')}${p.purpose ? ' — ' + esc(String(p.purpose).slice(0, 50)) : ''} — ${esc(fmtMVR(pcTotal(p)))}</option>`).join('')}</select></div>`)}
     <div id="tr-tk-ref" class="mt-3.5" ${tk.via === 'pr' || tk.via === 'petty' ? '' : 'style="display:none"'}>${vF('PR / petty cash number (if not in the app, e.g. a backdated request)', 'ticket.ref', tk.ref || '', 'text', { attrs:' placeholder="optional"' })}</div>
     ${vSec('Daily Subsistence Allowance (DSA)')}
@@ -14800,7 +14803,7 @@ async function saveTravel(id){
   const rec = { id:id || undefined, scope:o.scope === 'foreign' ? 'foreign' : 'local', formNumber:String(o.formNumber || '').trim(), formDate:o.formDate || '', destination:o.destination.trim(), country:String(o.country).trim(), rateLocation:String(o.rateLocation || '').trim(), fromDate:o.fromDate, toDate:o.toDate,
     budget:o.budget || '', purpose:String(o.purpose || '').trim(), status:TR_STATUSES.includes(o.status) ? o.status : 'Open', participants:parts, comments:String(o.comments || '').trim(),
     requestedBy:String(o.requestedBy || '').trim(), requestedDesig:String(o.requestedDesig || '').trim(), authorizedBy:String(o.authorizedBy || '').trim(), authorizedDesig:String(o.authorizedDesig || '').trim(), formUrl:urls.formUrl,
-    ticket:{ via:tk.via || '', prId:tk.via === 'pr' ? tk.prId : '', pettyId:tk.via === 'petty' ? tk.pettyId : '', ref:(tk.via === 'pr' && !tk.prId) || (tk.via === 'petty' && !tk.pettyId) ? String(tk.ref || '').trim() : '' },
+    ticket:{ via:tk.via || '', prId:tk.via === 'pr' ? tk.prId : '', pettyId:tk.via === 'petty' ? tk.pettyId : '', sponsor:tk.via === 'sponsor' ? String(tk.sponsor || '').trim() : '', ref:(tk.via === 'pr' && !tk.prId) || (tk.via === 'petty' && !tk.pettyId) ? String(tk.ref || '').trim() : '' },
     dsa:{ enabled:on, currency:String(dd.currency || 'MVR').trim() || 'MVR', mealRate:pcRound(vNum(dd.mealRate)), mealDays:Math.round(vNum(dd.mealDays)), pocketRate:pcRound(vNum(dd.pocketRate)), pocketDays:Math.round(vNum(dd.pocketDays)), accomRate:pcRound(vNum(dd.accomRate)), accomDays:Math.round(vNum(dd.accomDays)), stopRate:pcRound(vNum(dd.stopRate)), stopDays:Math.round(vNum(dd.stopDays)), pmoneyRate:pcRound(vNum(dd.pmoneyRate)), pmoneyDays:1, dailyRate:pcRound(vNum(dd.dailyRate)), dailyDays:Math.round(vNum(dd.dailyDays)),
       cat2:Object.fromEntries(TR_ALLOW.map(([k]) => [k, pcRound(vNum((dd.cat2 || {})[k]))])), memoNo, memoDate:dd.memoDate || '', memoFrom:String(dd.memoFrom || '').trim(), memoTo:String(dd.memoTo || '').trim(), memoCc:String(dd.memoCc || '').trim(), signName:String(dd.signName || '').trim(), signDesig:String(dd.signDesig || '').trim(), memoUrl:urls.memoUrl } };
   if(on && !trDsaTotal(rec)) return vFail('Enter the DSA amounts and days, or untick "DSA is paid for this trip".');
@@ -15349,7 +15352,7 @@ function rhSections(){
     const byDest = {}, byPerson = {}, byTicket = {};
     tr.forEach(t => { const k = (t.scope === 'foreign' ? (t.country || 'Abroad') + ' – ' : '') + (t.rateLocation || t.destination || '—'); byDest[k] = (byDest[k] || 0) + 1;
       trParts(t).forEach(pp => { byPerson[pp.name] = (byPerson[pp.name] || 0) + trDays(t.fromDate, t.toDate); });
-      const ti = trTicketInfo(t); if(ti && ti.kind !== 'none'){ byTicket[ti.kind] = pcRound((byTicket[ti.kind] || 0) + vNum(ti.amount)); } });
+      const ti = trTicketInfo(t); if(ti && ti.kind !== 'none' && ti.kind !== 'Sponsored'){ byTicket[ti.kind] = pcRound((byTicket[ti.kind] || 0) + vNum(ti.amount)); } });
     const curs = Object.keys(dsa).sort((a, b) => a === 'MVR' ? -1 : b === 'MVR' ? 1 : a.localeCompare(b));
     return { key:'travel', title:'Travel', icon:'plane', link:'travel-local', linkLabel:'Local Travel',
       rows:[['Trips', cnt(tr.length, 'trip'), fmtNum(loc.length) + ' local · ' + fmtNum(frn.length) + ' foreign'], ['Travellers', fmtNum(ppl), fmtNum(pDays) + ' person-days'],
@@ -19539,6 +19542,94 @@ function clearAssetFilters(){
   ui.assetsFilter = { search:'', locationId:'', department:'' };
   rerenderMain();
 }
+/* ---------- asset card: every code and detail of an asset on one card (99 × 67 mm) with its QR code — shown on the asset page,
+   downloaded as a PDF (one card per page for a card printer, or A4 sheets of 8 to cut out) ---------- */
+const AC_W = 280, AC_H = 190, AC_DARK = [0.13, 0.13, 0.14], AC_GRAY = [0.45, 0.47, 0.51], AC_LIME = [0.788, 0.859, 0.2], AC_LINE = [0.86, 0.87, 0.89];
+const acQrText = a => a.departmentAssetCode || a.tag || a.serialNumber || a.name || '';
+function acFit(t, bold, size, w){ t = String(t || ''); if(pdfTextWidth(t, bold, size) <= w) return t; while(t.length > 1 && pdfTextWidth(t + '…', bold, size) > w) t = t.slice(0, -1); return t.trimEnd() + '…'; }
+// the card as simple shapes, drawn the same way in the page preview (SVG) and in the PDF
+function acLayout(a){
+  const P = [], R = (x, y, w, h, c) => P.push({ k:'rect', x, y, w, h, c }), T = (x, y, t, size, bold, c, anchor) => P.push({ k:'text', x, y, t:String(t || ''), size, bold:!!bold, c:c || AC_DARK, anchor:anchor || 'start' });
+  const loc = getLocation(a.locationId), L = 14, LW = 172, QX = 196, QS = 70;
+  R(0, 0, AC_W, AC_H, [1, 1, 1]);
+  P.push({ k:'img', x:L, y:11, w:70, h:29.87 });
+  T(AC_W - 14, 22, 'ASSET CARD', 9, true, AC_DARK, 'end');
+  T(AC_W - 14, 34, (a.status === 'retired' ? 'Retired' : 'Active') + (a.createdAt ? ' · added ' + fmtDate(String(a.createdAt).slice(0, 10)) : ''), 6.4, false, AC_GRAY, 'end');
+  R(0, 47, AC_W, 3, AC_LIME); R(0, 50, AC_W, 1, [0.55, 0.55, 0.55]);
+  const name = pdfWrap(String(a.name || 'Asset'), true, 11.5, LW); let y = 67;
+  name.slice(0, 2).forEach((ln, i) => { T(L, y, i === 1 && name.length > 2 ? acFit(ln + ' ' + name.slice(2).join(' '), true, 11.5, LW) : ln, 11.5, true); y += 13.5; });
+  if(a.category){ T(L, y - 3, acFit(a.category, false, 7, LW), 7, false, AC_GRAY); y += 8; }
+  y += 2; R(L, y - 6, LW, 0.6, AC_LINE);
+  const rows = [['Asset code', a.tag], ['Dept. asset code', a.departmentAssetCode], ['Serial no.', a.serialNumber], ['Location', loc ? loc.name + (loc.external ? ' (outside the corporation)' : loc.code ? ' (' + loc.code + ')' : '') : ''], ['Department', a.department], ['Assigned to', a.assignedTo]];
+  const step = Math.min(11.6, (AC_H - 23 - y) / rows.length);
+  rows.forEach(([l, v]) => { y += step; T(L, y, l, 6.3, false, AC_GRAY); T(L + 64, y, acFit(v || '—', true, 7.4, LW - 64), 7.4, true, v ? AC_DARK : AC_GRAY); });
+  let q = null; try{ q = qrEncode(acQrText(a)); }catch(e){}
+  if(q){ R(QX - 3, 57, QS + 6, QS + 6, [1, 1, 1]); P.push({ k:'qr', x:QX, y:60, s:QS, q }); }
+  T(QX + QS / 2, 145, acFit(acQrText(a), true, 8, QS + 8), 8, true, AC_DARK, 'middle');
+  T(QX + QS / 2, 154, a.departmentAssetCode ? 'Department asset code' : a.tag ? 'Asset code' : 'Scan to identify', 5.6, false, AC_GRAY, 'middle');
+  R(0, AC_H - 15, AC_W, 0.6, AC_LINE);
+  T(AC_W / 2, AC_H - 7, 'Property of Fahi Dhiriulhun Corporation · if found, please return to Administration', 5.4, false, AC_GRAY, 'middle');
+  R(0, AC_H - 3, AC_W * 0.62, 3, AC_LIME); R(AC_W * 0.62, AC_H - 3, AC_W * 0.23, 3, [0.55, 0.55, 0.55]); R(AC_W * 0.85, AC_H - 3, AC_W * 0.15, 3, [0.2, 0.2, 0.2]);
+  return P;
+}
+// the FAHI logo as a picture for the preview (it is kept compressed for the PDFs)
+let _acLogo = null;
+async function acLogoUrl(){
+  if(_acLogo) return _acLogo;
+  const L = PCPDF_IMAGES.pcLogo, w = +L.w, h = +L.h;
+  const inflate = async b64 => { const bin = pdfB64(b64), ds = new DecompressionStream('deflate'); return new Uint8Array(await new Response(new Blob([bin]).stream().pipeThrough(ds)).arrayBuffer()); };
+  const rgb = await inflate(L.rgb), al = L.alpha ? await inflate(L.alpha) : null, c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'), id = ctx.createImageData(w, h);
+  for(let i = 0; i < w * h; i++){ id.data[i * 4] = rgb[i * 3]; id.data[i * 4 + 1] = rgb[i * 3 + 1]; id.data[i * 4 + 2] = rgb[i * 3 + 2]; id.data[i * 4 + 3] = al ? al[i] : 255; }
+  ctx.putImageData(id, 0, 0); return (_acLogo = c.toDataURL('image/png'));
+}
+const acRgb = c => 'rgb(' + c.map(v => Math.round(v * 255)).join(',') + ')';
+function acSvg(a, logo){
+  const P = acLayout(a);
+  return `<svg viewBox="0 0 ${AC_W} ${AC_H}" class="block w-full h-auto" role="img" aria-label="Asset card — ${esc(a.name || '')}" style="font-family:Poppins,Inter,sans-serif">` + P.map(p =>
+    p.k === 'rect' ? `<rect x="${pdfN(p.x)}" y="${pdfN(p.y)}" width="${pdfN(p.w)}" height="${pdfN(p.h)}" fill="${acRgb(p.c)}"/>`
+    : p.k === 'text' ? `<text x="${pdfN(p.x)}" y="${pdfN(p.y)}" font-size="${p.size}" font-weight="${p.bold ? 700 : 400}" fill="${acRgb(p.c)}" text-anchor="${p.anchor}">${esc(p.t)}</text>`
+    : p.k === 'img' ? (logo ? `<image href="${logo}" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}"/>` : '')
+    : p.k === 'qr' ? `<path d="${qrSvgPath(p.q, p.x, p.y, p.s / p.q.size)}" fill="#111" shape-rendering="crispEdges"/>` : '').join('') + '</svg>';
+}
+function acDraw(pg, a, ox, oy){
+  acLayout(a).forEach(p => {
+    if(p.k === 'rect') pg.fill(ox + p.x, oy + p.y, p.w, p.h, p.c);
+    else if(p.k === 'text'){ const w = pdfTextWidth(p.t, p.bold, p.size), x = p.anchor === 'end' ? p.x - w : p.anchor === 'middle' ? p.x - w / 2 : p.x; pg.text(ox + x, oy + p.y, p.t, { size:p.size, bold:p.bold, color:p.c }); }
+    else if(p.k === 'img') pg.image('Hdr', ox + p.x, oy + p.y, p.w, p.h);
+    else if(p.k === 'qr'){ const s = p.s / p.q.size, rects = []; for(let y = 0; y < p.q.size; y++) for(let x = 0; x < p.q.size; x++) if(p.q.m[y][x]) rects.push(`${pdfN(ox + p.x + x * s)} ${pdfN(pg.h - (oy + p.y + (y + 1) * s))} ${pdfN(s)} ${pdfN(s)} re`); pg.ops.push(`0.067 0.067 0.067 rg ${rects.join(' ')} f`); }
+  });
+}
+// sheet: false = one card per page (card size), true = A4 sheets of 8 cards with cut lines
+async function buildAssetCardsPdf(list, sheet){
+  const pages = [];
+  if(!sheet) list.forEach(a => { const pg = new PdfPage(AC_H); acDraw(pg, a, 0, 0); pages.push({ ops:pg.ops, bare:true, mw:AC_W, mh:AC_H }); });
+  else { const mx = (PCA4_W - AC_W * 2) / 2, my = (PCA4_H - AC_H * 4) / 2;
+    for(let i = 0; i < list.length; i += 8){ const pg = new PdfPage(PCA4_H);
+      list.slice(i, i + 8).forEach((a, j) => { const ox = mx + (j % 2) * AC_W, oy = my + Math.floor(j / 2) * AC_H; acDraw(pg, a, ox, oy); });
+      const G = [0.7, 0.7, 0.7]; for(let c = 0; c <= 2; c++) pg.line(mx + c * AC_W, my - 10, mx + c * AC_W, my + AC_H * 4 + 10, G, 0.3); for(let r = 0; r <= 4; r++) pg.line(mx - 10, my + r * AC_H, mx + AC_W * 2 + 10, my + r * AC_H, G, 0.3);
+      pages.push({ ops:pg.ops, bare:true }); } }
+  return pcPdfFinish(pages, { title:'', number:'', docTitle:list.length === 1 ? 'Asset card ' + (list[0].tag || list[0].name || '') : 'Asset cards', pageNumbers:false });
+}
+async function acDownload(ids, sheet, btn){
+  const list = (Array.isArray(ids) ? ids : [ids]).map(getAsset).filter(Boolean); if(!list.length) return toast('No assets to print.', true);
+  const label = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try{ const name = list.length === 1 ? 'Asset_Card_' + String(list[0].tag || list[0].departmentAssetCode || list[0].name).replace(/[^A-Za-z0-9-]+/g, '_') : 'Asset_Cards_' + list.length + (sheet ? '_A4' : '');
+    downloadBlob(await buildAssetCardsPdf(list, sheet), name + '.pdf'); toast(list.length === 1 ? 'Asset card downloaded.' : list.length + ' asset cards downloaded.'); closeModalIf('Asset cards'); }
+  catch(e){ console.error(e); toast('The asset card could not be made: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
+}
+function closeModalIf(title){ const t = document.getElementById('modal-title'); if(t && t.textContent === title) closeModal(); }
+// Assets page: cards for the assets in the list (as filtered)
+function openAssetCardsPdf(){
+  const ids = getFilteredAssets().sort(byTag).map(a => a.id); if(!ids.length) return toast('No assets in the list.', true);
+  window._acIds = ids;
+  openModal('Asset cards', `<p class="text-sm text-slate-500 mb-4">Cards for the <b>${ids.length}</b> asset${ids.length === 1 ? '' : 's'} in the list${hasActiveAssetFilters() ? ' (as filtered)' : ''} — every code and detail with the QR code.</p>
+    <div class="grid sm:grid-cols-2 gap-3"><button onclick="acDownload(window._acIds, true, this)" class="text-left rounded-xl border border-slate-200 hover:border-brand-400 px-4 py-3"><div class="font-semibold text-slate-800">A4 sheets</div><div class="text-xs text-slate-500">8 cards a page with cut lines (${Math.ceil(ids.length / 8)} page${Math.ceil(ids.length / 8) === 1 ? '' : 's'})</div></button>
+    <button onclick="acDownload(window._acIds, false, this)" class="text-left rounded-xl border border-slate-200 hover:border-brand-400 px-4 py-3"><div class="font-semibold text-slate-800">One card per page</div><div class="text-xs text-slate-500">99 × 67 mm pages — for a card or label printer</div></button></div>`);
+}
+// the preview on the asset page fills in once the logo is ready
+function acFillPreview(id){ const el = document.getElementById('ac-prev-' + id), a = getAsset(id); if(!el || !a) return; acLogoUrl().then(u => { if(el.isConnected) el.innerHTML = acSvg(a, u); }).catch(() => { if(el.isConnected) el.innerHTML = acSvg(a, ''); }); }
 function assetStatusBadge(status){
   return status==='retired'
     ? '<span class="inline-flex px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs font-semibold">Retired</span>'
@@ -19572,6 +19663,7 @@ function viewAssets(){
           <details class="as-menu inline-block relative ml-2 align-middle"><summary title="More" aria-label="More actions" class="list-none cursor-pointer w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 text-base leading-none">⋯</summary>
             <div class="rounded-lg border border-slate-200 bg-white shadow-lg py-1 text-left" style="position:absolute;right:0;top:100%;margin-top:4px;z-index:30;width:9rem">
               <button onclick="this.closest('details').open=false; openAssetDetail('${a.id}')" class="block w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Details</button>
+              <button onclick="this.closest('details').open=false; acDownload('${a.id}', false)" class="block w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Asset card (PDF)</button>
               ${admin ? `<button onclick="this.closest('details').open=false; openAssetForm('${a.id}')" class="block w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Edit</button>
               <button onclick="this.closest('details').open=false; deleteAsset('${a.id}')" class="block w-full text-left px-3 py-1.5 text-sm text-rose-600 hover:bg-rose-50">Delete</button>` : ''}
             </div></details>
@@ -19590,6 +19682,7 @@ function viewAssets(){
       </div>
       <div class="flex gap-2.5">
         <button onclick="exportAssetsCSV()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export CSV</button>
+        <button onclick="openAssetCardsPdf()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Asset cards (PDF)</button>
         <button onclick="openAssetForm()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Add Asset</button>
       </div>
     </div>
@@ -22403,6 +22496,7 @@ function viewAssetDetail(){
         </div>
       </div>
       <div class="flex gap-2.5">
+        <button onclick="acDownload('${asset.id}', false, this)" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Asset card (PDF)</button>
         <button onclick="openTransferForm('${asset.id}')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Transfer</button>
         ${canManageInventory() ? `<button onclick="openAssetForm('${asset.id}')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">Edit</button>` : ''}
       </div>
@@ -22425,6 +22519,13 @@ function viewAssetDetail(){
         <div class="text-xs font-medium text-slate-500">Added</div>
         <div class="text-sm font-bold text-slate-900 mt-1">${asset.createdAt?fmtDate(asset.createdAt.slice(0,10)):'—'}</div>
       </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 mb-6">
+      <div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-sm font-bold text-slate-900 mb-1">Asset card</div><div class="text-xs text-slate-500">Every code and detail of this asset with its QR code — print it and keep it with the asset.</div></div>
+        <div class="flex gap-2.5 flex-wrap"><button onclick="acDownload('${asset.id}', false, this)" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700">Download card (PDF)</button><button onclick="acDownload('${asset.id}', true, this)" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">On an A4 page</button></div></div>
+      <div id="ac-prev-${asset.id}" class="rounded-lg overflow-hidden ring-1 ring-slate-200 shadow-sm" style="background:#fff;max-width:440px">${acSvg(asset, _acLogo || '')}</div>
+      <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" class="hidden" onload="acFillPreview('${asset.id}')" onerror="acFillPreview('${asset.id}')">
     </div>
 
     <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 mb-6">

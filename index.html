@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.339';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.342';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -6799,7 +6799,7 @@ async function pcReplForm(no, btn){
 function pcReplCell(s){
   if(!s.rec) return '<span class="text-slate-300">—</span>';
   const pend = pcStmtPending(s), got = vNum(s.rec.replenishedAmount), rr = s.rec.replRequest;
-  const req = rr ? `<div class="text-[11px] text-slate-500 mt-1">Requested ${vDate(rr.date)}${pcReplDocs(s.rec, rr) ? ' · ' + pcReplDocs(s.rec, rr) : ''}</div>` : '';
+  const req = (rr ? `<div class="text-[11px] text-slate-500 mt-1">Requested ${vDate(rr.date)}${pcReplDocs(s.rec, rr) ? ' · ' + pcReplDocs(s.rec, rr) : ''}</div>` : '') + (s.rec.signedStatement && s.rec.signedStatement.fileId ? `<div class="text-[11px] mt-0.5"><button type="button" onclick="event.stopPropagation(); pcStmtOpenSigned('${esc(s.no)}', 'stmt')" class="text-brand-600 font-semibold hover:underline">📎 Signed statement</button></div>` : '');
   return (pend > 0 ? vPill('warn', 'Pending ' + fmtMVR(pend)) + (got ? `<div class="text-[11px] text-slate-400 mt-0.5">${fmtMVR(got)} received</div>` : '') : vPill('good', 'Replenished' + (s.rec.replenishedDate ? ' ' + vDate(s.rec.replenishedDate) : ''))) + req;
 }
 // a short status for the closed-statements list
@@ -6845,6 +6845,45 @@ async function pcStatementZip(no, btn){
   }catch(e){ console.error(e); toast('Could not make the ZIP: ' + (e && e.message ? e.message : e), true); }
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; } }
 }
+/* ---------- signed copies kept with a closed statement: the signed statement, and the signed replenishment request form ---------- */
+function pcStmtSignedBox(no, s, can){
+  const rec = s.rec || {}, rr = rec.replRequest, st = rec.signedStatement && rec.signedStatement.fileId ? rec.signedStatement : null, rf = rr && rr.docFile && rr.docFile.fileId ? rr.docFile : null;
+  const row = (label, kind, f, note) => `<div class="flex items-center justify-between gap-3 flex-wrap py-2.5 border-t border-slate-100 first:border-0">
+      <div class="min-w-0"><div class="text-sm font-semibold text-slate-800">${label}</div><div class="text-[11.5px] ${f ? 'text-emerald-600 font-semibold' : 'text-slate-400'}">${f ? '✓ ' + esc(f.fileName || 'Attached') + (f.at ? ' · ' + esc(fmtDT(f.at)) : '') : esc(note || 'Not attached yet')}</div></div>
+      <div class="flex items-center gap-3 flex-wrap text-xs font-semibold">
+        ${f ? `<button type="button" onclick="pcStmtOpenSigned('${esc(no)}', '${kind}')" class="text-brand-600 hover:underline">View</button><button type="button" onclick="attPdfGo('${esc(f.fileId)}', 'download', '${esc(label.replace(/'/g, ''))} ${esc(no)}', this)" class="text-slate-500 hover:text-brand-600">⬇ PDF</button>` : ''}
+        ${can && s.rec && (kind === 'stmt' || rr) ? `<label class="text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcStmtAttach('${esc(no)}', '${kind}', this)">${f ? 'Replace' : '📎 Attach signed copy'}</label>${f ? `<button type="button" onclick="pcStmtRemoveSigned('${esc(no)}', '${kind}')" class="text-slate-400 hover:text-rose-600">Remove</button>` : ''}` : ''}
+      </div></div>`;
+  return `<div class="rounded-xl border border-slate-200 px-4 py-2 mb-5"><div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 pt-2 pb-1">Signed copies</div>
+    ${row('Signed statement', 'stmt', st)}${row('Signed replenishment request form', 'repl', rf, rr ? 'Not attached yet' : 'Raise the replenishment request first')}</div>`;
+}
+function pcStmtOpenSigned(no, kind){
+  const rec = pcStmtRec(no); if(!rec) return;
+  const f = kind === 'stmt' ? rec.signedStatement : rec.replRequest && rec.replRequest.docFile;
+  if(f && f.fileId) agOpenFile(f.fileId, (kind === 'stmt' ? 'Signed statement — ' : 'Signed replenishment request — ') + no, null);
+}
+async function pcStmtAttach(no, kind, input){
+  const files = [...input.files]; input.value = ''; if(!files.length) return;
+  const rec = pcStmtRec(no); if(!rec){ toast('Close the statement first.', true); return; }
+  if(!pcCanStatement(rec.locationId)){ toast('Only ' + pcStatementWho(rec.locationId) + ' can attach to a statement.', true); return; }
+  if(kind === 'repl' && !rec.replRequest){ toast('Raise the replenishment request first.', true); return; }
+  let att; try{ att = await agPrepare(files); }catch(e){ toast('Could not attach: ' + (e && e.message ? e.message : e), true); return; }
+  att.name = (kind === 'stmt' ? 'Signed statement ' : 'Signed replenishment request ') + no + (att.pdf ? '.pdf' : '');
+  toast('Uploading the signed ' + (kind === 'stmt' ? 'statement' : 'replenishment request form') + '…');
+  await attBg(att, no, async st => {
+    const r = pcStmtRec(no); if(!r) return ''; st = Object.assign({}, st, { at:Date.now(), by:authUser ? authUser.name : '' });
+    if(kind === 'stmt'){ const old = r.signedStatement && r.signedStatement.fileId; await vehSave('pettyStatements', { id:r.id, signedStatement:st }); return old; }
+    const rr = r.replRequest || {}, old = rr.docFile && rr.docFile.fileId; await vehSave('pettyStatements', { id:r.id, replRequest:Object.assign({}, rr, { docFile:st }) }); return old;
+  });
+  const t = document.getElementById('modal-title'); if(t && t.textContent === 'Statement ' + no && !document.getElementById('modal-overlay').classList.contains('hidden')) openPcStatementDetail(no);
+}
+function pcStmtRemoveSigned(no, kind){
+  const rec = pcStmtRec(no); if(!rec) return; const f = kind === 'stmt' ? rec.signedStatement : rec.replRequest && rec.replRequest.docFile; if(!f || !f.fileId) return;
+  confirmAction('Remove the signed ' + (kind === 'stmt' ? 'statement' : 'replenishment request form') + ' from ' + no + '?', async () => {
+    if(kind === 'stmt') await vehSave('pettyStatements', { id:rec.id, signedStatement:null }); else await vehSave('pettyStatements', { id:rec.id, replRequest:Object.assign({}, rec.replRequest, { docFile:null }) });
+    agFileDel(f.fileId); toast('Removed.'); rerenderMain(); openPcStatementDetail(no);
+  });
+}
 function openPcStatementDetail(no){
   const locId = pcStLocation(), s = pcStatements(locId).find(x => x.no === no); if(!s) return;
   const can = pcCanStatement(locId), rec = s.rec || {}, rr = rec.replRequest, pend = pcStmtPending(s), got = vNum(rec.replenishedAmount), fig = pcStmtFigures(locId, s);
@@ -6860,9 +6899,11 @@ function openPcStatementDetail(no){
       ${dl('Statement', 'PDF', `pcStatementPdf('${esc(no)}', this)`)}${dl('Statement workbook — ' + esc((pcFundOfStatement(no) || {}).name || 'this location') + ' (a sheet per statement)', 'Excel', `pcDownloadStatements('${esc(no)}', this)`)}${dl('Workbook of all locations', 'Excel', `pcDownloadStatements('${esc(no)}', this, true)`)}${dl('Preview the statement sheet', 'View', `pcStWorkbookPreview('${esc(no)}', true)`)}${dl('All petty cash requests and invoices', 'ZIP', `pcStatementZip('${esc(no)}', this)`)}
       ${rr ? dl('Replenishment form', 'PDF', `pcReplFormPdf('${esc(no)}', this)`) + dl('Replenishment form', 'Word', `pcReplForm('${esc(no)}', this)`) : ''}
     </div>
+    ${s.closed ? pcStmtSignedBox(no, s, can) : ''}
     <div class="rounded-xl border border-slate-200 p-4 mb-5">
       <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Replenishment</div><div class="mt-1.5">${pend > 0 ? vPill('warn', 'Pending ' + fmtMVR(pend)) : vPill('good', 'Replenished' + (rec.replenishedDate ? ' ' + vDate(rec.replenishedDate) : ''))}${got && pend > 0 ? `<span class="text-xs text-slate-500 ml-2">${fmtMVR(got)} received</span>` : ''}</div></div>
-        <div class="flex items-center gap-4 flex-wrap">${can && s.rec ? act(rr ? 'Edit request' : 'Raise request', `openPcReplRequest('${esc(no)}')`, rr ? 'text-slate-500 hover:text-brand-600' : '') : ''}${can && s.rec && pend > 0 ? act('Mark replenished', `openPcReplenish('${esc(no)}')`) : ''}${can && got > 0 ? act('Undo', `pcUndoReplenish('${esc(no)}')`, 'text-slate-400 hover:text-rose-600') : ''}</div></div>
+        <div class="flex items-center gap-4 flex-wrap">${can && s.rec ? act(rr ? 'Edit request' : 'Raise request', `openPcReplRequest('${esc(no)}')`, rr ? 'text-slate-500 hover:text-brand-600' : '') : ''}${can && s.rec && pend > 0 ? act('Mark replenished', `openPcReplenish('${esc(no)}')`) : ''}${got > 0 && (can || pcCanCount(locId)) ? act(rec.replCash ? 'Update cash count' : 'Count received cash', `openPcReplCount('${esc(no)}')`) : ''}${can && got > 0 ? act('Undo', `pcUndoReplenish('${esc(no)}')`, 'text-slate-400 hover:text-rose-600') : ''}</div></div>
+      ${rec.replCash ? (() => { const d = pcRound(vNum(rec.replCash.total) - got); return `<div class="mt-3 rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm flex items-center justify-between gap-3 flex-wrap"><span><span class="text-slate-500">Cash received counted:</span> <b class="num">${fmtMVR(rec.replCash.total)}</b> ${Math.abs(d) < 0.005 ? '<span class="text-emerald-600 font-semibold text-xs">Matches ✓</span>' : vPill('crit', (d < 0 ? 'Short ' : 'Over ') + fmtMVR(Math.abs(d)))}</span><span class="text-[11.5px] text-slate-400">${esc(PC_DENOMS.filter(dd => rec.replCash.counts && rec.replCash.counts[String(dd)]).map(dd => dd + ' × ' + rec.replCash.counts[String(dd)]).join(' · '))}${rec.replCash.at ? ' · ' + esc(fmtDT(rec.replCash.at)) + (rec.replCash.by ? ' · ' + esc(rec.replCash.by) : '') : ''}${rec.replCash.added ? ' · added to cash at hand' : ''}</span></div>`; })() : ''}
       ${rr ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-sm">${item('Request no.', esc(pcReplNo(s)))}${item('Requested', vDate(rr.date) + ' · ' + fmtMVR(rr.amount))}${item('Approved by', esc(rr.hodName || '—') + (rr.hodDate ? ' · ' + vDate(rr.hodDate) : ''))}${item('Signed form', pcReplDocs(s.rec, rr, 'Open') || '—')}</div>` : `<div class="text-xs text-slate-500 mt-2">No replenishment request yet.</div>`}
       ${rec.replenishNote ? `<div class="text-xs text-slate-500 mt-2">Note: ${esc(rec.replenishNote)}</div>` : ''}
     </div>
@@ -6991,6 +7032,49 @@ async function pcReplFormPdf(no, btn){
   catch(e){ console.error(e); toast('Could not create the PDF: ' + (e && e.message ? e.message : e), true); }
   finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.style.opacity = ''; } }
 }
+/* ---------- cash count of a received replenishment: the notes and coins that came back, checked against the amount received,
+   and (by default) added to the location's cash at hand ---------- */
+function openPcReplCount(no){
+  const locId = pcStLocation(); if(!pcCanCount(locId) && !pcCanStatement(locId)){ toast('Only the petty cash custodian (or an admin) can count the cash.', true); return; }
+  const s = pcStatements(locId).find(x => x.no === no); if(!s || !s.rec) return;
+  const got = vNum(s.rec.replenishedAmount), rc = s.rec.replCash || {}, counts = rc.counts || {}, f = pcFund(locId);
+  openModal('Count received cash — ' + no, `
+    <div class="text-[12.5px] text-slate-500 mb-3">Count the notes and coins received for this replenishment. The total is checked against the amount recorded as received (<b class="text-slate-800">${fmtMVR(got)}</b>).${rc.at ? `<br>Last counted ${esc(fmtDT(rc.at))}${rc.by ? ' by ' + esc(rc.by) : ''}.` : ''}</div>
+    <table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wider text-slate-400"><th class="py-1.5 font-semibold">Denomination</th><th class="py-1.5 font-semibold w-32">Quantity</th><th class="py-1.5 font-semibold text-right">Total MVR</th></tr></thead>
+      <tbody id="pc-rc-body" data-got="${got}">${PC_DENOMS.map(d => `<tr class="border-t border-slate-100"><td class="py-1.5 font-semibold text-slate-700 num">${d}</td><td class="py-1.5"><input type="number" min="0" step="1" data-d="${d}" value="${esc(counts[String(d)] || '')}" placeholder="0" oninput="pcReplCountRecalc()" class="${VEH_FIELD} !py-1.5"></td><td class="py-1.5 text-right num pc-ct">0.00</td></tr>`).join('')}</tbody></table>
+    <div class="border-t border-slate-200 mt-1 pt-3 grid grid-cols-2 gap-y-2.5 text-sm items-center">
+      <span class="text-slate-500">Cash counted</span><span id="pc-rc-total" class="text-right font-bold num">MVR 0.00</span>
+      <span class="text-slate-500">Amount received</span><span class="text-right num">${fmtMVR(got)}</span>
+      <span class="text-slate-500">Difference</span><span id="pc-rc-diff" class="text-right"></span></div>
+    <label class="flex items-start gap-2.5 mt-4 text-sm text-slate-700 cursor-pointer"><input type="checkbox" id="pc-rc-add" ${rc.at && !rc.added ? '' : 'checked'} class="mt-0.5 w-4 h-4"><span>Add these notes and coins to the cash at hand of <b>${esc(f ? f.name : 'this location')}</b><span class="block text-[11.5px] text-slate-400">${rc.added ? 'Already added — only the change since the last count is added (or taken off).' : 'The location\'s cash count is updated, so the reconciliation shows the money received.'}</span></span></label>
+    <div class="flex justify-end gap-2.5 mt-5"><button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50" onclick="openPcStatementDetail('${esc(no)}')">Back</button><button type="button" id="pc-rc-save" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700" onclick="savePcReplCount('${esc(no)}')">Save count</button></div>`, true);
+  pcReplCountRecalc();
+}
+function pcReplCountRecalc(){
+  let total = 0; document.querySelectorAll('#pc-rc-body input[data-d]').forEach(i => { const q = Math.max(0, Math.floor(vNum(i.value))), t = pcRound(+i.dataset.d * q); total += t; i.closest('tr').querySelector('.pc-ct').textContent = pcMoneyPlain(t); });
+  total = pcRound(total); const got = +document.getElementById('pc-rc-body').dataset.got, diff = pcRound(total - got), el = document.getElementById('pc-rc-diff');
+  document.getElementById('pc-rc-total').textContent = fmtMVR(total);
+  el.className = 'text-right text-sm font-bold ' + (Math.abs(diff) < 0.005 ? 'text-emerald-600' : 'text-rose-600');
+  el.textContent = Math.abs(diff) < 0.005 ? 'Matches ✓' : (diff < 0 ? 'Short ' : 'Over ') + fmtMVR(Math.abs(diff));
+}
+async function savePcReplCount(no){
+  const locId = pcStLocation(), s = pcStatements(locId).find(x => x.no === no); if(!s || !s.rec) return;
+  const counts = {}; document.querySelectorAll('#pc-rc-body input[data-d]').forEach(i => { const q = Math.max(0, Math.floor(vNum(i.value))); if(q) counts[i.dataset.d] = q; });
+  const total = pcCountTotal(counts); if(!(total > 0)) return toast('Enter the notes and coins received.', true);
+  const add = document.getElementById('pc-rc-add').checked, prevRc = s.rec.replCash || {}, at = Date.now(), by = authUser ? authUser.name : '';
+  const btn = document.getElementById('pc-rc-save'); if(btn) btn.disabled = true;
+  // the location's cash at hand: add this count (taking off what an earlier count of this replenishment already added)
+  if(add || prevRc.added){
+    const cur = pcCountOf(locId), base = Object.assign({}, (cur && cur.counts) || {}), before = prevRc.added ? prevRc.counts || {} : {}, now = add ? counts : {};
+    PC_DENOMS.forEach(d => { const k = String(d), q = Math.max(0, Math.floor(vNum(base[k])) - Math.floor(vNum(before[k])) + Math.floor(vNum(now[k]))); if(q) base[k] = q; else delete base[k]; });
+    const t2 = pcCountTotal(base);
+    await vehSave('pettyCounts', { id:locId, counts:base, total:t2, pendingManual:cur ? vNum(cur.pendingManual) : 0, countedAt:at, countedBy:by, countedByUid:authUser ? authUser.uid : '', log:((cur && cur.log) || []).concat([{ at, by, total:t2, pendingManual:cur ? vNum(cur.pendingManual) : 0, note:'Replenishment ' + no + ' received: ' + fmtMVR(total) }]).slice(-10) });
+  }
+  await vehSave('pettyStatements', { id:s.rec.id, replCash:{ counts, total, at, by, added:!!add } });
+  const got = vNum(s.rec.replenishedAmount), diff = pcRound(total - got);
+  toast('Received cash counted: ' + fmtMVR(total) + (Math.abs(diff) < 0.005 ? ' — matches the amount received.' : ' — ' + (diff < 0 ? 'short by ' : 'over by ') + fmtMVR(Math.abs(diff)) + '.') + (add ? ' Added to the cash at hand.' : ''), Math.abs(diff) >= 0.005);
+  rerenderMain(); openPcStatementDetail(no);
+}
 function openPcReplenish(no){
   const locId = pcStLocation(); if(!pcCanStatement(locId)){ toast('Only ' + pcStatementWho(locId) + ' can record a replenishment.', true); return; }
   const s = pcStatements(locId).find(x => x.no === no); if(!s || !s.closed || !s.rec) return;
@@ -7009,12 +7093,17 @@ async function savePcReplenish(no){
   if(amt > pend + 0.005) return vFail('That is more than is pending (' + fmtMVR(pend) + ').');
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   await vehSave('pettyStatements', { id:s.rec.id, replenishedAmount:pcRound(vNum(s.rec.replenishedAmount) + amt), replenishedDate:o.replenishedDate, replenishNote:o.replenishNote || '', replenishedBy:authUser ? authUser.name : '' });
-  closeModal(); rerenderMain(); openPcStatementDetail(no); toast(Math.abs(amt - pend) < 0.005 ? 'Statement marked replenished.' : 'Replenishment recorded. ' + fmtMVR(pcRound(pend - amt)) + ' is still pending.');
+  closeModal(); rerenderMain(); toast(Math.abs(amt - pend) < 0.005 ? 'Statement marked replenished — now count the cash received.' : 'Replenishment recorded. ' + fmtMVR(pcRound(pend - amt)) + ' is still pending. Count the cash received.');
+  openPcReplCount(no);
 }
 function pcUndoReplenish(no){
   const locId = pcStLocation(); if(!pcCanStatement(locId)){ toast('Only ' + pcStatementWho(locId) + ' can change this.', true); return; }
   const s = pcStatements(locId).find(x => x.no === no); if(!s || !s.rec) return;
-  confirmAction('Clear the replenishment recorded for ' + no + '? Its full total (' + fmtMVR(s.total) + ') goes back to pending replenishment.', async () => { await vehSave('pettyStatements', { id:s.rec.id, replenishedAmount:0, replenishedDate:null, replenishNote:null, replenishedBy:null }); rerenderMain(); toast('Replenishment cleared.'); });
+  const rc = s.rec.replCash;
+  confirmAction('Clear the replenishment recorded for ' + no + '? Its full total (' + fmtMVR(s.total) + ') goes back to pending replenishment.' + (rc && rc.added ? ' The cash counted for it (' + fmtMVR(rc.total) + ') is taken off the cash at hand again.' : ''), async () => {
+    if(rc && rc.added){ const cur = pcCountOf(locId); if(cur){ const base = Object.assign({}, cur.counts || {}); PC_DENOMS.forEach(d => { const k = String(d), q = Math.max(0, Math.floor(vNum(base[k])) - Math.floor(vNum((rc.counts || {})[k]))); if(q) base[k] = q; else delete base[k]; });
+      await vehSave('pettyCounts', { id:locId, counts:base, total:pcCountTotal(base), countedAt:Date.now(), countedBy:authUser ? authUser.name : '', log:(cur.log || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', total:pcCountTotal(base), note:'Replenishment ' + no + ' undone' }]).slice(-10) }); } }
+    await vehSave('pettyStatements', { id:s.rec.id, replenishedAmount:0, replenishedDate:null, replenishNote:null, replenishedBy:null, replCash:null }); rerenderMain(); toast('Replenishment cleared.'); });
 }
 function pcCashBoxHtml(loc){
   const rc = pcReconcile(loc), bad = rc.counted && Math.abs(rc.diff) >= 0.005, cell = (l, v, strong) => `<div><div class="text-[11px] text-slate-400">${l}</div><div class="text-sm ${strong ? 'font-bold text-slate-900' : 'text-slate-700'} num">${v}</div></div>`;
@@ -21573,8 +21662,13 @@ function pdfCode(ch){
   if(cp === 9) return 32;
   if(cp >= 32 && cp <= 126) return cp;
   if(cp >= 160 && cp <= 255) return cp;
+  if(PDF_FOLD[cp] != null) return pdfCode(String.fromCodePoint(PDF_FOLD[cp]));   // look-alikes: inch ″, foot ′, minus −, odd dashes…
   return PDF_CP1252[cp] || 63;                                          // anything outside Western text becomes "?"
 }
+// characters the PDF fonts don't have, drawn as the nearest one they do (by code point)
+const PDF_FOLD = { 0x2033:0x201D, 0x2036:0x201C, 0x02BA:0x22, 0x3003:0x22, 0x2032:0x2019, 0x2035:0x2018, 0x02B9:0x27, 0x02BC:0x2019, 0x2212:0x2D, 0x2010:0x2D, 0x2011:0x2D, 0x2012:0x2013, 0x2043:0x2D, 0x2219:0xB7, 0x22C5:0xB7, 0x2027:0xB7,
+  0x2215:0x2F, 0x2044:0x2F, 0x2236:0x3A, 0xFF02:0x22, 0xFF07:0x27, 0x201F:0x201D, 0x201B:0x2019, 0x2E3A:0x2014, 0x2015:0x2014, 0x00AD:0x2D, 0x2007:0x20, 0x2008:0x20, 0x2009:0x20, 0x200A:0x20, 0x202F:0x20, 0x205F:0x20, 0x3000:0x20, 0x2002:0x20, 0x2003:0x20,
+  0x2715:0xD7, 0x2716:0xD7, 0x2A2F:0xD7, 0x2217:0x2A, 0x25CF:0x2022, 0x25E6:0xB0, 0x2218:0xB0, 0x00B5:0xB5, 0x03BC:0xB5, 0x2126:0x4F };
 function pdfClean(s){ return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ''); }
 // the font family used while laying out a PDF: '' = Poppins (most forms), 'apt_' = Inter, standing in for Aptos (EXCO paper)
 let PDF_FAM = '';

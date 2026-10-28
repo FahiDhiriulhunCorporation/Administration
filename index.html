@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.338';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.339';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -4084,7 +4084,7 @@ async function buildIsPdf(D){
     gen.forEach(([k, v]) => { const lw = 110, ls = pdfWrap(v, false, FS, R - L - lw); need(ls.length * LH + 2); pg.text(L, y, k + ':', { bold:true, size:FS }); ls.forEach((t, i) => { pg.text(L + lw, y, t, { size:FS }); y += LH; }); y += 2; });
     D.other.forEach(t => { const ls = pdfWrap(t, false, FS, R - L - 14); need(ls.length * LH); pg.text(L, y, '•', { size:FS }); ls.forEach((x, i) => { jl(L + 14, x, i === ls.length - 1, R - L - 14); y += LH; }); y += 2; }); }
   y += 16; need(128); const half = (R - L) / 2, SG = 58;
-  [[L, 'Prepared by', [D.by, D.byDesig, D.byDept], !!D.by], [L + half + 10, 'Approved by', D.ap ? [D.ap, D.apDesig] : ['Name:', 'Designation:', 'Date:'], !!D.ap]].forEach(([x, lab, ls, named]) => {
+  [[L, 'Prepared by', [D.by, D.byDesig, D.byDept], !!D.by]].forEach(([x, lab, ls, named]) => {
     pg.text(x, y, lab, { font:'F11', size:10 }); pg.line(x, y + SG, x + half - 30, y + SG, K, 0.6); ls.filter(Boolean).forEach((l, i) => pg.text(x, y + SG + 16 + i * 13, l, { size:9.5, bold:i === 0 && named })); });
   return lhPdfFinish(pages, 'Item Specification ' + (D.no || ''), R, { black:true });
 }
@@ -4114,7 +4114,7 @@ async function buildIsDocx(D){
     gen.forEach(([k, v]) => out.push(P(T(k + ': ', { b:true }) + '<w:r><w:tab/></w:r>' + T(v), { ind:'<w:ind w:left="2000" w:hanging="2000"/>' }).replace('<w:pPr>', '<w:pPr><w:tabs><w:tab w:val="left" w:pos="2000"/></w:tabs>')));
     D.other.forEach(t => out.push(P(T('•') + '<w:r><w:tab/></w:r>' + T(t), { jc:'both', ind:'<w:ind w:left="300" w:hanging="300"/>' }))); }
   const sc = (lab, ls, named) => `<w:tc><w:tcPr><w:tcW w:w="${TW / 2}" w:type="dxa"/></w:tcPr>${wP(wR(lab, { font:HF, sz:20 }), { after:1000 })}<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="6" w:space="4" w:color="000000"/></w:pBdr><w:spacing w:after="40"/><w:ind w:right="500"/></w:pPr>${T(ls[0], { b:named })}</w:p>${ls.slice(1).map(l => wP(T(l, { sz:18 }), { after:20 })).join('')}</w:tc>`;
-  out.push(P('', { after:240 }), `<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${TW / 2}"/><w:gridCol w:w="${TW / 2}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${sc('Prepared by', [D.by || 'Name:', D.byDesig, D.byDept].filter(Boolean), !!D.by)}${sc('Approved by', D.ap ? [D.ap, D.apDesig].filter(Boolean) : ['Name:', 'Designation:', 'Date:'], !!D.ap)}</w:tr></w:tbl>`);
+  out.push(P('', { after:240 }), `<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${TW / 2}"/><w:gridCol w:w="${TW / 2}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${sc('Prepared by', [D.by || 'Name:', D.byDesig, D.byDept].filter(Boolean), !!D.by)}<w:tc><w:tcPr><w:tcW w:w="${TW / 2}" w:type="dxa"/></w:tcPr>${wP('')}</w:tc></w:tr></w:tbl>`);
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
   return lhDocx(doc, LH_NS);
 }
@@ -4185,10 +4185,8 @@ function openIsForm(id){
     vSec('General requirements') + vGrid(2, vF('Warranty', 'warranty', d.warranty, 'text', { attrs:' placeholder="e.g. At least 1 year from delivery"' }) + vF('Delivery period', 'delivery', d.delivery, 'text', { attrs:' placeholder="e.g. Within 14 days of the PO"' }) +
       vF('Delivery location', 'deliveryLocation', d.deliveryLocation, 'text', { span:'sm:col-span-2', attrs:' placeholder="e.g. FDC Head Office, Malé"' }) +
       vTa('Other requirements (optional)', 'other', d.other || '', { span:'sm:col-span-2', rows:3, ph:'One per line, e.g.\nQuotation must be valid for 30 days\nInstallation included' })) +
-    vSec('Prepared and approved by') + vGrid(2, vF('Prepared by', 'preparedBy', d.preparedBy, 'text', { attrs:' list="is-staff" oninput="irFillDesig(this, \'preparedDesig\')"' }) + vF('Designation', 'preparedDesig', d.preparedDesig) +
-      vF('Department', 'preparedDept', d.preparedDept) + `<div></div>` +
-      vF('Approved by (optional)', 'approvedBy', d.approvedBy, 'text', { attrs:' list="is-staff" oninput="irFillDesig(this, \'approvedDesig\')"' }) + vF('Designation', 'approvedDesig', d.approvedDesig) +
-      `<p class="sm:col-span-2 -mt-1 text-xs text-slate-500">Leave "Approved by" empty to print blank lines for signing by hand.</p>`) +
+    vSec('Prepared by') + vGrid(2, vF('Prepared by', 'preparedBy', d.preparedBy, 'text', { attrs:' list="is-staff" oninput="irFillDesig(this, \'preparedDesig\')"' }) + vF('Designation', 'preparedDesig', d.preparedDesig) +
+      vF('Department', 'preparedDept', d.preparedDept)) +
     vFoot(r ? 'Save' : 'Save specification', `saveIsForm('${id || ''}')`, r && canManageInventory() ? `deleteIs('${id}')` : ''), true);
 }
 async function saveIsForm(id){

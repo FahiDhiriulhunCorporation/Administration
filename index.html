@@ -1973,7 +1973,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.332';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.336';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2381,7 +2381,7 @@ function openModal(title, bodyHtml, wide){
   overlay.classList.remove('hidden');
   overlay.classList.add('flex');
   if(!sameDialog) overlay.scrollTop = 0;
-  try{ const old = document.getElementById('modal-share'); if(old) old.remove(); const sh = shareNext; shareNext = null;
+  try{ const old = document.getElementById('modal-share'); if(old) old.remove(); const oe = document.getElementById('modal-edit'); if(oe) oe.remove(); const sh = shareNext; shareNext = null;
     if(sh){ const b = document.createElement('button'); b.id = 'modal-share'; b.type = 'button'; b.title = 'Share a link to this request'; b.style.cssText = 'margin-left:auto;margin-right:10px'; b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 align-middle';
       b.textContent = '🔗 Share'; b.onclick = () => openShare(sh.kind, sh.id); titleEl.after(b); } }catch(e){}
 }
@@ -2390,10 +2390,11 @@ let shareNext = null;                                 // set just before a reque
 const shareFor = (kind, id) => { if(id) shareNext = { kind, id }; };
 const SHARE_KINDS = {
   pc:{ label:'Petty cash request', rec:id => state.pettyCash.find(x => x.id === id), title:r => [r.number, r.purpose].filter(Boolean).join(' — '), open:id => { goTo('petty-cash'); openPcDetails(id); } },
-  pr:{ label:'Purchase requisition', rec:id => (state.purchaseRequisitions || []).find(x => x.id === id), title:r => [r.prNumber, (r.lineItems || []).map(l => l.itemName).filter(Boolean).slice(0, 2).join(', ')].filter(Boolean).join(' — '), open:id => { goTo('purchase-requisitions'); openPurchaseRequisitionForm(id); } },
+  pr:{ label:'Purchase requisition', rec:id => (state.purchaseRequisitions || []).find(x => x.id === id), title:r => [r.prNumber, (r.lineItems || []).map(l => l.itemName).filter(Boolean).slice(0, 2).join(', ')].filter(Boolean).join(' — '), open:id => { goTo('purchase-requisitions'); openPrDetail(id); } },
   tr:{ label:'Travel request', rec:id => (state.travelRequests || []).find(x => x.id === id), title:r => [r.formNumber, r.destination, r.purpose].filter(Boolean).join(' — '), open:id => { const t = trById(id); goTo('travel-' + (t && t.scope === 'foreign' ? 'foreign' : 'local')); openTravelDetail(id); } },
   sr:{ label:'Stock request', rec:id => (state.stockRequests || []).find(x => x.id === id), title:r => [r.number, (r.lines || []).map(l => { const p = getProduct(l.productId); return p ? l.qty + ' × ' + displayName(p) : ''; }).filter(Boolean).slice(0, 2).join(', ')].filter(Boolean).join(' — '),
     open:id => { goTo('movements'); ui.movementsView = 'requests'; rerenderMain(); setTimeout(() => { const el = document.getElementById('sr-card-' + id); if(el){ el.scrollIntoView({ block:'center', behavior:'smooth' }); el.classList.add('ring-2', 'ring-brand-500'); setTimeout(() => el.classList.remove('ring-2', 'ring-brand-500'), 4000); } }, 300); } },
+  ho:{ label:'Handover', rec:id => (state.handovers || []).find(x => x.id === id), title:r => [r.referenceNumber, r.handoverType, [r.fromStaffName, r.toStaffName].filter(Boolean).join(' → ')].filter(Boolean).join(' — '), open:id => { goTo('handovers'); openHoDetail(id); } },
   cp:{ label:'Complaint', rec:id => (state.complaints || []).find(x => x.id === id), title:r => [r.no, r.title].filter(Boolean).join(' — '), open:id => { goTo('complaints'); openCpView(id); } },
 };
 const shareUrl = (kind, id) => location.origin + location.pathname + '?open=' + encodeURIComponent(kind + ':' + id);
@@ -3419,7 +3420,7 @@ function vehLinkChips(rq){
   if(rq.pettyCashId && state.pettyCash.some(v => v.id === rq.pettyCashId)) chips.push(`<button onclick="vehGoPC('${esc(rq.pettyCashId)}')" class="text-brand-600 hover:underline">Petty cash voucher ↗</button>`);
   return chips.length ? `<div class="text-[11px] font-semibold mt-0.5 space-x-2">${chips.join('')}</div>` : '';
 }
-function vehGoPR(id){ closeModal(); goTo('purchase-requisitions'); if(canManageInventory()) openPurchaseRequisitionForm(id); }
+function vehGoPR(id){ closeModal(); goTo('purchase-requisitions'); openPrDetail(id); }
 function vehGoPC(id){ closeModal(); goTo('petty-cash'); openPcDetails(id); }
 function vehGoReq(refNo){ closeModal(); vehUi.fuelTab = 'req'; vehUi.fuelQ = refNo || ''; goTo('fueling'); }
 function vehPickVehFuel(sel){ const v = vehById(sel.value); if(v && v.fuelType && sel.form.fuelType) sel.form.fuelType.value = v.fuelType; if(typeof vehRefreshReqSelect === 'function' && vehFuelCtx) vehRefreshReqSelect(); }
@@ -8633,7 +8634,7 @@ function gsIndex(){
   safe(() => sdAll().forEach(p => add('Staff', p.name, [p.designation, p.department].filter(Boolean).join(' · '), `goTo('staff-list'); openSdView && openSdView('${p.key}')`)));
   safe(() => state.tasks.forEach(t => add('Task', t.title, [t.no, tkWho(t)].filter(Boolean).join(' · '), `goTo('tasks'); openTkView('${t.id}')`)));
   safe(() => state.documents.forEach(d => add('Document', d.title, [(DOC_TYPES.find(x => x.k === d.type) || {}).label, d.refNo, d.status].filter(Boolean).join(' · '), `goTo('docs-${d.type}'); openDocView('${d.id}')`)));
-  safe(() => state.purchaseRequisitions.forEach(p => add('PR', 'PR ' + (p.prNumber || ''), [prFirstItem(p) || p.title, p.requester, prStatusMeta(p.status).label].filter(Boolean).join(' · '), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`)));
+  safe(() => state.purchaseRequisitions.forEach(p => add('PR', 'PR ' + (p.prNumber || ''), [prFirstItem(p) || p.title, p.requester, prStatusMeta(p.status).label].filter(Boolean).join(' · '), `goTo('purchase-requisitions'); openPrDetail('${p.id}')`)));
   safe(() => state.pettyCash.forEach(r => add('Petty cash', r.number || 'Petty cash request', [pcRequester(r).name, r.purpose, r.category].filter(Boolean).join(' · '), `goTo('petty-cash'); openPcDetails('${r.id}')`)));
   safe(() => state.complaints.forEach(c => add('Complaint', c.title, [c.no, c.department, c.status].filter(Boolean).join(' · '), `goTo('complaints'); openCpView('${c.id}')`)));
   safe(() => state.keyRegistry.forEach(k => add('Key', k.details || k.no, [k.site, k.kind].filter(Boolean).join(' · '), k.kind === 'Vehicle Key' ? `goTo('vehicle-keys')` : `goTo('keys')`)));
@@ -9475,6 +9476,157 @@ function anyaDownload(t){
   if(anyaGetFile(t)) return true;
   anyaSay('What should I download? For example: "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "voucher PTC-V-HO-26-01", "weekly report week 42", "staff list CSV" or "backup".');
   anyaDraw(); return true;
+}
+/* ---------- Anya: more commands — change statuses, create records with details filled in, look things up, share and download ----------
+   "mark PR 1204 as closed", "set task DS Maintenance to in progress", "complaint 3 level high", "resolve incident 2"
+   "new task check AC filters for Ali due friday high priority", "raise a complaint about water leakage in pantry (high)", "log stock in 10 A4 paper at HO"
+   "how many A4 paper in stock", "who has the brother printer", "where is AD-0068", "status of PR 1204", "my tasks", "overdue tasks", "open complaints"
+   "share PR 1204", "asset card for AD-0068", "asset cards", "open SR 1", "download PR list" */
+const anyaNum = (v, n) => { const m = /(\d+)\D*$/.exec(String(v || '')); return !!m && +m[1] === +n; };
+const anyaWords = t => anyaNorm(t).split(' ').filter(w => w.length > 2 && !/^(the|and|for|with|from|this|that|task|status|set|mark|change|move|make|to|as|of|in|on|please|it|my|our|its)$/.test(w));
+function anyaBestBy(list, txt, keyFn){
+  const w = anyaWords(txt); if(!w.length) return null; let best = null, bs = 0;
+  list.forEach(r => { const k = ' ' + anyaNorm(keyFn(r)) + ' '; let sc = 0; w.forEach(x => { if(k.includes(' ' + x + ' ')) sc += 2; else if(x.length > 3 && k.includes(x)) sc += 1; }); if(sc > bs){ bs = sc; best = r; } });
+  return bs >= Math.min(2, w.length) ? best : null;
+}
+// a record named in the message: "PR 1204", "FDC-2026-PR-01204", "SR-2026-001", "CMP 3", "incident 2", "TSK-26-007", "task <title>", a voucher, a travel form, an asset code
+function anyaRef(t){
+  const n = anyaNorm(t), S = state;
+  let m;
+  if((m = /\b(?:pr|requisition|purchase requisition)\s*-?\s*(?:no\.?\s*)?(?:\d{4}\s*-?\s*pr\s*-?\s*)?0*(\d{1,6})\b/.exec(n)) || (m = /\bfdc-\d{4}-pr-0*(\d+)\b/.exec(n))){ const r = (S.purchaseRequisitions || []).filter(x => anyaNum(x.prNumber, m[1])).sort((a, b) => String(b.requisitionDate || '').localeCompare(String(a.requisitionDate || '')))[0]; if(r) return { kind:'pr', r, label:'PR ' + r.prNumber }; }
+  if((m = /\b(?:sr|stock request)\s*-?\s*(?:\d{4}\s*-?\s*)?0*(\d{1,4})\b/.exec(n))){ const r = (S.stockRequests || []).filter(x => anyaNum(x.number, m[1])).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))[0]; if(r) return { kind:'sr', r, label:'stock request ' + r.number }; }
+  if((m = /\b(?:cmp|complaint)\s*-?\s*(?:no\.?\s*)?(?:\d{4}\s*-?\s*)?0*(\d{1,4})\b/.exec(n))){ const r = (S.complaints || []).filter(x => anyaNum(x.no, m[1])).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0]; if(r) return { kind:'cp', r, label:'complaint ' + r.no }; }
+  if((m = /\b(?:inc|incident(?: report)?)\s*-?\s*(?:no\.?\s*)?(?:\d{4}\s*-?\s*)?0*(\d{1,4})\b/.exec(n))){ const r = (S.incidentReports || []).filter(x => anyaNum(x.no, m[1]))[0]; if(r) return { kind:'ir', r, label:'incident report ' + r.no }; }
+  if((m = /\b(?:tsk|task)\s*-?\s*(?:no\.?\s*)?(?:\d{2,4}\s*-?\s*)?0*(\d{1,4})\b/.exec(n))){ const r = (S.tasks || []).filter(x => anyaNum(x.no, m[1]))[0]; if(r) return { kind:'tk', r, label:'task ' + (r.no || r.title) }; }
+  for(const p of S.pettyCash || []) if(p.number && n.includes(anyaNorm(p.number))) return { kind:'pc', r:p, label:'petty cash ' + p.number };
+  for(const tr of S.travelRequests || []) if(tr.formNumber && n.includes(anyaNorm(tr.formNumber))) return { kind:'tr', r:tr, label:'travel request ' + tr.formNumber };
+  const a = anyaAssetRef(n, true); if(a) return { kind:'as', r:a, label:'asset ' + a.name };
+  if(/\btask\b/.test(n)){ const r = anyaBestBy((S.tasks || []).filter(x => !tkDone(x) || /\b(reopen|not started|in progress)\b/.test(n)), n.replace(/\btask\b/, ''), x => x.title + ' ' + (x.category || '')); if(r) return { kind:'tk', r, label:'task ' + r.title }; }
+  if(/\bcomplaint\b/.test(n)){ const r = anyaBestBy(S.complaints || [], n.replace(/\bcomplaint\b/, ''), x => x.title + ' ' + (x.location || '')); if(r) return { kind:'cp', r, label:'complaint ' + (r.no || r.title) }; }
+  if(/\bincident\b/.test(n)){ const r = anyaBestBy(S.incidentReports || [], n.replace(/\bincident( report)?\b/, ''), x => (x.subject || '') + ' ' + (x.location || '') + ' ' + (x.type || '')); if(r) return { kind:'ir', r, label:'incident report ' + (r.no || '') }; }
+  return null;
+}
+// an asset by its codes (exact), or by name when loose
+function anyaAssetRef(n, strict){
+  const tokens = n.split(' ');
+  const exact = (state.assets || []).find(a => [a.tag, a.departmentAssetCode, a.serialNumber].filter(Boolean).some(c => tokens.includes(anyaNorm(c)) || n.includes(' ' + anyaNorm(c))));
+  if(exact || strict) return exact || null;
+  return anyaBestBy(state.assets || [], n, a => a.name + ' ' + (a.category || '') + ' ' + (a.department || ''));
+}
+const ANYA_ST = {
+  pr:[[/\bpending( approval)?\b/, 'pending_approval'], [/\breleas/, 'released'], [/\bclos/, 'closed'], [/\b(re)?open\b/, 'open']],
+  tk:[[/\b(in progress|start(ed)?|working)\b/, 'In progress'], [/\b(on )?hold\b|\bpause/, 'On hold'], [/\b(complete(d)?|done|finish(ed)?)\b/, 'Completed'], [/\bcancel/, 'Cancelled'], [/\bnot started|reopen\b/, 'Not started']],
+  cp:[[/\bpending\b/, 'Pending'], [/\breview\b/, 'Review'], [/\bimplement/, 'Implemented'], [/\b(resolv|close)/, 'Resolved'], [/\b(re)?open\b/, 'Open']],
+  ir:[[/\bin progress\b/, 'In progress'], [/\b(resolv|close)/, 'Resolved'], [/\b(re)?open\b/, 'Open']],
+  tr:[[/\bpending\b/, 'Pending'], [/\bclos/, 'Closed'], [/\b(re)?open\b/, 'Open']],
+};
+const anyaOpenRef = x => { try{ if(x.kind === 'tk'){ goTo('tasks'); openTkView(x.r.id); } else if(x.kind === 'ir'){ goTo('incident-reports'); openIrReport(x.r.id); } else if(x.kind === 'as'){ openAssetDetail(x.r.id); } else SHARE_KINDS[x.kind].open(x.r.id); }catch(e){ console.warn(e); } };
+const anyaOpenAct = x => ['Open it', () => { anyaToggleSmall(); anyaOpenRef(x); }];
+async function anyaSetStatus(x, st, n){
+  const r = x.r, id = r.id;
+  if(x.kind === 'pr'){ prQuickStatus(id, st); return `**${r.prNumber}** → ${PR_STATUSES.find(s => s.id === st).label}${st === 'closed' ? ' (confirm in the window if it asks)' : ''}.`; }
+  if(x.kind === 'tk'){ if(!tkCanUpdate(r)) return 'You can only update tasks assigned to you.'; await tkQuickSet(id, 'status', st); return `Task **${r.title}** → ${st}.`; }
+  if(x.kind === 'cp'){ if(st === 'Resolved'){ if(!(r.resolution && r.resolution.text)){ anyaToggleSmall(); goTo('complaints'); openCpView(id); return `Complaint **${r.no || r.title}** needs a final resolution — I opened it; write it under **Resolution** and press Resolve.`; } }
+    if(st === 'Implemented'){ anyaToggleSmall(); goTo('complaints'); cpImplemented(id); return `Opened **mark as implemented** for ${r.no || r.title}.`; }
+    await cpSetCpStatus(id, st); return `Complaint **${r.no || r.title}** → ${st}.`; }
+  if(x.kind === 'ir'){ await irSetStatus(id, st); return `Incident report **${r.no}** → ${st}.`; }
+  if(x.kind === 'tr'){ if(!canManageInventory()) return 'Only admins can change a travel request\'s status.'; await vehSave('travelRequests', { id, status:st }); rerenderMain(); return `Travel request **${r.formNumber || r.destination}** → ${st}.`; }
+  return '';
+}
+function anyaDue(s){
+  s = String(s || '').toLowerCase().trim(); const d = new Date(vToday() + 'T00:00:00'), days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  let m = /^(?:next |this )?(sun|mon|tue|wed|thu|fri|sat)[a-z]*$/.exec(s); if(m){ const k = days.findIndex(x => x.startsWith(m[1])); let add = (k - d.getDay() + 7) % 7 || 7; if(/^next /.test(s) && add < 7) add += 7; d.setDate(d.getDate() + add); return localDateStr(d); }
+  if((m = /^in (\d+) days?$/.exec(s))){ d.setDate(d.getDate() + +m[1]); return localDateStr(d); }
+  if(/^next week$/.test(s)){ d.setDate(d.getDate() + 7); return localDateStr(d); }
+  if(/^end of (the )?month$/.test(s)){ return localDateStr(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
+  return anyaDate(s);
+}
+// the words as the person typed them (capitals kept), found from their lower-case form
+function anyaOrig(raw, norm){ const w = String(norm || '').trim().split(/\s+/).filter(Boolean); if(!w.length) return ''; const rx = new RegExp(w.map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^A-Za-z0-9]+'), 'i'), m = rx.exec(String(raw || '')); const o = m ? m[0] : norm; return o.charAt(0).toUpperCase() + o.slice(1); }
+const ANYA_DUE_RX = '(today|tomorrow|next week|end of (?:the )?month|in \\d+ days?|(?:next |this )?(?:sun|mon|tue|wed|thu|fri|sat)[a-z]*|\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}[\\/.\\-]\\d{1,2}(?:[\\/.\\-]\\d{2,4})?|\\d{1,2}(?:st|nd|rd|th)?\\s+[a-z]{3,9}(?:\\s+\\d{4})?)';
+// returns true when handled
+async function anyaCommands(t, raw){
+  const n = anyaNorm(raw), say = (msg, acts, extra) => { anyaSay(msg, acts || [], extra); anyaDraw(); return true; };
+  // ---- share / asset card / open ----
+  if(/^(share|send (a |the )?link (to|for|of)|link (to|for))\b/.test(n)){ const x = anyaRef(n.replace(/^(share|send (a |the )?link (to|for|of)|link (to|for))\s*/, ''));
+    if(!x) return say('What should I share? Say e.g. "share PR 1204", "share complaint 3", "share SR 1" or a petty cash / travel number.');
+    if(x.kind === 'as' || x.kind === 'ir' || x.kind === 'tk') return say(`I can share links to requests (PR, petty cash, travel, stock requests, complaints). For ${esc(x.label)} I can open it for you.`, [anyaOpenAct(x)]);
+    anyaToggleSmall(); openShare(x.kind, x.r.id); return say(`Here's the share link for **${esc(x.label)}** — copy it, or send it by WhatsApp or as an email draft.`); }
+  if(/\basset cards?\b/.test(n)){
+    if(/\b(all|every|cards)\b/.test(n) && !anyaAssetRef(n, true)){ anyaToggleSmall(); goTo('assets'); openAssetCardsPdf(); return say('Pick **A4 sheets** (8 a page) or **one card per page** — the cards follow the Assets list as filtered.'); }
+    const a = anyaAssetRef(n.replace(/\basset cards?\b|\b(for|of|download|print|make|generate|pdf)\b/g, ' ').replace(/\s+/g, ' ').trim()); if(!a) return say('Which asset? Say its code, serial number or name — e.g. "asset card for AD-0068".');
+    acDownload(a.id, false); return say(`Downloading the asset card for **${esc(a.name)}**${a.tag ? ' (' + esc(a.tag) + ')' : ''}.`, [['On an A4 page', () => acDownload(a.id, true)], ['Open the asset', () => { anyaToggleSmall(); openAssetDetail(a.id); }]]); }
+  if(/^(download|export)\b.*\b(prs?|purchase requisitions?|requisitions?)\b.*\b(list|csv|excel)?\b/.test(n) && !anyaRef(n)){ exportPurchaseRequisitionsCSV(); return say('Downloaded the purchase requisitions list (CSV).'); }
+  if(/^(download|export)\b.*\bassets?\b/.test(n) && !/\bcards?\b/.test(n)){ exportAssetsCSV(); return say('Downloaded the assets list (CSV).'); }
+  if(/^(open|show|view|go to|take me to)\s+(my )?(stock )?requests$/.test(n)){ anyaToggleSmall(); goTo('movements'); ui.movementsView = 'requests'; rerenderMain(); return say('Opened **Stock Movements → Requests**.'); }
+  if(/^(open|show|view|pull up)\s+/.test(n)){ const x = anyaRef(n.replace(/^(open|show|view|pull up)\s+/, '')); if(x && (/\d/.test(n) || x.kind === 'as')){ anyaToggleSmall(); anyaOpenRef(x); return say(`Opened **${esc(x.label)}**.`); } }
+  // ---- status / priority / level changes ----
+  let m = /^(?:mark|set|change|move|make|update|put)\s+(.+?)\s+(?:as|to|status to|into)\s+(.+)$/.exec(n) || /^(?:close|resolve|reopen|release|approve|complete|finish|cancel|hold|start|pause|implement)\s+(.+)$/.exec(n) && [n, n.replace(/^\S+\s+/, ''), n.split(' ')[0]];
+  if(m){
+    const what = m[1], to = m[2], x = anyaRef(what);
+    // priority / level
+    const pm = /\b(low|normal|medium|high|urgent|critical)\b/.exec(to);
+    if(x && pm && (/\bpriority\b|\blevel\b/.test(n) || !ANYA_ST[x.kind] || !ANYA_ST[x.kind].some(([rx]) => rx.test(to)))){
+      if(x.kind === 'tk'){ const v = pm[1] === 'medium' ? 'Normal' : pm[1] === 'critical' ? 'Urgent' : pm[1][0].toUpperCase() + pm[1].slice(1); if(!canManageInventory()) return say('Only admins can change a task\'s priority.'); await tkQuickSet(x.r.id, 'priority', v); return say(`Task **${esc(x.r.title)}** → ${v} priority.`, [anyaOpenAct(x)]); }
+      if(x.kind === 'cp'){ const v = pm[1] === 'normal' ? 'Medium' : pm[1] === 'urgent' ? 'Critical' : pm[1][0].toUpperCase() + pm[1].slice(1); await cpSetLevel(x.r.id, v); return say(`Complaint **${esc(x.r.no || x.r.title)}** → level ${v}.`, [anyaOpenAct(x)]); }
+    }
+    if(x && ANYA_ST[x.kind]){
+      const hit = ANYA_ST[x.kind].find(([rx]) => rx.test(to)); if(!hit) return say(`What status for ${esc(x.label)}? ${ANYA_ST[x.kind].map(s => '"' + s[1] + '"').join(', ')}.`);
+      const msg = await anyaSetStatus(x, hit[1], n); return say(msg, [anyaOpenAct(x)]);
+    }
+    if(x && x.kind === 'sr') return say(`Stock requests are approved or rejected by the custodian — I opened it.`, [anyaOpenAct(x)]);
+    if(!x && /\b(pr|requisition|task|complaint|incident|travel|tsk|cmp|inc)\b/.test(what)) return say(`I couldn't find "${esc(what)}". Use its number — e.g. "mark PR 1204 as closed", "set TSK-26-007 to in progress", "resolve complaint 3".`);
+  }
+  // ---- look up ----
+  if(/^(status of|what is the status of|whats the status of|where is my|where s my|status)\s+/.test(n)){ const x = anyaRef(n.replace(/^(what is the |whats the )?status( of)?\s+|^where i?s my\s+/, ''));
+    if(x){ const r = x.r, st = x.kind === 'pr' ? PR_STATUSES.find(s => s.id === (r.status || 'open')).label : x.kind === 'sr' ? (r.status === 'pending' ? 'awaiting approval' + (getLocation(r.locationId) && getLocation(r.locationId).custodianName ? ' by ' + getLocation(r.locationId).custodianName : '') : r.status) : x.kind === 'tk' ? tkState(r) + ' · ' + tkProg(r) + '%' : x.kind === 'pc' ? pcStatus(r).label : x.kind === 'as' ? (r.status === 'retired' ? 'Retired' : 'Active') : (r.status || 'Open');
+      return say(`**${esc(x.label)}** is **${esc(st)}**.`, [anyaOpenAct(x)]); } }
+  if((m = /^(?:how many|how much|stock of|stock level of|stock levels? for|quantity of|qty of|do we have(?: any)?|is there(?: any)?)\s+(.+?)(?:\s+(?:in stock|left|do we have|available|are there|is there|at\s+.+))?\??$/.exec(n)) && state.products.length){
+    const ps = anyaSrMatch(m[1]); if(ps.length){
+      const html = `<ul class="anya-list">${ps.slice(0, 4).map(p => { const locs = LOCATIONS.filter(l => qtyAt(p, l.id) > 0); return `<li><b>${esc(displayName(p))}</b>: ${fmtNum(productTotalQty(p))} in stock${locs.length ? ' — ' + locs.map(l => esc(l.code || l.name) + ' ' + fmtNum(qtyAt(p, l.id))).join(', ') : ''}${isLowStock(p) ? ' <span style="color:#d97706">(low)</span>' : ''}</li>`; }).join('')}</ul>`;
+      return say(ps.length === 1 ? 'Here is the stock:' : 'These items match:', [['Request some', () => anyaSend('request ' + displayName(ps[0]))], ['Stock levels', "vehUi.slQ=" + JSON.stringify(m[1]) + "; goTo('levels')"]], html); } }
+  if((m = /^(?:who has|who is using|who uses|where is|wheres|location of|find asset)\s+(?:the\s+)?(.+?)\??$/.exec(n)) && (state.assets || []).length){
+    const a = anyaAssetRef(m[1]); if(a){ const l = getLocation(a.locationId);
+      return say(`**${esc(a.name)}**${a.tag ? ' (' + esc(a.tag) + ')' : ''} is at **${esc(l ? l.name : 'no location')}**${a.department ? ', ' + esc(a.department) : ''}${a.assignedTo ? ' — assigned to **' + esc(a.assignedTo) + '**' : ' — not assigned to anyone'}.`, [['Open the asset', () => { anyaToggleSmall(); openAssetDetail(a.id); }], ['Asset card', () => acDownload(a.id, false)]]); } }
+  if(/^(my tasks|my open tasks|what are my tasks|show my tasks|tasks for me)$/.test(n)){ const me = authUser ? 'u:' + authUser.uid : '', list = (state.tasks || []).filter(x => !tkDone(x) && (x.assignees || []).some(a => a.key === me)).sort((a, b) => String(a.due || '9').localeCompare(String(b.due || '9')));
+    return say(list.length ? `You have **${list.length}** open task${list.length === 1 ? '' : 's'}:` : 'You have no open tasks. 🎉', list.length ? [['Open Tasks', "goTo('tasks')"]] : [], list.length ? `<ul class="anya-list">${list.slice(0, 8).map(x => `<li>${esc(x.title)} — ${esc(tkState(x))}${x.due ? ', due ' + esc(vDate(x.due)) : ''}</li>`).join('')}</ul>` : ''); }
+  if(/^(overdue tasks|which tasks are overdue|late tasks|tasks overdue)$/.test(n)){ const list = (state.tasks || []).filter(tkOverdue);
+    return say(list.length ? `**${list.length}** task${list.length === 1 ? ' is' : 's are'} overdue:` : 'No tasks are overdue.', list.length ? [['Open Tasks', "goTo('tasks')"]] : [], list.length ? `<ul class="anya-list">${list.slice(0, 8).map(x => `<li>${esc(x.title)} — due ${esc(vDate(x.due))} (${esc((x.assignees || []).map(a => a.name).join(', '))})</li>`).join('')}</ul>` : ''); }
+  if(/^(open|pending|unresolved) complaints$|^complaints (open|pending)$/.test(n)){ const list = cpOpen().sort((a, b) => CP_LEVELS.indexOf(cpLevel(b)) - CP_LEVELS.indexOf(cpLevel(a)));
+    return say(list.length ? `**${list.length}** complaint${list.length === 1 ? ' is' : 's are'} not resolved:` : 'All complaints are resolved.', list.length ? [['Open complaints', "goTo('complaints')"]] : [], list.length ? `<ul class="anya-list">${list.slice(0, 8).map(c => `<li>${esc(c.no || '')} ${esc(c.title)} — ${esc(c.status || 'Open')}, ${esc(cpLevel(c))}</li>`).join('')}</ul>` : ''); }
+  if(/^(pending|released|open|closed) (prs|purchase requisitions|requisitions)$|^(prs|requisitions) (pending|released|open|closed)$/.test(n)){ const w = /pending/.test(n) ? 'pending_approval' : /released/.test(n) ? 'released' : /closed/.test(n) ? 'closed' : 'open', list = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') === w);
+    return say(`**${list.length}** ${PR_STATUSES.find(s => s.id === w).label.toLowerCase()} requisition${list.length === 1 ? '' : 's'}${list.length ? ', ' + fmtMVR(list.reduce((s, p) => s + vNum(p.totalCost), 0)) + ' in all' : ''}.`, [['Open requisitions', "goTo('purchase-requisitions')"]], list.length ? `<ul class="anya-list">${list.slice(0, 8).map(p => `<li>${esc(p.prNumber)} — ${esc(prFirstItem(p) || '')} (${esc(fmtMVR(p.totalCost))})</li>`).join('')}</ul>` : ''); }
+  if(/^(low stock|what is low|whats low|what is running low|items running low|low items|out of stock)$/.test(n)){ const list = state.products.filter(/out/.test(n) ? (p => !productTotalQty(p)) : isLowStock);
+    return say(list.length ? `**${list.length}** item${list.length === 1 ? '' : 's'} ${/out/.test(n) ? 'out of stock' : 'low on stock'}:` : 'Nothing is low on stock.', list.length ? [['Stock levels', "vehUi.slLow='" + (/out/.test(n) ? 'out' : 'low') + "'; goTo('levels')"]] : [], list.length ? `<ul class="anya-list">${list.slice(0, 10).map(p => `<li>${esc(displayName(p))} — ${fmtNum(productTotalQty(p))}</li>`).join('')}</ul>` : ''); }
+  // ---- create with details ----
+  if((m = /^(?:new|add|create|make)\s+(?:a\s+)?task\s+(.+)$/.exec(n))){
+    let body = m[1], due = '', pri = '', who = [];
+    const dm = new RegExp('\\b(?:due|by|on|before)\\s+' + ANYA_DUE_RX + '\\b').exec(body); if(dm){ due = anyaDue(dm[1]); body = body.replace(dm[0], ' '); }
+    const pr = /\b(low|normal|high|urgent)(?:\s+priority)?\b|\bpriority\s+(low|normal|high|urgent)\b/.exec(body); if(pr){ pri = (pr[1] || pr[2]); pri = pri[0].toUpperCase() + pri.slice(1); body = body.replace(pr[0], ' '); }
+    const fm = /\b(?:for|to|assign(?:ed)? to)\s+(.+)$/.exec(body);
+    if(fm){ const names = fm[1].split(/\s*(?:,|and|&)\s*/), staff = sdAll(); names.forEach(nm => { const s = staff.find(p => anyaNorm(p.name) === nm.trim()) || staff.find(p => anyaNorm(p.name).split(' ').includes(nm.trim().split(' ')[0]) && nm.trim().length > 2); if(s) who.push(s.name); }); if(who.length) body = body.slice(0, fm.index); }
+    const title = anyaOrig(raw, body.replace(/\s+/g, ' ').trim().replace(/^(to|called|named)\s+/, '')); if(!title) return false;
+    anyaToggleSmall(); goTo('tasks'); openTkEdit(''); await anyaWaitForm(2000);
+    const f = document.getElementById('vform'); if(f){ if(f.title) f.title.value = title; if(due && f.due) f.due.value = due; if(pri && f.priority) f.priority.value = pri;
+      who.forEach(w => { const c = [...document.querySelectorAll('.tk-as')].find(x => x.dataset.name === w); if(c && !c.checked){ c.checked = true; c.dispatchEvent(new Event('change', { bubbles:true })); } }); }
+    return say(`Opened a new task with: **${esc(title)}**${who.length ? ' · for ' + esc(who.join(', ')) : ''}${due ? ' · due ' + esc(vDate(due)) : ''}${pri ? ' · ' + esc(pri) + ' priority' : ''}. Check it and press **Save** (or say "submit").`); }
+  if((m = /^(?:raise|log|new|add|record|create|make)\s+(?:a\s+|an\s+)?complaint\s+(?:about|regarding|on|for|that)?\s*(.+)$/.exec(n))){
+    let body = m[1], lv = ''; const lm = /\(?\b(low|medium|high|critical|urgent)\b(?:\s+level)?\)?/.exec(body); if(lm){ lv = lm[1] === 'urgent' ? 'Critical' : lm[1][0].toUpperCase() + lm[1].slice(1); body = body.replace(lm[0], ' '); }
+    let loc = ''; const im = /\b(?:in|at)\s+(.+)$/.exec(body); if(im && im[1].split(' ').length <= 5){ loc = im[1]; }
+    anyaToggleSmall(); goTo('complaints'); openCpEdit(''); await anyaWaitForm(2000);
+    const f = document.getElementById('vform'), tt = anyaOrig(raw, body.replace(/\s+/g, ' ').trim()); if(f){ if(f.title) f.title.value = tt; if(loc && f.location) f.location.value = anyaOrig(raw, loc.trim()).replace(/\b\w/g, c => c.toUpperCase()); if(lv){ const r = f.querySelector('[name=level][value="' + lv + '"]'); if(r) r.checked = true; } }
+    return say(`Opened a new complaint: **${esc(tt)}**${lv ? ' · level ' + lv : ''}. Add the details and press **Record complaint**.`); }
+  if((m = /^(?:new|add|create|write|report|log)\s+(?:an?\s+)?incident(?: report)?\s*(?:about|regarding|on|for|of)?\s*(.*)$/.exec(n))){
+    anyaToggleSmall(); goTo('incident-reports'); openIrForm(''); await anyaWaitForm(2000);
+    const f = document.getElementById('vform'), s = (m[1] || '').trim(), so = anyaOrig(raw, s); if(f && s){ if(f.subject) f.subject.value = so; if(f.description) f.description.value = so + '.'; const ty = IR_TYPES.find(x => anyaNorm(x).split(' ').some(w => w.length > 3 && s.includes(w))); if(ty && f.type) f.type.value = ty; }
+    return say('Opened a new incident report' + (s ? ' with the subject filled in' : '') + '. Add what happened, the damage and the action taken, then **Save report**.'); }
+  if((m = /^(?:log |add |record )?(stock in|receive|received)\s+(\d+)\s+(.+?)(?:\s+(?:at|to|into|in)\s+(.+))?$/.exec(n)) && state.products.length){
+    const ps = anyaSrMatch(m[3]); if(!ps.length) return say(`I couldn't find **${esc(m[3])}** in the items list.`);
+    const p = ps[0], loc = m[4] ? (LOCATIONS.find(l => anyaNorm(l.code) === m[4].split(' ')[0]) || LOCATIONS.find(l => anyaNorm(l.name).startsWith(m[4]))) : null;
+    anyaToggleSmall(); goTo('movements'); openMovementForm('in'); await anyaWaitForm(1500);
+    try{ if(loc){ const s = document.getElementById('mf-location'); if(s) s.value = loc.id; } selectMovementProduct(p.id, 0); const q = document.querySelector('.mf-line-wrap input[type=number]'); if(q){ q.value = m[2]; q.dispatchEvent(new Event('input', { bubbles:true })); } }catch(e){}
+    return say(`Opened **Stock In**: ${esc(m[2])} × ${esc(displayName(p))}${loc ? ' at ' + esc(loc.name) : ''}. Choose how it was acquired and save.${ps.length > 1 ? ' (Other matches: ' + ps.slice(1, 4).map(x => esc(displayName(x))).join(', ') + ')' : ''}`); }
+  return false;
 }
 /* ---------- Anya: "I want to request A4 paper", "request for 5 air freshener from APT" → a stock request (approved by the custodian) ---------- */
 const ANYA_SR_RX = /^(?:i (?:want|need|would like|wish) to (?:request|order|get)|i(?:d| would) like to request|(?:can|could|may) i (?:request|get|have)|request(?:ing)?(?: for)?|(?:raise|make|send|create|submit|put in) (?:a |an )?(?:stock |inventory |item )?request(?: for| of)?|stock request(?: for)?|inventory request(?: for)?|i (?:want|need))\s+(.+)$/;
@@ -10345,7 +10497,7 @@ function anyaExec(i, q, chosen){
     else if(v === 'trno'){ let no = ''; try{ no = trNextFormNo(); }catch(e){} anyaSay(no ? `The next travel request number is **${no}**.` : 'I could not work out the next number.', anyaCanSee('travel-foreign') ? [['+ New travel request', "goTo('travel-foreign'); openTravelForm('', 'foreign')"]] : [], '', o); }
     else if(v === 'me'){ anyaSay(`You're signed in as **${(authUser && (authUser.name || authUser.email)) || 'unknown'}** (${(authUser && authUser.role) || 'user'}).`); }
     else if(v === 'help'){
-      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — say \"change your voice\" (or hold 🔈) to pick my voice; tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Travel** — \"process the DSA memo for TRF 32\", \"email the DSA memo to finance\", \"submit a travel request form\"\n• **Personality** — \"be playful\", \"be professional\", \"be friendly\"; ask me how I am, or for a joke\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Look** — \"dark mode\", \"light mode\"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
+      anyaSay('I can:\n• **Guide** you — "how do I replenish petty cash?"\n• **Start** things — "new travel request", "add fuel entry", "stock out"\n• **Go** places — "open vehicle log"\n• **Find** records — "find Ahmed", "find P5512"\n• **Download** — "business advance statement as PDF", "petty cash statement Excel", "DSA memo for Singapore", "staff list CSV"\n• **Voice** — say \"change your voice\" (or hold 🔈) to pick my voice; tap 🎤 and talk; hold 🎤 (or say \"hands free\") to just say \"Hey Anya …\"; 🔈 makes me speak\n• **You** — \"what do I do most?\", \"daily brief\"\n• **Travel** — \"process the DSA memo for TRF 32\", \"email the DSA memo to finance\", \"submit a travel request form\"\n• **Personality** — \"be playful\", \"be professional\", \"be friendly\"; ask me how I am, or for a joke\n• **Compose** — \"compose a letter regarding my resignation\", \"write a letter to Maldives Post regarding rent payment reminder\"\n• **Fill & submit** — "petty cash for duplicate keys MVR 150 hod Ahmed and submit it"\n• **Check** — "what\'s pending?", "petty cash balance", "next travel number"\n• **Change status** — "mark PR 1204 as closed", "set TSK-26-007 to in progress", "resolve complaint 3", "complaint 3 level high" → "set complaint 3 to high", "close incident 2", "set task DS Maintenance priority to urgent"\n• **Create** — "new task check AC filters for Ali due friday high priority", "raise a complaint about water leakage in pantry (high)", "new incident report vehicle scratched at parking", "stock in 10 A4 paper at HO"\n• **Ask** — "how many A4 paper in stock", "who has the brother printer", "where is AD-0068", "status of PR 1204", "my tasks", "overdue tasks", "open complaints", "pending PRs", "low stock"\n• **Request** — "I want to request 5 A4 paper"\n• **Share & download** — "share PR 1204", "asset card for AD-0068", "asset cards", "open SR 1", "download PR list"\n• **Look** — \"dark mode\", \"light mode\"\n• **Learn** — rate answers 👍/👎; your most used commands become ★ shortcuts. Ask "what have you learned?"', [], `<div class="anya-topics">${ANYA_GUIDES.map(g => `<button type="button" onclick="anyaExec('g:${g.id}','')">${esc(g.title)}</button>`).join('')}</div>`);
     }
     else if(v === 'learned'){
       const d = anyaML.data(), taught = d.ex.filter(e => e.w >= 2 && anyaIntentOk(e.i)).sort((a, b) => b.w - a.w), mine = anyaML.top(ui.tab, 6);
@@ -10404,6 +10556,7 @@ async function anyaReply(q){
   if(/\b(stop listening|hands? ?free off|don'?t listen|turn off (the )?(mic|microphone|listening))\b/.test(t)){ anyaSetHands(false); return; }
   if(!/\bdownload\b/.test(t) && (/\b(process|prepare|make|create|generate|do|issue|raise|calculate|work out)\b.{0,30}\bdsa\b|\bdsa memo\b.{0,20}\b(for|of)\b|\b(email|mail|send)\b.{0,25}\b(dsa|memo)\b/.test(t))){ await anyaProcessDsa(q); return; }
   if(/\b(submit|upload|attach|add|create|make|register|from)\b.{0,30}\b(travel|trip)\b.{0,25}\b(form|request form|file|pdf|scan|signed)\b|\btravel request form\b/.test(t) && !/\bhow\b/.test(t)){ anyaSay('Choose the signed travel request form (PDF or photo) — I\'ll read it, create the travel request and attach the form.', [['📎 Choose the form', () => trFormPick(true)]]); return; }
+  if(await anyaCommands(t, q)) return;
   if(anyaStockRequest(t, q)) return;
   if(anyaDownload(t)) return;
   if(/^(show|list|view|see)\b/.test(t) && /\b(letters|agreements|contracts|memos|documents|leases|vouchers|vehicles|tasks|complaints|handovers)\b/.test(t) && anyaRecordAnswer(t)) return;
@@ -10599,7 +10752,7 @@ function viewMyWork(){
   let apBody = '', apN = 0;
   if(apIsApprover()){
     const prs = [], docs = state.documents.filter(d => d.status === 'Pending approval'); apN = prs.length + docs.length;
-    apBody = prs.map(p => row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requester].filter(Boolean).join(' · ')), vPill('warn', 'Pending approval'), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`)).join('') +
+    apBody = prs.map(p => row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requester].filter(Boolean).join(' · ')), vPill('warn', 'Pending approval'), `goTo('purchase-requisitions'); openPrDetail('${p.id}')`)).join('') +
       docs.map(d => row(esc(d.title || 'Document'), esc([(DOC_TYPES.find(x => x.k === d.type) || {}).label, d.refNo].filter(Boolean).join(' · ')), vPill('warn', 'Pending approval'), `goTo('docs-${d.type}'); openDocView('${d.id}')`)).join('');
   }
   const nm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(), myName = nm(authUser.name);
@@ -10611,7 +10764,7 @@ function viewMyWork(){
   const srs = (state.stockRequests || []).filter(r => r.requestedByUid === authUser.uid).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0)).slice(0, 8);
   const trs = (state.travelRequests || []).filter(t => t.staffKey ? t.staffKey === me : t.createdBy === authUser.name).filter(t => t.status !== 'Closed');
   const prs = (state.purchaseRequisitions || []).filter(p => (p.status || 'open') !== 'closed' && (nm(p.requester) ? (myName && nm(p.requester) === myName) : (p.createdByEmail && p.createdByEmail === authUser.email))).sort((a, b) => prNumberCollator.compare(String(b.prNumber || ''), String(a.prNumber || '')));
-  const reqBody = prs.map(p => { const st = prStatusMeta(p.status || 'open'); return row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requisitionDate ? vDate(p.requisitionDate) : ''].filter(Boolean).join(' · ')) + (p.status === 'pending_approval' ? ' · waiting for ' + esc(apNames()) : ''), vPill(p.status === 'released' ? 'good' : p.status === 'pending_approval' ? 'warn' : 'acc', esc(st.label)), `goTo('purchase-requisitions'); openPurchaseRequisitionForm('${p.id}')`); }).join('') +
+  const reqBody = prs.map(p => { const st = prStatusMeta(p.status || 'open'); return row('PR ' + esc(p.prNumber || ''), esc([prFirstItem(p) || p.title, p.requisitionDate ? vDate(p.requisitionDate) : ''].filter(Boolean).join(' · ')) + (p.status === 'pending_approval' ? ' · waiting for ' + esc(apNames()) : ''), vPill(p.status === 'released' ? 'good' : p.status === 'pending_approval' ? 'warn' : 'acc', esc(st.label)), `goTo('purchase-requisitions'); openPrDetail('${p.id}')`); }).join('') +
     srs.map(r => row('Stock request', esc([fmtD(r.requestedAt), (getLocation(r.locationId) || {}).name].filter(Boolean).join(' · ')), vPill(r.status === 'approved' ? 'good' : r.status === 'rejected' ? 'crit' : 'warn', esc(r.status || 'pending')), `goTo('movements'); ui.movementsView='requests'; rerenderMain()`)).join('') +
     trs.map(t => row('Travel: ' + esc(t.destination || t.purpose || ''), esc(t.status || ''), vPill('acc', esc(t.status || 'Open')), `goTo('travel-${t.scope === 'foreign' ? 'foreign' : 'local'}'); openTravelDetail('${t.id}')`)).join('');
   let leave = []; try{ leave = ((lvBetween(t0, clIsoAdd(t0, 60)).find(x => x.key === me) || {}).items || []); }catch(e){}
@@ -11414,7 +11567,7 @@ function agTrackHtml(d){
       <div class="flex items-center gap-3 flex-wrap">${t.fileId ? `<button onclick="agOpenSigned('${id}')" class="font-semibold text-brand-600 hover:underline">📎 ${esc(t.fileName || 'Agreement file')}</button>` : '<span class="text-slate-400">No file attached.</span>'}${ed ? `<label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer ml-auto"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="agSignedFile(this, '${id}')">${t.fileId ? 'Replace file' : 'Attach the signed agreement (PDF)'}</label>` : ''}</div></div>`) +
     sec('Additional documents', `agDocEdit('${id}', -1)`, (t.docs || []).length ? (t.docs || []).map((x, i) => { const ho = x.handoverId ? (state.handovers || []).find(h => h.id === x.handoverId) : null;
       return `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm flex-wrap"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">${esc(x.kind || 'Document')}</span><span class="flex-1 min-w-0 truncate ${ed ? 'cursor-pointer hover:text-brand-700' : ''}" ${ed ? `onclick="agDocEdit('${id}', ${i})"` : ''}>${esc(x.title || (ho ? 'Handover ' + (ho.referenceNumber || '') : 'Document'))}${x.date ? ' <span class="text-slate-400">· ' + vDate(x.date) + '</span>' : ''}</span>
-        ${ho ? `<button onclick="closeModal(); goTo('handovers'); openHandoverForm('${ho.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Open handover</button>` : ''}${x.link ? `<a href="${esc(x.link)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-600 hover:underline">Open link</a>` : ''}${x.fileId ? `<button onclick="agOpenDocFile('${id}', ${i})" class="text-xs font-semibold text-brand-600 hover:underline">📎 View file</button>` : ''}</div>`; }).join('')
+        ${ho ? `<button onclick="closeModal(); goTo('handovers'); openHoDetail('${ho.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Open handover</button>` : ''}${x.link ? `<a href="${esc(x.link)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-600 hover:underline">Open link</a>` : ''}${x.fileId ? `<button onclick="agOpenDocFile('${id}', ${i})" class="text-xs font-semibold text-brand-600 hover:underline">📎 View file</button>` : ''}</div>`; }).join('')
       : '<div class="px-4 py-3 text-sm text-slate-400">No additional documents — add a handover, annex, quotation, certificate or any other document.</div>');
 }
 // agreement files: a PDF is kept as the original PDF (split into parts that fit the cloud store); photos become compressed pages
@@ -20140,9 +20293,35 @@ async function prBgUpload(id, att){
   catch(e){ toast('The quotation could not be uploaded: ' + (e && e.message ? e.message : e), true); }
   finally{ delete agUploads[key]; agUploadBar(); }
 }
+/* ---------- a requisition opens as details (read only); "Edit" at the top right opens the form ---------- */
+function openPrDetail(id){
+  const pr = state.purchaseRequisitions.find(x => x.id === id); if(!pr) return;
+  const loc = getLocation(pr.locationId), items = pr.lineItems || [], s = prStatusMeta(pr.status), ap = pr.approvals || {}, canEdit = !(typeof viewerBlock === 'function' && viewerBlock());
+  const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v}</div></div>`;
+  const rows = items.map(l => `<tr class="border-t border-slate-100 align-top"><td class="py-2 pr-3"><div class="text-slate-800 font-medium">${esc(l.itemName || '—')}</div>${l.itemDescription ? `<div class="text-[11.5px] text-slate-500">${esc(l.itemDescription)}</div>` : ''}${l.linkedProductId && getProduct(l.linkedProductId) ? `<div class="text-[11px] text-brand-600">↳ stock item: ${esc(displayName(getProduct(l.linkedProductId)))}${l.stockedIn ? ' · stocked in' : ''}</div>` : ''}</td>
+    <td class="py-2 pr-3 text-[12px] text-slate-500">${esc(prLineBudgetCode(pr, l) || '—')}</td><td class="py-2 pr-3 text-right num">${fmtNum(l.quantity)}</td><td class="py-2 pr-3 text-right num whitespace-nowrap">${fmtMVR(l.unitCost)}</td><td class="py-2 text-right num font-semibold whitespace-nowrap">${fmtMVR(l.totalCost)}</td></tr>`).join('');
+  const hist = (pr.statusHistory || []).slice(-5).reverse();
+  shareFor('pr', id);
+  openModal('Purchase requisition', `
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-lg font-extrabold text-slate-900 num">${esc(pr.prNumber || '—')}</div><div class="text-sm text-slate-500">${esc(prFirstItem(pr) || '')}</div></div>
+      <div class="flex items-center gap-2">${canEdit ? `<select aria-label="Status" onchange="prQuickStatus('${pr.id}', this.value, this); setTimeout(() => { if(document.getElementById('pr-detail-${pr.id}')) openPrDetail('${pr.id}'); }, 250)" class="text-xs font-semibold rounded-full border border-transparent px-2.5 py-1 pr-7 cursor-pointer ${s.badge}">${PR_STATUSES.map(x => `<option value="${x.id}" ${x.id === (pr.status || 'open') ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>` : `<span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${s.badge}">${esc(s.label)}</span>`}</div></div>
+    <div id="pr-detail-${pr.id}" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Requisition date', esc(fmtDate(prRequisitionDate(pr))))}${item('Requester', esc(pr.requester || '—'))}${item('Location', esc(loc ? loc.name : '—'))}${item('Total', fmtMVR(pr.totalCost))}</div>
+    ${ap.approved || ap.authorised ? `<div class="grid grid-cols-2 gap-4 mb-5">${item('Approved by', esc(ap.approved || '—') + (ap.approvedDesig ? `<div class="text-[11.5px] font-normal text-slate-500">${esc(ap.approvedDesig)}</div>` : ''))}${item('Authorised by', esc(ap.authorised || '—') + (ap.authorisedDesig ? `<div class="text-[11.5px] font-normal text-slate-500">${esc(ap.authorisedDesig)}</div>` : ''))}</div>` : ''}
+    ${vSec('Items')}
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="py-1.5 pr-3 font-semibold">Item</th><th class="py-1.5 pr-3 font-semibold">Budget code</th><th class="py-1.5 pr-3 font-semibold text-right">Qty</th><th class="py-1.5 pr-3 font-semibold text-right">Unit cost</th><th class="py-1.5 font-semibold text-right">Total</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="py-3 text-slate-400">No items.</td></tr>'}<tr class="border-t border-slate-200"><td colspan="4" class="py-2 text-right font-bold text-slate-700 pr-3">Grand total</td><td class="py-2 text-right num font-extrabold">${fmtMVR(pr.totalCost)}</td></tr></tbody></table></div>
+    ${vSec('Documents')}
+    ${prDocLinksHtml(Object.assign({}, pr, { approvals:null }), 'mt-0') || '<div class="text-sm text-slate-400">No documents attached.</div>'}
+    ${hist.length ? `<div class="text-[11px] text-slate-400 mt-4">${hist.map(h => esc((PR_STATUSES.find(x => x.id === h.to) || {}).label || h.to) + ' · ' + esc(h.by || '') + ' ' + fmtDT(h.at)).join(' — ')}</div>` : ''}
+    ${pr.createdByName ? `<div class="text-[11px] text-slate-400 mt-1">Created by ${esc(pr.createdByName)}${pr.createdAt ? ' · ' + esc(fmtDate(String(pr.createdAt).slice(0, 10))) : ''}</div>` : ''}`, true);
+  if(canEdit){ const sh = document.getElementById('modal-share'), t = document.getElementById('modal-title'), b = document.createElement('button');
+    b.type = 'button'; b.id = 'modal-edit'; b.title = 'Edit this requisition'; b.textContent = '✎ Edit';
+    b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700';
+    b.style.cssText = sh ? 'margin-right:8px' : 'margin-left:auto;margin-right:10px'; b.onclick = () => openPurchaseRequisitionForm(id);
+    if(sh) sh.after(b); else t.after(b); }
+}
 function openPurchaseRequisitionForm(id){ prReadApprovals = null;
   const editing = id ? state.purchaseRequisitions.find(x=>x.id===id) : null;
-  if(editing) shareFor('pr', id);
   const prNumber = editing ? editing.prNumber : '';
   const requester = editing ? editing.requester : (authUser ? authUser.name : '');
   const lines = editing && editing.lineItems && editing.lineItems.length
@@ -20435,7 +20614,7 @@ function prCardHtml(pr){
   const budget = prBudgetCodeText(pr);
   const s = prStatusMeta(pr.status);
   return `
-    <div onclick="openPurchaseRequisitionForm('${pr.id}')" class="pr-banner bg-white rounded-lg border border-slate-200 hover:border-brand-400 hover:shadow-sm transition-colors">
+    <div onclick="openPrDetail('${pr.id}')" class="pr-banner bg-white rounded-lg border border-slate-200 hover:border-brand-400 hover:shadow-sm transition-colors">
       <div class="pr-ribbon ${s.ribbon} ${s.ribbonText}" title="${esc(s.label)}">${esc(s.ribbonLabel || s.label)}</div>
       <div class="pb-num">
         <div class="pb-nowrap text-sm font-bold text-slate-800 num">${esc(pr.prNumber)}</div>
@@ -20453,9 +20632,24 @@ function prCardHtml(pr){
         <div class="pb-trunc text-[12.5px] text-slate-600" title="${loc?esc(loc.name):''}">${loc?esc(loc.name):'—'}</div>
         <div class="text-[11.5px] text-slate-400">${items.length} item${items.length===1?'':'s'}</div>
       </div>
-      <div class="pb-total pb-nowrap text-[15px] font-extrabold text-slate-900 num">${fmtMVR(pr.totalCost)}</div>
+      <div class="pb-total pb-nowrap text-right"><div class="text-[15px] font-extrabold text-slate-900 num">${fmtMVR(pr.totalCost)}</div>
+        ${typeof viewerBlock === 'function' && viewerBlock() ? '' : `<select aria-label="Status" title="Change the status" onclick="event.stopPropagation()" onchange="prQuickStatus('${pr.id}', this.value, this)" class="mt-1.5 text-[11px] font-semibold rounded-full border border-transparent px-2.5 py-0.5 pr-7 cursor-pointer ${s.badge}">${PR_STATUSES.map(x => `<option value="${x.id}" ${x.id === (pr.status || 'open') ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`}</div>
     </div>
   `;
+}
+// status straight from the list (no need to open the requisition); closing it still adds the linked stock items to inventory
+function prQuickStatus(id, st, sel){
+  const pr = state.purchaseRequisitions.find(x => x.id === id), meta = PR_STATUSES.find(x => x.id === st); if(!pr || !meta) return;
+  const was = pr.status || 'open'; if(was === st) return;
+  const go = () => {
+    pr.status = st; pr.statusHistory = (pr.statusHistory || []).concat([{ at:Date.now(), by:authUser ? authUser.name : '', from:was, to:st }]);
+    const stock = st === 'closed' && was !== 'closed'; if(stock) applyPrAutoStockIn(pr);
+    persistPurchaseRequisitionDoc(pr); rerenderMain();
+    toast((pr.prNumber || 'Requisition') + ' is now ' + meta.label + (stock && (pr.lineItems || []).some(l => l.linkedProductId) ? ' — linked stock items added to inventory.' : '.'));
+  };
+  if(st === 'closed' && (pr.lineItems || []).some(l => l.linkedProductId && !l.stockedIn)) confirmAction('Close ' + (pr.prNumber || 'this requisition') + '? Its linked stock items will be added to inventory.', go);
+  else go();
+  if(sel) setTimeout(() => { if(sel.isConnected) sel.value = pr.status || 'open'; }, 0);      // if the closing was cancelled, the list shows the old status again
 }
 function exportPurchaseRequisitionsCSV(){
   const header = ['PR Number','Requisition Date','Requester','Location','Status','Item Name','Item Description','Budget Code','Quantity','Unit Cost','Total Cost','Linked SKU','Linked Asset Code','Stocked In','PR URL','PO URL','DO URL','Invoice URL','TOR URL','Other Links'];
@@ -20701,6 +20895,36 @@ async function hoBgUpload(hid, att){
 async function hoQuickFile(input, hid){ const files = [...input.files]; input.value = ''; if(!files.length) return; try{ hoBgUpload(hid, await agPrepare(files)); }catch(e){ toast('Could not attach: ' + (e && e.message ? e.message : e), true); } }
 function hoOpenSigned(hid){ const h = state.handovers.find(x => x.id === hid); if(h && h.signedFileId) agOpenFile(h.signedFileId, 'Signed handover — ' + (h.referenceNumber || ''), null); }
 async function hoRemoveSigned(hid){ const h = state.handovers.find(x => x.id === hid); if(!h || !h.signedFileId) return; confirmAction('Remove the attached signed handover from ' + (h.referenceNumber || 'this handover') + '?', async () => { const f = h.signedFileId; delete h.signedFileId; delete h.signedFileName; delete h.signedFileKind; await persistHandoverDoc(h); agFileDel(f); rerenderMain(); toast('Removed.'); }); }
+/* ---------- a handover opens as details (read only); "Edit" at the top right opens the form ---------- */
+function openHoDetail(id){
+  const h = state.handovers.find(x => x.id === id); if(!h) return;
+  const lines = hoLines(h), canEdit = !(typeof viewerBlock === 'function' && viewerBlock()), sec = t => `<div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">${t}</div>`;
+  const rows = lines.map((l, i) => `<tr class="border-t border-slate-100"><td class="py-2 pr-3 text-slate-400 num">${i + 1}</td><td class="py-2 pr-3 text-slate-800">${esc(l.itemName || '—')}${l.itemDetails ? `<div class="text-[11.5px] text-slate-500">${esc(l.itemDetails)}</div>` : ''}</td><td class="py-2 pr-3">${l.assetCode ? `<span class="inline-flex px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-semibold">${esc(l.assetCode)}</span>` : '<span class="text-slate-300">—</span>'}</td><td class="py-2 text-right num font-semibold">${fmtNum(l.quantity)}</td></tr>`).join('');
+  const qty = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+  shareFor('ho', id);
+  openModal('Handover', `
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-lg font-extrabold text-slate-900 num">${esc(h.referenceNumber || 'No reference')}</div><div class="text-sm text-slate-500">${esc(fmtDate(h.handoverDate))}</div></div>
+      <span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">${esc(h.handoverType || 'Handover')}</span></div>
+    <div class="grid sm:grid-cols-2 gap-4 mb-5">
+      <div class="rounded-xl border border-slate-200 p-4">${sec('From')}${hoPersonHtml(h.fromStaffName, hoDesignationOf(h, 'from'), h.fromDepartment, hoSignStatusHtml(h, 'from'))}</div>
+      <div class="rounded-xl border border-slate-200 p-4">${sec('To')}${hoPersonHtml(h.toStaffName, hoDesignationOf(h, 'to'), h.toDepartment, hoSignStatusHtml(h, 'to'))}</div></div>
+    ${vSec('Items — ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + ', ' + fmtNum(qty) + ' in all')}
+    <div class="overflow-x-auto" style="max-height:360px;overflow-y:auto"><table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="py-1.5 pr-3 font-semibold w-8">#</th><th class="py-1.5 pr-3 font-semibold">Item</th><th class="py-1.5 pr-3 font-semibold">Asset code</th><th class="py-1.5 font-semibold text-right">Qty</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4" class="py-3 text-slate-400">No items.</td></tr>'}</tbody></table></div>
+    ${h.remarks ? `${vSec('Remarks')}<div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(h.remarks)}</div>` : ''}
+    ${vSec('Documents')}
+    <div class="flex items-center gap-2.5 flex-wrap text-sm">
+      <button type="button" onclick="generateHandoverDocument('${h.id}', this)" class="px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Word</button>
+      <button type="button" onclick="generateHandoverPdf('${h.id}', this)" class="px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">PDF</button>
+      ${h.fileUrl ? `<a href="${esc(h.fileUrl)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-600 hover:underline">Signed form ↗</a>` : ''}
+      ${h.signedFileId ? `<button type="button" onclick="hoOpenSigned('${h.id}')" class="text-xs font-semibold text-brand-600 hover:underline">📎 Signed handover</button>` : canEdit ? `<label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="closeModal(); hoQuickFile(this, '${h.id}')">📎 Attach signed</label>` : ''}</div>
+    ${h.createdByName ? `<div class="text-[11px] text-slate-400 mt-4">Recorded by ${esc(h.createdByName)}${h.createdAt ? ' · ' + esc(fmtDate(String(h.createdAt).slice(0, 10))) : ''}</div>` : ''}`, true);
+  if(canEdit){ const sh = document.getElementById('modal-share'), t = document.getElementById('modal-title'), b = document.createElement('button');
+    b.type = 'button'; b.id = 'modal-edit'; b.title = 'Edit this handover'; b.textContent = '✎ Edit';
+    b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700';
+    b.style.cssText = sh ? 'margin-right:8px' : 'margin-left:auto;margin-right:10px'; b.onclick = () => openHandoverForm(id);
+    if(sh) sh.after(b); else t.after(b); }
+}
 function openHandoverForm(id){ hoFormAtt = null;
   const editing = id ? state.handovers.find(x=>x.id===id) : null;
   const lines = editing && hoLines(editing).length ? hoLines(editing) : [{}];
@@ -20974,7 +21198,7 @@ function viewHandovers(){
     ${list.length ? `
     <div class="ho-list">
       ${list.map(h=>`
-      <div class="ho-card bg-white rounded-xl border border-slate-200">
+      <div class="ho-card bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-brand-400" onclick="if(!event.target.closest('button,a,label,input')) openHoDetail('${h.id}')">
         <div class="ho-card-head border-b border-slate-100">
           <div>
             <div class="text-[15px] font-bold text-slate-800 num">${h.referenceNumber ? esc(h.referenceNumber) : '<span class="font-normal text-slate-300">No reference</span>'}</div>
@@ -20989,7 +21213,7 @@ function viewHandovers(){
             </div>
             ${h.fileUrl ? `<a href="${esc(h.fileUrl)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-600 hover:underline">Signed form ↗</a>` : ''}
             ${h.signedFileId ? `<button type="button" onclick="hoOpenSigned('${h.id}')" class="text-xs font-semibold text-brand-600 hover:underline" title="${esc(h.signedFileName || '')}">📎 Signed handover</button>` : `<label class="text-xs font-semibold text-brand-600 hover:underline cursor-pointer" title="Attach the signed handover form (PDF or photo)"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="hoQuickFile(this, '${h.id}')">📎 Attach signed</label>`}
-            <button type="button" onclick="openHandoverForm('${h.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>
+            <button type="button" onclick="openHoDetail('${h.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Details</button>
           </div>
         </div>
         <div class="ho-card-body">

@@ -2000,7 +2000,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.357';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.358';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -4129,9 +4129,9 @@ async function buildIsPdf(D){
   let n = 0;
   if(D.purpose){ head('Purpose / Background', ++n); para(D.purpose); }
   head('Items and Specifications', ++n);
-  // the table: No. | Item and specification | Qty | Unit — the header repeats on a new page
-  const C = [L, L + 26, R - 96, R - 48, R], IW = C[2] - C[1] - 12;
-  const thead = () => { pg.fill(L, y - 2, R - L, 20, HEAD); [['No.', 0], ['Item and specification', 1], ['Qty', 2], ['Unit', 3]].forEach(([t, k]) => pg.text(k >= 2 ? C[k] + (C[k + 1] - C[k] - pdfTextWidth(t, true, 8.5)) / 2 : C[k] + 6, y + 11.5, t, { bold:true, size:8.5, color:[1, 1, 1] })); y += 18; };
+  // the table: No. | Item and specification | Qty — the header repeats on a new page
+  const C = [L, L + 26, R - 48, R], IW = C[2] - C[1] - 12;
+  const thead = () => { pg.fill(L, y - 2, R - L, 20, HEAD); [['No.', 0], ['Item and specification', 1], ['Qty', 2]].forEach(([t, k]) => pg.text(k >= 2 ? C[k] + (C[k + 1] - C[k] - pdfTextWidth(t, true, 8.5)) / 2 : C[k] + 6, y + 11.5, t, { bold:true, size:8.5, color:[1, 1, 1] })); y += 18; };
   thead();
   D.items.forEach((it, i) => {
     const ln = []; pdfWrap(it.name || '—', true, 10, IW).forEach(t => ln.push({ t, b:true }));
@@ -4143,10 +4143,10 @@ async function buildIsPdf(D){
     const h = ln.reduce((s, l) => s + (l.h || LH), 0) + 10;
     if(y + Math.min(h, LH * 4) > BOT){ newPage(); thead(); }
     let top = y - 2, k = 0;
-    const box = (t0, t1, first) => { pg.line(L, t0, L, t1, LINE, 0.6); pg.line(R, t0, R, t1, LINE, 0.6); [C[1], C[2], C[3]].forEach(x => pg.line(x, t0, x, t1, LINE, 0.6)); pg.line(L, t1, R, t1, LINE, 0.6);
+    const box = (t0, t1, first) => { pg.line(L, t0, L, t1, LINE, 0.6); pg.line(R, t0, R, t1, LINE, 0.6); [C[1], C[2]].forEach(x => pg.line(x, t0, x, t1, LINE, 0.6)); pg.line(L, t1, R, t1, LINE, 0.6);
       if(first){ pg.text(C[0] + (C[1] - C[0] - pdfTextWidth(String(i + 1), false, FS)) / 2, t0 + 14, String(i + 1), { size:FS });
         const q = it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—'; pg.text(C[2] + (C[3] - C[2] - pdfTextWidth(q, true, FS)) / 2, t0 + 14, q, { size:FS, bold:true });
-        if(it.unit){ const u = pdfWrap(it.unit, false, 8.8, C[4] - C[3] - 6)[0]; pg.text(C[3] + (C[4] - C[3] - pdfTextWidth(u, false, 8.8)) / 2, t0 + 14, u, { size:8.8 }); } } };
+      } };
     let first = true; y += 12;
     while(k < ln.length){
       const lh = ln[k].h || LH;
@@ -4192,9 +4192,9 @@ async function buildIsDocx(D){
   let n = 0;
   if(D.purpose){ head('Purpose / Background', ++n); para(D.purpose); }
   head('Items and Specifications', ++n);
-  const W = [520, TW - 520 - 900 - 1000, 900, 1000], hc = (t, w) => cell(wP(T(t, { b:true, sz:17, color:'FFFFFF' }), { jc:'center' }), w, { fill:'334155', vc:1 });
-  const rows = D.items.map((it, i) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cell(wP(T(i + 1), { jc:'center' }), W[0])}${cell(wP(T(it.name || '—', { b:true, sz:20 }), { after:40 }) + (it.brand ? wP(T('Brand / model: ' + it.brand, { sz:17, color:'64748B' }), { after:40 }) : '') + it.spec.map(sp => wP(T('•') + '<w:r><w:tab/></w:r>' + T(sp), { after:20, ind:'<w:ind w:left="300" w:hanging="300"/>' })).join('') + pics(it, i), W[1])}${cell(wP(T(it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—', { b:true }), { jc:'center' }), W[2])}${cell(wP(T(it.unit || ''), { jc:'center' }), W[3])}</w:tr>`).join('');
-  out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${B('CBD5E1')}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${W.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid><w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>${hc('No.', W[0])}${hc('Item and specification', W[1])}${hc('Qty', W[2])}${hc('Unit', W[3])}</w:tr>${rows || `<w:tr>${cell(wP(''), W[0])}${cell(wP(T('No items.')), W[1])}${cell(wP(''), W[2])}${cell(wP(''), W[3])}</w:tr>`}</w:tbl>`, P('', { after:60 }));
+  const W = [520, TW - 520 - 1000, 1000], hc = (t, w) => cell(wP(T(t, { b:true, sz:17, color:'FFFFFF' }), { jc:'center' }), w, { fill:'334155', vc:1 });
+  const rows = D.items.map((it, i) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cell(wP(T(i + 1), { jc:'center' }), W[0])}${cell(wP(T(it.name || '—', { b:true, sz:20 }), { after:40 }) + (it.brand ? wP(T('Brand / model: ' + it.brand, { sz:17, color:'64748B' }), { after:40 }) : '') + it.spec.map(sp => wP(T('•') + '<w:r><w:tab/></w:r>' + T(sp), { after:20, ind:'<w:ind w:left="300" w:hanging="300"/>' })).join('') + pics(it, i), W[1])}${cell(wP(T(it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—', { b:true }), { jc:'center' }), W[2])}</w:tr>`).join('');
+  out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${B('CBD5E1')}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${W.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid><w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>${hc('No.', W[0])}${hc('Item and specification', W[1])}${hc('Qty', W[2])}</w:tr>${rows || `<w:tr>${cell(wP(''), W[0])}${cell(wP(T('No items.')), W[1])}${cell(wP(''), W[2])}</w:tr>`}</w:tbl>`, P('', { after:60 }));
   const gen = [['Warranty', D.warranty], ['Delivery period', D.delivery], ['Delivery location', D.deliveryLocation]].filter(x => x[1]);
   if(gen.length || D.other.length){ head('General Requirements', ++n);
     gen.forEach(([k, v]) => out.push(P(T(k + ': ', { b:true }) + '<w:r><w:tab/></w:r>' + T(v), { ind:'<w:ind w:left="2000" w:hanging="2000"/>' }).replace('<w:pPr>', '<w:pPr><w:tabs><w:tab w:val="left" w:pos="2000"/></w:tabs>')));
@@ -4235,7 +4235,7 @@ function openIsView(id){
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">${item('Date', esc(D.date || '—'))}${item('Department', esc(D.department || '—'))}${item('Prepared by', esc(D.by || '—'))}${item('Related PR', esc(D.pr || '—'))}</div>
     ${D.purpose ? `${vSec('Purpose / background')}<div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(D.purpose)}</div>` : ''}
     ${vSec('Items and specifications')}
-    <div class="space-y-2.5">${D.items.map((it, i) => `<div class="rounded-lg border border-slate-200 px-4 py-3"><div class="flex items-start justify-between gap-3"><div class="font-semibold text-slate-800">${i + 1}. ${esc(it.name || '—')}</div><div class="text-sm font-bold num whitespace-nowrap">${it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—'} ${esc(it.unit || '')}</div></div>${it.brand ? `<div class="text-xs text-slate-500">Brand / model: ${esc(it.brand)}</div>` : ''}${it.spec.length ? `<ul class="list-disc pl-5 mt-1.5 text-sm text-slate-700 space-y-0.5">${it.spec.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}${it.photos.length ? `<div class="flex flex-wrap gap-2 mt-2.5">${it.photos.map(p => `<button type="button" class="rounded-md overflow-hidden border border-slate-200 bg-slate-100" style="width:96px;height:72px" onclick="isPhotoOpen('${esc(p.fileId)}')" title="Open the picture"><span data-is-thumb="${esc(p.fileId)}" class="w-full h-full flex items-center justify-center text-[10px] text-slate-400">Loading…</span></button>`).join('')}</div>` : ''}</div>`).join('') || '<div class="text-sm text-slate-400">No items.</div>'}</div>
+    <div class="space-y-2.5">${D.items.map((it, i) => `<div class="rounded-lg border border-slate-200 px-4 py-3"><div class="flex items-start justify-between gap-3"><div class="font-semibold text-slate-800">${i + 1}. ${esc(it.name || '—')}</div><div class="text-sm font-bold num whitespace-nowrap">${it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—'}</div></div>${it.brand ? `<div class="text-xs text-slate-500">Brand / model: ${esc(it.brand)}</div>` : ''}${it.spec.length ? `<ul class="list-disc pl-5 mt-1.5 text-sm text-slate-700 space-y-0.5">${it.spec.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}${it.photos.length ? `<div class="flex flex-wrap gap-2 mt-2.5">${it.photos.map(p => `<button type="button" class="rounded-md overflow-hidden border border-slate-200 bg-slate-100" style="width:96px;height:72px" onclick="isPhotoOpen('${esc(p.fileId)}')" title="Open the picture"><span data-is-thumb="${esc(p.fileId)}" class="w-full h-full flex items-center justify-center text-[10px] text-slate-400">Loading…</span></button>`).join('')}</div>` : ''}</div>`).join('') || '<div class="text-sm text-slate-400">No items.</div>'}</div>
     ${D.warranty || D.delivery || D.deliveryLocation || D.other.length ? `${vSec('General requirements')}<div class="text-sm text-slate-700 space-y-1">${[['Warranty', D.warranty], ['Delivery period', D.delivery], ['Delivery location', D.deliveryLocation]].filter(x => x[1]).map(([k, v]) => `<div><b>${k}:</b> ${esc(v)}</div>`).join('')}${D.other.length ? `<ul class="list-disc pl-5">${D.other.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}</div>` : ''}
     <div class="flex justify-end gap-2.5 mt-6">${vBtnPlain('Download Word', `isDownload('${id}', 'word', this)`)}${vBtnPrimary('Download PDF', `isDownload('${id}', 'pdf', this)`)}</div>`, true);
   isThumbsLoad();
@@ -4249,7 +4249,6 @@ const isItemHtml = (i, it, k) => `<div class="is-item rounded-lg border border-s
       <input class="is-name ${VEH_FIELD} col-span-2" value="${esc(it.name || '')}" placeholder="Item, e.g. Office chair (ergonomic)">
       <input class="is-brand ${VEH_FIELD}" value="${esc(it.brand || '')}" placeholder="Brand / model (optional)">
       <input class="is-qty ${VEH_FIELD}" type="number" min="0" step="any" value="${esc(it.qty != null ? it.qty : '')}" placeholder="Qty">
-      <input class="is-unit ${VEH_FIELD}" value="${esc(it.unit || '')}" list="is-units" placeholder="Unit">
     </div>
     <textarea class="is-spec ${VEH_FIELD} text-sm" rows="${Math.max(3, String(it.spec || '').split('\n').length + 1)}" placeholder="Specification — one point per line, e.g.&#10;Mesh back with adjustable lumbar support&#10;Height-adjustable seat, 360° swivel&#10;Load capacity at least 120 kg">${esc(it.spec || '')}</textarea>
     <div class="flex flex-wrap items-center gap-2 mt-2.5"><div class="is-ph flex flex-wrap gap-2" data-k="${k}"></div>
@@ -4320,7 +4319,7 @@ async function saveIsForm(id){
   const no = String(o.no || '').trim().toUpperCase(); if(!no) return vFail('Enter the reference number.');
   if(isAll().some(x => x.id !== id && String(x.no || '').toUpperCase() === no)) return vFail('Reference ' + no + ' is already used.');
   if(!String(o.title || '').trim()) return vFail('Enter the subject.'); if(!o.date) return vFail('Enter the date.');
-  const ph = isPh || {}, items = [...f.querySelectorAll('.is-item')].map(el => ({ key:el.dataset.k || uid(), name:el.querySelector('.is-name').value.trim(), brand:el.querySelector('.is-brand').value.trim(), qty:el.querySelector('.is-qty').value === '' ? '' : +el.querySelector('.is-qty').value, unit:el.querySelector('.is-unit').value.trim(), spec:el.querySelector('.is-spec').value.trim(),
+  const ph = isPh || {}, items = [...f.querySelectorAll('.is-item')].map(el => ({ key:el.dataset.k || uid(), name:el.querySelector('.is-name').value.trim(), brand:el.querySelector('.is-brand').value.trim(), qty:el.querySelector('.is-qty').value === '' ? '' : +el.querySelector('.is-qty').value, unit:'', spec:el.querySelector('.is-spec').value.trim(),
     photos:((ph[el.dataset.k] || {}).keep || []).map(p => ({ fileId:p.fileId, fileName:p.fileName || '' })) })).filter(i => i.name || i.spec || i.photos.length || ((ph[i.key] || {}).add || []).length);
   if(!items.length) return vFail('Add at least one item.'); if(items.some(i => !i.name)) return vFail('Give every item a name.');
   const rec = { id:id || undefined, no, status:IS_STATUSES.includes(o.status) ? o.status : 'Draft', title:o.title.trim(), date:o.date, department:o.department || '', prId:o.prId || '', purpose:o.purpose || '', items,

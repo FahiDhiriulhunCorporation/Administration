@@ -1974,7 +1974,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.347';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.348';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -17602,8 +17602,16 @@ async function xlsxSimple(sheets){
   const x = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
   const col = n => { let s = ''; n++; while(n){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
   const used = new Set(), names = sheets.map(sh => { let b = String(sh.name || 'Sheet').replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31).trim() || 'Sheet', n = b, i = 2; while(used.has(n.toLowerCase())) n = b.slice(0, 27) + ' (' + i++ + ')'; used.add(n.toLowerCase()); return n; });
+  // letterhead: the FDC logo strip as a picture over the first rows, and the address / page numbers in the printed footer
+  // the picture spans the sheet's full width (so the stripes reach the right edge), and the content starts below it
+  const lhSheets = sheets.filter(s => s.letterhead);
+  if(lhSheets.length) await assetsPreload();
+  sheets = sheets.map(sh => { if(!sh.letterhead) return sh;
+    const w = (sh.widths || []).reduce((s, c) => s + Math.round(c * 7 + 5), 0) || 826, h = Math.round(w * 424 / 2481), n = Math.ceil(h / 20) + 1;
+    return Object.assign({}, sh, { freeze:0, lhW:w, lhH:h, rows:Array.from({ length:n }, () => []).concat(sh.rows), merges:(sh.merges || []).map(m => m.replace(/\d+/g, k => String(+k + n))) }); });
   const z = new JSZip();
-  z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') + '</Types>');
+  if(lhSheets.length) z.file('xl/media/letterhead.png', EXCO_HDR_PNG, { base64:true });
+  z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/>' + sheets.map((s, i) => s.letterhead ? `<Override PartName="/xl/drawings/drawing${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>` : '').join('') + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') + '</Types>');
   z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
   z.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + names.map((n, i) => `<sheet name="${x(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>');
   z.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') + `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
@@ -17617,10 +17625,16 @@ async function xlsxSimple(sheets){
       if(o.v == null || o.v === '') return `<c r="${ref}"${s}/>`;
       return typeof o.v === 'number' ? `<c r="${ref}"${s}><v>${o.v}</v></c>` : `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${x(o.v)}</t></is></c>`; }).join('') + '</row>').join('');
     const pane = sh.freeze ? `<sheetViews><sheetView workbookViewId="0"${i === 0 ? ' tabSelected="1"' : ''}><pane ySplit="${sh.freeze}" topLeftCell="A${sh.freeze + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` : '';
-    z.file(`xl/worksheets/sheet${i + 1}.xml`, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' + pane
+    z.file(`xl/worksheets/sheet${i + 1}.xml`, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' + pane
       + (sh.widths ? '<cols>' + sh.widths.map((w, k) => `<col min="${k + 1}" max="${k + 1}" width="${w}" customWidth="1"/>`).join('') + '</cols>' : '')
       + `<sheetData>${rows}</sheetData>` + (sh.merges && sh.merges.length ? `<mergeCells count="${sh.merges.length}">` + sh.merges.map(m => `<mergeCell ref="${m}"/>`).join('') + '</mergeCells>' : '')
-      + '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>');
+      + `<pageMargins left="0.5" right="0.5" top="0.4" bottom="${sh.letterhead ? 0.9 : 0.6}" header="0.2" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>`
+      + (sh.letterhead ? `<headerFooter><oddFooter>${x('&L&8' + EXCO_FOOT.join('\n').replace(/&/g, '&&') + '&R&8Page &P of &N')}</oddFooter></headerFooter><drawing r:id="rIdD"/>` : '') + '</worksheet>');
+    if(sh.letterhead){
+      z.file(`xl/worksheets/_rels/sheet${i + 1}.xml.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${i + 1}.xml"/></Relationships>`);
+      z.file(`xl/drawings/_rels/drawing${i + 1}.xml.rels`, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdI" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/letterhead.png"/></Relationships>');
+      z.file(`xl/drawings/drawing${i + 1}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="${sh.lhW * 9525}" cy="${sh.lhH * 9525}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="FDC letterhead"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rIdI"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${sh.lhW * 9525}" cy="${sh.lhH * 9525}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>`);
+    }
   });
   return z.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE' });
 }
@@ -17683,7 +17697,7 @@ async function buildLocationStockReport(locId, from, to){
   const T = { v:'', s:XS.tot }, title = 'Stock report — ' + (l ? l.name : '') + (l && l.code ? ' (' + l.code + ')' : '');
   const note = 'Period: ' + period + ' · generated ' + fmtDate(today) + (authUser ? ' by ' + authUser.name : '');
   const sum = (k) => lines.reduce((s, x) => s + x[k], 0);
-  const summary = { name:'Summary', freeze:4, widths:[34, 13, 18, 14, 10, 10, 14], merges:['A1:G1', 'A2:G2'],
+  const summary = { name:'Summary', letterhead:true, freeze:4, widths:[34, 13, 18, 14, 10, 10, 14], merges:['A1:G1', 'A2:G2'],
     rows:[[{ v:title, s:XS.title }], [{ v:note, s:XS.note }], [], ['Item', 'SKU', 'Category', 'Opening balance', 'In', 'Out', 'Closing balance'].map(v => ({ v, s:XS.head })),
       ...lines.map(x => [displayName(x.p), x.p.sku || '', x.p.category || '', x.opening, x.inQ || '', x.outQ || '', { v:x.closing, s:XS.totNum }]),
       [{ v:'Total (' + lines.length + ' item' + (lines.length === 1 ? '' : 's') + ')', s:XS.tot }, T, T, { v:sum('opening'), s:XS.totNum }, { v:sum('inQ'), s:XS.totNum }, { v:sum('outQ'), s:XS.totNum }, { v:sum('closing'), s:XS.totNum }]] };
@@ -17697,7 +17711,7 @@ async function buildLocationStockReport(locId, from, to){
     rows.push([fmtDate(end), { v:'Closing balance', s:XS.tot }, T, { v:x.inQ, s:XS.totNum }, { v:x.outQ, s:XS.totNum }, { v:x.closing, s:XS.totNum }]);
     rows.push([]);
   });
-  const tx = { name:'Transactions', freeze:4, widths:[11, 26, 15, 8, 8, 10, 13, 36, 18, 18, 28], merges:['A1:H1', 'A2:H2'], rows };
+  const tx = { name:'Transactions', letterhead:true, freeze:4, widths:[11, 26, 15, 8, 8, 10, 13, 36, 18, 18, 28], merges:['A1:H1', 'A2:H2'], rows };
   const fname = 'Stock report ' + (l ? (l.code || l.name) : '') + ' ' + (from || 'start') + ' to ' + end + '.xlsx';
   downloadBlob(await xlsxSimple([summary, tx]), fname.replace(/[\\\/:*?"<>|]/g, '-'));
   return lines.length;

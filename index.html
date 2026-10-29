@@ -2000,7 +2000,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.351';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.352';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -21550,6 +21550,18 @@ function openHoDetail(id){
     b.style.cssText = sh ? 'margin-right:8px' : 'margin-left:auto;margin-right:10px'; b.onclick = () => openHandoverForm(id);
     if(sh) sh.after(b); else t.after(b); }
 }
+// the next handover number: same pattern as the existing ones (FDC-HO-2026-180 → FDC-HO-2026-181), restarting at 001 in a new year
+function hoNextRef(){
+  const yr = String(new Date().getFullYear()), seen = [];
+  (state.handovers || []).forEach(h => { const m = /^(.*?)(\d{4})([-\/])(\d+)$/.exec(String(h.referenceNumber || '').trim()); if(m) seen.push({ pre:m[1], y:m[2], sep:m[3], n:+m[4], len:m[4].length, at:String(h.createdAt || h.handoverDate || '') }); });
+  if(!seen.length) return 'FDC-HO-' + yr + '-001';
+  const latest = seen.slice().sort((a, b) => a.at.localeCompare(b.at)).pop(), pre = latest.pre, sep = latest.sep;
+  const same = seen.filter(s => s.pre === pre && s.y === yr), len = Math.max(3, ...seen.filter(s => s.pre === pre).map(s => s.len));
+  const taken = new Set((state.handovers || []).map(h => String(h.referenceNumber || '').trim().toLowerCase()));
+  let n = same.length ? Math.max(...same.map(s => s.n)) + 1 : 1, ref;
+  do { ref = pre + yr + sep + String(n).padStart(len, '0'); n++; } while(taken.has(ref.toLowerCase()));
+  return ref;
+}
 function openHandoverForm(id){ hoFormAtt = null;
   const editing = id ? state.handovers.find(x=>x.id===id) : null;
   const lines = editing && hoLines(editing).length ? hoLines(editing) : [{}];
@@ -21560,7 +21572,7 @@ function openHandoverForm(id){ hoFormAtt = null;
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5">Reference number *</label>
-        <input type="text" id="ho-ref" value="${editing?esc(editing.referenceNumber||''):''}" placeholder="e.g. HO-0001" class="${inp}">
+        <input type="text" id="ho-ref" value="${editing?esc(editing.referenceNumber||''):esc(hoNextRef())}" placeholder="e.g. FDC-HO-2026-001" class="${inp}">
       </div>
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5">Handover date *</label>

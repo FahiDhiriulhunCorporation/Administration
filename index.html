@@ -2000,7 +2000,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.352';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.354';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -4042,6 +4042,37 @@ function deptSelectify(inp){
 function deptScan(root){ try{ (root.querySelectorAll ? root.querySelectorAll('input') : []).forEach(deptSelectify); if(root.tagName === 'INPUT') deptSelectify(root); }catch(e){} }
 new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if(n.nodeType === 1) deptScan(n); }))).observe(document.documentElement, { childList:true, subtree:true });
 document.addEventListener('DOMContentLoaded', () => deptScan(document));
+/* ---------- an × at the right end of every search box, to clear it in one click ---------- */
+(function(){
+  const st = document.createElement('style');
+  st.textContent = '.sx-wrap{position:relative;display:block}.sx-wrap>input{width:100%;padding-right:2.1rem!important}'
+    + '.sx-btn{position:absolute;right:.45rem;top:50%;transform:translateY(-50%);width:1.45rem;height:1.45rem;border-radius:999px;border:0;display:none;align-items:center;justify-content:center;cursor:pointer;background:rgba(148,163,184,.18);color:inherit;opacity:.75;font-size:15px;line-height:1;padding:0}'
+    + '.sx-btn:hover{opacity:1;background:rgba(148,163,184,.32)}.sx-wrap.sx-on .sx-btn{display:inline-flex}'
+    + 'input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;display:none}';
+  document.head.appendChild(st);
+  const LAYOUT = /^(?:[a-z]+:)?(?:flex-|grow|shrink|basis-|min-w-|max-w-|w-|col-span|order-|self-|m[trblxy]?-|hidden$|block$|inline)/;
+  const isSearch = i => !i.closest('.sx-wrap') && !i.dataset.noClear && (i.type === 'search' || (i.type === 'text' && /\bsearch|^find\b|^filter\b/i.test(i.getAttribute('placeholder') || '')));
+  const sync = i => { const w = i.parentElement; if(w && w.classList.contains('sx-wrap')) w.classList.toggle('sx-on', !!i.value); };
+  function enhance(i){
+    const w = document.createElement('span'); w.className = 'sx-wrap';
+    [...i.classList].filter(c => LAYOUT.test(c)).forEach(c => { w.classList.add(c); if(!/^(?:[a-z]+:)?w-/.test(c)) i.classList.remove(c); });
+    const had = document.activeElement === i, s0 = had ? i.selectionStart : null, s1 = had ? i.selectionEnd : null;
+    i.parentNode.insertBefore(w, i); w.appendChild(i);
+    if(had){ try{ i.focus(); if(s0 != null) i.setSelectionRange(s0, s1); }catch(x){} }      // moving the box would otherwise drop the cursor
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'sx-btn'; b.title = 'Clear the search'; b.setAttribute('aria-label', 'Clear the search'); b.textContent = '×';
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const inp = w.querySelector('input'); if(!inp) return; inp.value = '';
+      inp.dispatchEvent(new Event('input', { bubbles:true })); inp.dispatchEvent(new Event('change', { bubbles:true }));
+      const id = inp.id; setTimeout(() => { const again = (id && document.getElementById(id)) || inp; try{ again.focus(); }catch(x){} sync(again); }, 30); });
+    w.appendChild(b); sync(i);
+  }
+  const scan = root => { (root.querySelectorAll ? root.querySelectorAll('input[placeholder]') : []).forEach(i => { if(isSearch(i)) enhance(i); }); };
+  document.addEventListener('input', e => { if(e.target && e.target.matches && e.target.matches('.sx-wrap > input')) sync(e.target); }, true);
+  let queued = false; const later = () => { if(queued) return; queued = true; requestAnimationFrame(() => { queued = false; scan(document); }); };
+  new MutationObserver(later).observe(document.documentElement, { childList:true, subtree:true });
+  later();
+})();
+
 setTimeout(() => deptScan(document), 0);
 
 /* =====================================================================

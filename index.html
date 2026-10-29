@@ -2000,7 +2000,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.355';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.356';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2441,6 +2441,20 @@ function openShare(kind, id){
 }
 function shareCopy(){ const i = document.getElementById('share-url'); if(!i) return; const done = () => toast('Link copied.');
   if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(i.value).then(done).catch(() => { i.select(); document.execCommand('copy'); done(); }); else { i.select(); document.execCommand('copy'); done(); } }
+// an asset's QR code is a link to the app (?asset=<department asset code>): scanning it with any phone camera opens that asset's card.
+// The code (not the internal id) is used so the printed label stays readable; a code changed later still finds the asset through its history.
+const assetQrUrl = a => location.origin + location.pathname + '?asset=' + encodeURIComponent(a.departmentAssetCode || a.id);
+function assetByQr(v){ const c = String(v || '').trim().toLowerCase(); if(!c) return null;
+  return state.assets.find(a => String(a.departmentAssetCode || '').toLowerCase() === c) || state.assets.find(a => a.id === v) || state.assets.find(a => (a.codeHistory || []).some(h => String(h.from || '').toLowerCase() === c)) || null; }
+function openAssetCard(id){
+  openAssetDetail(id);
+  setTimeout(() => { const el = document.getElementById('ac-prev-' + id); if(!el) return; el.scrollIntoView({ block:'center', behavior:'smooth' }); el.classList.add('ring-4', 'ring-brand-500'); setTimeout(() => el.classList.remove('ring-4', 'ring-brand-500'), 2600); }, 350);
+}
+(function(){ try{ const v = new URLSearchParams(location.search).get('asset'); if(!v) return;
+  let n = 0; const tm = setInterval(() => { n++; let a = null; try{ a = authUser && assetByQr(v); }catch(e){}
+    if(a){ clearInterval(tm); history.replaceState(null, '', location.pathname + location.hash); try{ openAssetCard(a.id); }catch(e){ console.warn(e); } }
+    else if(authUser && n > 45){ clearInterval(tm); history.replaceState(null, '', location.pathname + location.hash); toast('No asset with the code ' + v + ' was found — it may have been deleted, or you may not have access to assets.', true); }
+    else if(n > 900) clearInterval(tm); }, 1000); }catch(e){} })();
 // a shared link (?open=pc:<id>): once signed in and the data has arrived, the request opens
 (function(){ try{ const v = new URLSearchParams(location.search).get('open'); if(!v) return; const i = v.indexOf(':'), kind = v.slice(0, i), id = v.slice(i + 1), K = SHARE_KINDS[kind]; if(!K || !id) return;
   let n = 0; const tm = setInterval(() => { n++; let r = null; try{ r = authUser && K.rec(id); }catch(e){}
@@ -20323,7 +20337,7 @@ function acLayout(a){
   name.slice(0, 2).forEach((ln, i) => { T(L, y, i === 1 && name.length > 2 ? acFit(ln + ' ' + name.slice(2).join(' '), true, 11.5, LW) : ln, 11.5, true); y += 13.5; });
   if(a.category){ T(L, y - 3, acFit(a.category, false, 7, LW), 7, false, AC_GRAY); y += 8; }
   y += 2; R(L, y - 6, LW, 0.6, AC_LINE);
-  const rows = [['Asset code', a.tag], ['Dept. asset code', a.departmentAssetCode], ['Serial no.', a.serialNumber], ['Location', loc ? loc.name + (loc.external ? ' (outside the corporation)' : loc.code ? ' (' + loc.code + ')' : '') : ''], ['Department', a.department], ['Assigned to', a.assignedTo]];
+  const rows = [['Asset code', a.tag], ['Dept. asset code', a.departmentAssetCode], ['Serial no.', a.serialNumber], ['Location', loc ? loc.name + (loc.external ? '' : loc.code ? ' (' + loc.code + ')' : '') : ''], ['Department', a.department], ['Assigned to', a.assignedTo]];
   const step = Math.min(11.6, (AC_H - 23 - y) / rows.length);
   rows.forEach(([l, v]) => { y += step; T(L, y, l, 6.3, false, AC_GRAY); T(L + 64, y, acFit(v || '—', true, 7.4, LW - 64), 7.4, true, v ? AC_DARK : AC_GRAY); });
   // the asset's photo (in place of the QR code)
@@ -23436,16 +23450,16 @@ function viewAssetDetail(){
 
     <div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 mb-6">
       <div class="text-sm font-bold text-slate-900 mb-1">Department asset code & QR code</div>
-      <div class="text-xs text-slate-500 mb-4">Scan to quickly pull up this asset on a phone</div>
+      <div class="text-xs text-slate-500 mb-4">Scan with any phone camera to open this asset's card in the app (sign in if asked). Codes printed before this change only show the code — download and print the QR again.</div>
       ${asset.departmentAssetCode ? `
       <div class="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-        <img src="${qrCodeImgUrl(asset.departmentAssetCode)}" alt="QR code for ${esc(asset.departmentAssetCode)}" width="150" height="150" class="rounded-lg border border-slate-200 shrink-0">
+        <img src="${qrCodeImgUrl(assetQrUrl(asset))}" alt="QR code for ${esc(asset.departmentAssetCode)}" width="150" height="150" class="rounded-lg border border-slate-200 shrink-0">
         <div class="text-center sm:text-left">
           <div class="text-xs font-medium text-slate-500">Department asset code</div>
           <div class="text-lg font-bold text-slate-900 num mb-3">${esc(asset.departmentAssetCode)}</div>
           <div class="flex flex-wrap justify-center sm:justify-start gap-2.5">
-            <a href="${qrCodeImgUrl(asset.departmentAssetCode, 600)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Open full size</a>
-            <a href="${qrCodeImgUrl(asset.departmentAssetCode, 600)}" download="${esc(asset.departmentAssetCode)}-qr.png" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Download</a>
+            <a href="${qrCodeImgUrl(assetQrUrl(asset), 600)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Open full size</a>
+            <a href="${qrCodeImgUrl(assetQrUrl(asset), 600)}" download="${esc(asset.departmentAssetCode)}-qr.png" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Download</a>
             ${canManageInventory() ? `<button type="button" onclick="openAssetCodeEdit('${asset.id}')" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700">✎ Change code</button>` : ''}
           </div>
         </div>

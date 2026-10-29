@@ -750,6 +750,7 @@ function refreshAppearanceModal(){
 html[data-theme="dark"] .wf-chip.wf-s{color:#fca5a5}html[data-theme="dark"] .wf-chip.wf-g{color:#93c5fd}html[data-theme="dark"] .wf-s{text-decoration-color:#f87171}html[data-theme="dark"] .wf-g{text-decoration-color:#60a5fa}
 .wf-all{padding:2px 9px;border-radius:999px;font-weight:600;color:#fff;background:#2563eb}.wf-more{padding:2px 4px;opacity:.7}
 .as-menu > summary::-webkit-details-marker{display:none}.as-menu > summary{list-style:none}
+.pr-more > summary::-webkit-details-marker{display:none}
 </style>
 <script>
   if('serviceWorker' in navigator){
@@ -1973,7 +1974,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.342';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.344';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3391,7 +3392,7 @@ function openVehReqForm(id, preset){
     vFoot(id ? 'Save changes' : 'Add requisition', `saveVehReq('${id || ''}')`, id && canManageInventory() ? `vehConfirmDeleteReq('${id}')` : ''), true);
 }
 const vehReqPRs = () => state.purchaseRequisitions.slice().sort((a, b) => prNumberCollator.compare(b.prNumber || '', a.prNumber || ''));
-const prFirstItem = p => ((p.lineItems || [])[0] || {}).itemName || '';
+const prFirstItem = p => (p && p.title) || ((p.lineItems || [])[0] || {}).itemName || '';
 // fueling petty cash vouchers that no requisition is linked to yet (the one being edited keeps its own)
 const vehReqVouchers = editId => pcSortList(state.pettyCash.filter(v => (v.kind === 'fuel' || v.category === 'Fuel') && !state.fuelRequisitions.some(q => q.pettyCashId === v.id && q.id !== editId)), 'num-desc');
 function vehReqKindChanged(sel){
@@ -9018,7 +9019,7 @@ const ANYA_GUIDES = [
     acts:[['+ Business advance', "goTo('business-advance'); openBaForm()"]] },
   { id:'pr', title:'Purchase requisition (PR)', page:'purchase-requisitions', keys:['purchase requisition','pr form','requisition','pr ','purchase request'],
     steps:['Open **Finance → Purchase Requisitions** and press **+ New Purchase Requisition**.', 'Attach the PR form from the finance system — the app reads it and fills every field, including the approvals.', 'Check the highlighted fields and save. Later attach the PO and invoices as they arrive.'],
-    acts:[['+ New PR', "goTo('purchase-requisitions'); openPurchaseRequisitionForm()"]] },
+    acts:[['+ New PR', "goTo('purchase-requisitions'); openPrQuick()"]] },
   { id:'travel', title:'Travel request & DSA', page:'travel-foreign', keys:['travel','trip','dsa','subsistence','allowance','per diem','pocket money','incidental','trf'],
     steps:['Have the signed form? Press **📎 From signed form** (or tell me "submit a travel request form") — it is read, the request is created and the form attached. Otherwise open **Travel → Local** or **Foreign Travel** and press **+ Travel request**. The next request number (FDC/TRF/…) is filled in for you.', 'Add the travellers, dates and destination. Turn on DSA to enter the daily rate, incidental allowance and pocket money — totals update as you type, and empty columns are left off the memo.', 'Print the DSA memo, get it signed and attach the signed memo.', 'Press **✉ Email to Finance** to make an email draft (to Finance, CC Rukham, Administration, Sama). It is never sent — you review and send it yourself.'],
     acts:[['+ Foreign travel', "goTo('travel-foreign'); openTravelForm('', 'foreign')"], ['+ Local travel', "goTo('travel-local'); openTravelForm('', 'local')"]] },
@@ -17598,8 +17599,15 @@ function viewStockLevels(){
   const hiddenCount = LOCATIONS.length - valuationLocations.length;
   const all = [...state.products].sort(byDisplayName), slq = String(vehUi.slQ || '').toLowerCase().trim(), slc = vehUi.slCat || '', sll = vehUi.slLow || '';
   const cats = [...new Set(all.map(p => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  // balance left from each way of buying (CSR / PO / Petty Cash): stock in minus stock out, per item — one pass over the movements
+  const SL_SRC = [['CSR', 'CSR'], ['Purchase Order', 'PO'], ['Petty Cash', 'Petty Cash']], sls = vehUi.slSrc || '', srcBal = {};
+  state.movements.forEach(m => { if(!m.acquisition || (m.type !== 'in' && m.type !== 'out')) return;
+    const o = srcBal[m.productId] || (srcBal[m.productId] = {}); o[m.acquisition] = (o[m.acquisition] || 0) + (m.type === 'in' ? 1 : -1) * (Number(m.quantity) || 0); });
+  const balOf = (p, a) => (srcBal[p.id] || {})[a] || 0;
   const list = all.filter(p => (!slc || p.category === slc) && (!sll || (sll === 'low' ? isLowStock(p) : sll === 'out' ? !productTotalQty(p) : productTotalQty(p) > 0))
+    && (!sls || balOf(p, sls) > 0)
     && (!slq || [displayName(p), p.name, p.sku, p.category, p.description].join(' ').toLowerCase().includes(slq)));
+  const srcChips = p => SL_SRC.filter(([a]) => balOf(p, a) > 0).map(([a, s]) => `<span class="inline-flex items-center gap-1 px-1.5 py-px rounded-md border border-slate-200 bg-slate-50 text-[10.5px] text-slate-500" title="${esc(a)} balance">${esc(s)} <b class="num text-slate-700">${fmtNum(balOf(p, a))}</b></span>`).join('');
   const rows = list.map(p=>{
     const total = productTotalQty(p);
     const low = isLowStock(p);
@@ -17614,6 +17622,7 @@ function viewStockLevels(){
         <td class="px-5 sm:px-6 py-3">
           <div class="font-semibold text-slate-800">${esc(displayName(p))} ${low?'<span class="ml-1.5 inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">Low</span>':''}</div>
           <div class="text-[11.5px] text-slate-400">${esc(p.sku||'No SKU')}${p.category?(' · '+esc(p.category)):''}</div>
+          ${srcChips(p) ? `<div class="flex flex-wrap gap-1 mt-1">${srcChips(p)}</div>` : ''}
         </td>
         ${cells}
         <td class="py-3 pr-5 sm:pr-6 text-right num font-bold text-slate-900">${fmtNum(total)}</td>
@@ -17629,7 +17638,7 @@ function viewStockLevels(){
     </div>
 
     ${stkNotifyBar()}
-    ${all.length ? `<div class="flex flex-wrap items-center gap-2.5 mb-4">${vSearch('sl-q', 'slQ', 'Search item, SKU or category…')}${cats.length ? vSelect('slCat', cats, slc, 'All categories') : ''}${vSelect('slLow', [['low', 'Low stock'], ['in', 'In stock'], ['out', 'Out of stock (0)']], sll, 'All stock')}${(slq || slc || sll) ? `<span class="text-xs text-slate-500">${fmtNum(list.length)} of ${fmtNum(all.length)} items</span>` : ''}</div>` : ''}
+    ${all.length ? `<div class="flex flex-wrap items-center gap-2.5 mb-4">${vSearch('sl-q', 'slQ', 'Search item, SKU or category…')}${cats.length ? vSelect('slCat', cats, slc, 'All categories') : ''}${vSelect('slLow', [['low', 'Low stock'], ['in', 'In stock'], ['out', 'Out of stock (0)']], sll, 'All stock')}${vSelect('slSrc', [['CSR', 'Balance in CSR'], ['Purchase Order', 'Balance in PO'], ['Petty Cash', 'Balance in Petty Cash']], sls, 'All sources')}${(slq || slc || sll || sls) ? `<span class="text-xs text-slate-500">${fmtNum(list.length)} of ${fmtNum(all.length)} items</span>` : ''}</div>` : ''}
     <div class="bg-white rounded-xl border border-slate-200">
       ${list.length ? `
       <div class="w-full">
@@ -20395,11 +20404,27 @@ function prLineItemHtml(idx, line){
     <div class="pr-line-wrap border border-slate-200 rounded-lg p-3.5 mb-3 bg-slate-50/50" data-line="${idx}">
       <div class="flex items-start justify-between gap-2 mb-3">
         <div class="flex-1">
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Item name *</label>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Item name</label>
           <input type="text" id="pr-item-name-${idx}" value="${esc(line.itemName||'')}" placeholder="e.g. Office chairs" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
         </div>
         <button type="button" onclick="removePrLineItem(${idx})" class="mt-6 text-slate-400 hover:text-rose-600 px-1 ${idx===0?'invisible':''}" title="Remove item">✕</button>
       </div>
+      <div class="grid grid-cols-3 gap-3 mb-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Quantity</label>
+          <input type="number" min="0" step="any" id="pr-qty-${idx}" value="${line.quantity != null && line.quantity !== '' ? line.quantity : 1}" oninput="updatePrLineTotal(${idx})" placeholder="0" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Unit cost (MVR)</label>
+          <input type="number" min="0" step="any" id="pr-unit-cost-${idx}" value="${line.unitCost||''}" oninput="updatePrLineTotal(${idx})" placeholder="0.00" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Total cost</label>
+          <div id="pr-line-total-${idx}" class="w-full px-3.5 py-2.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold text-slate-700 num">${fmtMVR((line.quantity != null && line.quantity !== '' ? line.quantity : 1)*(line.unitCost||0))}</div>
+        </div>
+      </div>
+      <details class="pr-more" ${line.itemDescription || line.linkedProductId || line.linkedAssetId || line.budgetCode ? 'open' : ''}>
+        <summary class="cursor-pointer select-none text-xs font-semibold text-brand-600 hover:underline mb-2 list-none">＋ Details (optional) — description, budget code, link to stock item or asset</summary>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
           <label class="block text-xs font-semibold text-slate-600 mb-1.5">Item description</label>
@@ -20408,20 +20433,6 @@ function prLineItemHtml(idx, line){
         <div>
           <label class="block text-xs font-semibold text-slate-600 mb-1.5">Budget code</label>
           <select id="pr-budget-code-${idx}" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">${prBudgetCodeOptionsHtml(line.budgetCode)}</select>
-        </div>
-      </div>
-      <div class="grid grid-cols-3 gap-3 mb-3">
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Quantity *</label>
-          <input type="number" min="0" step="any" id="pr-qty-${idx}" value="${line.quantity||''}" oninput="updatePrLineTotal(${idx})" placeholder="0" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Unit cost (MVR) *</label>
-          <input type="number" min="0" step="any" id="pr-unit-cost-${idx}" value="${line.unitCost||''}" oninput="updatePrLineTotal(${idx})" placeholder="0.00" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Total cost</label>
-          <div id="pr-line-total-${idx}" class="w-full px-3.5 py-2.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold text-slate-700 num">${fmtMVR((line.quantity||0)*(line.unitCost||0))}</div>
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -20443,6 +20454,7 @@ function prLineItemHtml(idx, line){
         </div>
       </div>
       ${line.stockedIn ? `<div class="text-[11px] text-emerald-600 font-semibold mt-2">✓ Already stocked in automatically</div>` : ''}
+      </details>
     </div>
   `;
 }
@@ -20586,13 +20598,13 @@ function openPrDetail(id){
   const hist = (pr.statusHistory || []).slice(-5).reverse();
   shareFor('pr', id);
   openModal('Purchase requisition', `
-    <div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-lg font-extrabold text-slate-900 num">${esc(pr.prNumber || '—')}</div><div class="text-sm text-slate-500">${esc(prFirstItem(pr) || '')}</div></div>
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-lg font-extrabold text-slate-900">${esc(prFirstItem(pr) || 'Untitled requisition')}</div><div class="text-sm num ${pr.prNumber ? 'text-slate-500' : 'text-slate-400 italic'}">${pr.prNumber ? esc(pr.prNumber) : 'No PR number yet'}</div></div>
       <div class="flex items-center gap-2">${canEdit ? `<select aria-label="Status" onchange="prQuickStatus('${pr.id}', this.value, this); setTimeout(() => { if(document.getElementById('pr-detail-${pr.id}')) openPrDetail('${pr.id}'); }, 250)" class="text-xs font-semibold rounded-full border border-transparent px-2.5 py-1 pr-7 cursor-pointer ${s.badge}">${PR_STATUSES.map(x => `<option value="${x.id}" ${x.id === (pr.status || 'open') ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>` : `<span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${s.badge}">${esc(s.label)}</span>`}</div></div>
     <div id="pr-detail-${pr.id}" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">${item('Requisition date', esc(fmtDate(prRequisitionDate(pr))))}${item('Requester', esc(pr.requester || '—'))}${item('Location', esc(loc ? loc.name : '—'))}${item('Total', fmtMVR(pr.totalCost))}</div>
     ${ap.approved || ap.authorised ? `<div class="grid grid-cols-2 gap-4 mb-5">${item('Approved by', esc(ap.approved || '—') + (ap.approvedDesig ? `<div class="text-[11.5px] font-normal text-slate-500">${esc(ap.approvedDesig)}</div>` : ''))}${item('Authorised by', esc(ap.authorised || '—') + (ap.authorisedDesig ? `<div class="text-[11.5px] font-normal text-slate-500">${esc(ap.authorisedDesig)}</div>` : ''))}</div>` : ''}
     ${vSec('Items')}
     <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="py-1.5 pr-3 font-semibold">Item</th><th class="py-1.5 pr-3 font-semibold">Budget code</th><th class="py-1.5 pr-3 font-semibold text-right">Qty</th><th class="py-1.5 pr-3 font-semibold text-right">Unit cost</th><th class="py-1.5 font-semibold text-right">Total</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="5" class="py-3 text-slate-400">No items.</td></tr>'}<tr class="border-t border-slate-200"><td colspan="4" class="py-2 text-right font-bold text-slate-700 pr-3">Grand total</td><td class="py-2 text-right num font-extrabold">${fmtMVR(pr.totalCost)}</td></tr></tbody></table></div>
+      <tbody>${rows || '<tr><td colspan="5" class="py-3 text-slate-400">No items yet' + (canEdit ? ' — press ✎ Edit to add them.' : '.') + '</td></tr>'}<tr class="border-t border-slate-200"><td colspan="4" class="py-2 text-right font-bold text-slate-700 pr-3">Grand total</td><td class="py-2 text-right num font-extrabold">${fmtMVR(pr.totalCost)}</td></tr></tbody></table></div>
     ${vSec('Documents')}
     ${prDocLinksHtml(Object.assign({}, pr, { approvals:null }), 'mt-0') || '<div class="text-sm text-slate-400">No documents attached.</div>'}
     ${hist.length ? `<div class="text-[11px] text-slate-400 mt-4">${hist.map(h => esc((PR_STATUSES.find(x => x.id === h.to) || {}).label || h.to) + ' · ' + esc(h.by || '') + ' ' + fmtDT(h.at)).join(' — ')}</div>` : ''}
@@ -20602,6 +20614,42 @@ function openPrDetail(id){
     b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700';
     b.style.cssText = sh ? 'margin-right:8px' : 'margin-left:auto;margin-right:10px'; b.onclick = () => openPurchaseRequisitionForm(id);
     if(sh) sh.after(b); else t.after(b); }
+}
+// quick add: a title is all that's needed — number, items and documents can be filled in later from Edit
+function openPrQuick(){
+  if(typeof viewerBlock === 'function' && viewerBlock()) return;
+  const inp = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white';
+  openModal('New purchase requisition', `
+    <div class="space-y-4">
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">PR title *</label>
+        <input type="text" id="prq-title" placeholder="e.g. AC maintenance at Apollo Tower" class="${inp}" onkeydown="if(event.key==='Enter') savePrQuick()"></div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">PR number <span class="font-normal text-slate-400">(optional)</span></label><input type="text" id="prq-no" class="${inp}"></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Estimated amount (MVR) <span class="font-normal text-slate-400">(optional)</span></label><input type="number" min="0" step="0.01" id="prq-amt" class="${inp}"></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Location</label><select id="prq-loc" class="${inp}">${LOCATIONS.map(l => `<option value="${l.id}">${esc(l.name)} (${esc(l.code)})</option>`).join('')}</select></div>
+      </div>
+      <p class="text-[12px] text-slate-500">Items, budget codes and documents can be added later — open the requisition and press ✎ Edit.</p>
+      <div id="prq-err" class="hidden text-sm text-red-600"></div>
+      <div class="flex items-center justify-between gap-3 pt-1">
+        <button type="button" onclick="openPurchaseRequisitionForm()" class="text-sm font-semibold text-brand-600 hover:underline">Use the full form instead</button>
+        <div class="flex gap-2"><button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" id="prq-save" onclick="savePrQuick()" class="px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Create requisition</button></div>
+      </div>
+    </div>`);
+  setTimeout(() => { const t = document.getElementById('prq-title'); if(t) t.focus(); }, 50);
+}
+function savePrQuick(){
+  const v = id => (document.getElementById(id) || {}).value || '', err = document.getElementById('prq-err');
+  const title = v('prq-title').trim(), prNumber = v('prq-no').trim(), amt = Number(v('prq-amt')) || 0, locationId = v('prq-loc') || (LOCATIONS[0] || {}).id || '';
+  const fail = m => { err.textContent = m; err.classList.remove('hidden'); };
+  if(!title) return fail('Give the requisition a title.');
+  if(prNumber && state.purchaseRequisitions.some(x => String(x.prNumber || '').toLowerCase() === prNumber.toLowerCase())) return fail('PR number ' + prNumber + ' already exists.');
+  const pr = { id:uid(), title, prNumber, requisitionDate:todayStr(), requester:authUser ? authUser.name || authUser.email || '' : '', locationId, status:'open',
+    prUrl:'', poUrl:'', doUrl:'', invoiceUrl:'', torUrl:'', otherLinks:[], lineItems:amt > 0 ? [{ itemName:title, itemDescription:'', budgetCode:'', quantity:1, unitCost:amt, totalCost:amt, linkedProductId:'', linkedAssetId:'', stockedIn:false }] : [],
+    totalCost:amt, approvals:null, createdByName:authUser ? authUser.name : null, createdByEmail:authUser ? authUser.email : null, createdAt:nowISO() };
+  state.purchaseRequisitions.push(pr); persistPurchaseRequisitionDoc(pr);
+  closeModal(); rerenderMain(); toast('Requisition created — add details any time with ✎ Edit.');
+  openPrDetail(pr.id);
 }
 function openPurchaseRequisitionForm(id){ prReadApprovals = null;
   const editing = id ? state.purchaseRequisitions.find(x=>x.id===id) : null;
@@ -20616,8 +20664,12 @@ function openPurchaseRequisitionForm(id){ prReadApprovals = null;
     <div class="pr-sticky-head bg-white border-b border-slate-200 -mx-5 sm:-mx-6 px-5 sm:px-6 -mt-5 pt-5 pb-4 mb-4">
     <div id="pr-error" class="hidden bg-rose-50 text-rose-700 text-sm rounded-lg px-3.5 py-2.5 mb-4"></div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="sm:col-span-2">
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5">PR title *</label>
+        <input type="text" id="pr-title" value="${esc(editing ? editing.title || prFirstItem(editing) : '')}" placeholder="e.g. AC maintenance at Apollo Tower" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
       <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5">PR Number *</label>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5">PR Number <span class="font-normal text-slate-400">(can be added later)</span></label>
         <input type="text" id="pr-number" value="${esc(prNumber)}" placeholder="e.g. PR-0001" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
       <div>
@@ -20629,7 +20681,7 @@ function openPurchaseRequisitionForm(id){ prReadApprovals = null;
         ${state.profiles.length ? `
         <select id="pr-requester" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
           <option value="">Select a user…</option>
-          ${state.profiles.map(pr=>`<option value="${esc(pr.name||pr.email)}" ${requester===(pr.name||pr.email)?'selected':''}>${esc(pr.name||pr.email)}${pr.email?(' — '+esc(pr.email)):''}</option>`).join('')}
+          ${state.profiles.map(pr=>`<option value="${esc(pr.name||pr.email)}" ${requester===(pr.name||pr.email) || (!editing && authUser && (pr.uid===authUser.uid || (pr.email && pr.email===authUser.email)))?'selected':''}>${esc(pr.name||pr.email)}${pr.email?(' — '+esc(pr.email)):''}</option>`).join('')}
         </select>
         ` : `
         <input type="text" id="pr-requester" value="${esc(requester)}" placeholder="Who is requesting this?" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
@@ -20657,9 +20709,9 @@ function openPurchaseRequisitionForm(id){ prReadApprovals = null;
         ${PR_STATUSES.map(s=>`<option value="${s.id}" ${(editing?editing.status:'open')===s.id?'selected':''}>${esc(s.label)}</option>`).join('')}
       </select>
     </div>
-    <div class="bg-amber-50 text-amber-800 text-[11.5px] rounded-lg px-3.5 py-2.5 mb-4 leading-relaxed">
-      Setting status to Closed automatically stocks in any line items linked to a stock item above, at the location selected — no separate Stock In entry needed.
-    </div>
+    <div class="text-[11.5px] text-slate-500 -mt-3 mb-4">Closing it adds any items linked to a stock item to inventory at the location chosen.</div>
+    <details class="pr-more mb-4" ${editing && ((editing.files && Object.keys(editing.files).length) || editing.prUrl || editing.poUrl) ? 'open' : ''}>
+    <summary class="cursor-pointer select-none text-sm font-semibold text-brand-600 hover:underline mb-3 list-none">＋ Documents (optional) — PR, PO, DO, invoice, TOR and others</summary>
     <div class="text-xs font-semibold text-slate-600 mb-2">Documents <span class="font-normal text-slate-400">(optional — attach PDFs or photos)</span></div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 mb-3">${PR_DOCS.map(([k, label, f]) => `<div><label class="block text-xs font-semibold text-slate-600 mb-1">${label}</label>${attRow('pr-' + k, ((editing && editing.files) || {})[k], 'Attach the ' + label.toLowerCase(), editing && editing[f])}</div>`).join('')}</div>
     <div class="mb-5">
@@ -20668,6 +20720,7 @@ function openPurchaseRequisitionForm(id){ prReadApprovals = null;
       <datalist id="pr-link-names">${prKnownLinkNames().map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
       ${[0, 1, 2].map(i => `<div class="grid gap-2 items-start mb-2" style="grid-template-columns:11rem 1fr"><input id="pr-oname-${i}" list="pr-link-names" placeholder="Name, e.g. Quotation" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm"><div class="-mt-2">${trAttRow('pr-o' + i, null, 'Attach the file')}</div></div>`).join('')}
     </div>
+    </details>
     <div class="flex justify-between items-center gap-2.5">
       <div>${editing && canManageInventory() ? `<button class="px-4 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50" onclick="deletePurchaseRequisition('${editing.id}')">Delete</button>` : ''}</div>
       <div class="flex gap-2.5">
@@ -20709,6 +20762,7 @@ function savePurchaseRequisition(id){
   const errEl = document.getElementById('pr-error');
   errEl.classList.add('hidden');
   const prNumber = document.getElementById('pr-number').value.trim();
+  const prTitle = ((document.getElementById('pr-title') || {}).value || '').trim();
   const requisitionDate = document.getElementById('pr-date').value;
   const requester = document.getElementById('pr-requester').value.trim();
   const locationId = document.getElementById('pr-location').value;
@@ -20719,11 +20773,11 @@ function savePurchaseRequisition(id){
   const prNewOther = [0, 1, 2].map(i => ({ label:((document.getElementById('pr-oname-' + i) || {}).value || '').trim(), att:attTake('pr-o' + i) })).filter(x => x.att);
   if(prNewOther.some(x => !x.label)){ errEl.textContent = 'Give each other document a name.'; errEl.classList.remove('hidden'); return; }
 
-  if(!prNumber){ errEl.textContent='PR Number is required.'; errEl.classList.remove('hidden'); return; }
+  if(!prTitle){ errEl.textContent='Give the requisition a title.'; errEl.classList.remove('hidden'); return; }
   if(!requisitionDate){ errEl.textContent='Requisition date is required.'; errEl.classList.remove('hidden'); return; }
   if(!requester){ errEl.textContent='Requester is required.'; errEl.classList.remove('hidden'); return; }
   if(!locationId){ errEl.textContent='Location is required.'; errEl.classList.remove('hidden'); return; }
-  const dup = state.purchaseRequisitions.find(x=>x.prNumber.toLowerCase()===prNumber.toLowerCase() && x.id!==id);
+  const dup = prNumber && state.purchaseRequisitions.find(x=>String(x.prNumber || '').toLowerCase()===prNumber.toLowerCase() && x.id!==id);
   if(dup){ errEl.textContent='That PR Number is already used by another requisition.'; errEl.classList.remove('hidden'); return; }
 
   const lineEls = [...document.querySelectorAll('.pr-line-wrap')];
@@ -20737,19 +20791,20 @@ function savePurchaseRequisition(id){
     const unitCost = Number(document.getElementById('pr-unit-cost-'+idx).value);
     const linkedProductId = document.getElementById('pr-sku-id-'+idx).value || null;
     const linkedAssetId = document.getElementById('pr-asset-id-'+idx).value || null;
+    if(!itemName && !itemDescription && !(Number(document.getElementById('pr-unit-cost-'+idx).value) > 0) && !linkedProductId && !linkedAssetId) continue;      // an empty line: details can be added later
     if(!itemName){ errEl.textContent='Item name is required for every line.'; errEl.classList.remove('hidden'); return; }
     if(!quantity || quantity<=0){ errEl.textContent=`Enter a quantity greater than zero for ${itemName}.`; errEl.classList.remove('hidden'); return; }
     if(unitCost==null || isNaN(unitCost) || unitCost<0){ errEl.textContent=`Enter a valid unit cost for ${itemName}.`; errEl.classList.remove('hidden'); return; }
     lineItems.push({ itemName, itemDescription, budgetCode, quantity, unitCost, totalCost: quantity*unitCost, linkedProductId, linkedAssetId, stockedIn: wasLineAlreadyStockedIn(id, linkedProductId) });
   }
-  if(!lineItems.length){ errEl.textContent='Add at least one item.'; errEl.classList.remove('hidden'); return; }
+
 
   const totalCost = lineItems.reduce((s,l)=>s+l.totalCost, 0);
   const editing = id ? state.purchaseRequisitions.find(x=>x.id===id) : null;
   const wasAlreadyClosed = editing ? editing.status === 'closed' : false;
 
   if(editing){
-    Object.assign(editing, { prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost }); if(prReadApprovals){ editing.approvals = prReadApprovals; prReadApprovals = null; }
+    Object.assign(editing, { title:prTitle, prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost }); if(prReadApprovals){ editing.approvals = prReadApprovals; prReadApprovals = null; }
     if(status === 'closed' && !wasAlreadyClosed){
       applyPrAutoStockIn(editing);
       toast('Purchase requisition closed — linked stock items added to inventory.');
@@ -20759,7 +20814,7 @@ function savePurchaseRequisition(id){
     persistPurchaseRequisitionDoc(editing); if(prQuoteAtt){ prBgUpload(editing.id, prQuoteAtt); prQuoteAtt = null; } prUploadDocs(editing.id, prNewDocs, prNewOther);
   } else {
     const pr = {
-      id: uid(), prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost, approvals: prReadApprovals || null,
+      id: uid(), title:prTitle, prNumber, requisitionDate, requester, locationId, status, prUrl, poUrl, doUrl, invoiceUrl, torUrl, otherLinks, lineItems, totalCost, approvals: prReadApprovals || null,
       createdByName: authUser ? authUser.name : null,
       createdByEmail: authUser ? authUser.email : null,
       createdAt: nowISO(),
@@ -20893,14 +20948,14 @@ function prCardBudgetCodeSummary(pr){
 function prCardHtml(pr){
   const items = pr.lineItems || [];
   const loc = getLocation(pr.locationId);
-  const names = items.map(l=>l.itemName).filter(Boolean).join(', ');
+  const names = pr.title || items.map(l=>l.itemName).filter(Boolean).join(', ');
   const budget = prBudgetCodeText(pr);
   const s = prStatusMeta(pr.status);
   return `
     <div onclick="openPrDetail('${pr.id}')" class="pr-banner bg-white rounded-lg border border-slate-200 hover:border-brand-400 hover:shadow-sm transition-colors">
       <div class="pr-ribbon ${s.ribbon} ${s.ribbonText}" title="${esc(s.label)}">${esc(s.ribbonLabel || s.label)}</div>
       <div class="pb-num">
-        <div class="pb-nowrap text-sm font-bold text-slate-800 num">${esc(pr.prNumber)}</div>
+        <div class="pb-nowrap text-sm font-bold num ${pr.prNumber ? 'text-slate-800' : 'text-slate-400 italic font-medium'}">${pr.prNumber ? esc(pr.prNumber) : 'No PR no. yet'}</div>
         <div class="text-[11.5px] text-slate-400">${fmtDate(prRequisitionDate(pr))}</div>
       </div>
       <div class="pb-items">
@@ -20966,7 +21021,7 @@ function viewPurchaseRequisitions(){
       </div>
       <div class="pr-head-actions">
         <button onclick="exportPurchaseRequisitionsCSV()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export CSV</button>
-        <button onclick="openPurchaseRequisitionForm()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ New Purchase Requisition</button>
+        <button onclick="openPrQuick()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ New Purchase Requisition</button>
       </div>
     </div>
     <div class="pr-toolbar">

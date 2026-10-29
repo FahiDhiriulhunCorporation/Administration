@@ -1974,7 +1974,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.344';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.346';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -17594,20 +17594,128 @@ function stkNotifyBarOld(){
     <button type="button" onclick="openNdSettings()" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-brand-600 hover:underline">Personalise</button>
     <button type="button" onclick="stkNotifySet(${on ? 'false' : 'true'})" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">${on ? 'Turn off' : 'Turn on'}</button></div>`;
 }
+/* ---------- Excel export: stock report with every transaction and the balance at each location ---------- */
+// small workbook writer: sheets = [{ name, widths, rows:[[cell]], merges:['A1:K1'], freeze:row }]; a cell is a value or { v, s } with s a style below
+const XS = { n:0, head:1, title:2, num:3, group:4, totNum:5, note:6, tot:7 };
+async function xlsxSimple(sheets){
+  await loadScriptOnce(JSZIP_URL);
+  const x = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  const col = n => { let s = ''; n++; while(n){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const used = new Set(), names = sheets.map(sh => { let b = String(sh.name || 'Sheet').replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31).trim() || 'Sheet', n = b, i = 2; while(used.has(n.toLowerCase())) n = b.slice(0, 27) + ' (' + i++ + ')'; used.add(n.toLowerCase()); return n; });
+  const z = new JSZip();
+  z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') + '</Types>');
+  z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  z.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + names.map((n, i) => `<sheet name="${x(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>');
+  z.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') + `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+  z.file('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<fonts count="5"><font><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><b/><sz val="10"/><name val="Calibri"/></font><font><i/><sz val="9"/><color rgb="FF7F7F7F"/><name val="Calibri"/></font></fonts>'
+    + '<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F3864"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E2F3"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/></patternFill></fill></fills>'
+    + '<borders count="2"><border/><border><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom></border></borders><cellStyleXfs count="1"><xf/></cellStyleXfs>'
+    + '<cellXfs count="8"><xf/><xf fontId="1" fillId="2" applyFont="1" applyFill="1"><alignment vertical="center" wrapText="1"/></xf><xf fontId="2" applyFont="1"/><xf numFmtId="3" applyNumberFormat="1"/><xf fontId="3" fillId="3" applyFont="1" applyFill="1"/><xf numFmtId="3" fontId="3" fillId="4" borderId="1" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/><xf fontId="4" applyFont="1"/><xf fontId="3" fillId="4" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/></cellXfs></styleSheet>');
+  sheets.forEach((sh, i) => {
+    const rows = sh.rows.map((r, ri) => `<row r="${ri + 1}">` + r.map((c, ci) => { if(c == null || c === '') return ''; const o = (typeof c === 'object') ? c : { v:c }, ref = col(ci) + (ri + 1), s = o.s ? ` s="${o.s}"` : (typeof o.v === 'number' ? ' s="3"' : '');
+      if(o.v == null || o.v === '') return `<c r="${ref}"${s}/>`;
+      return typeof o.v === 'number' ? `<c r="${ref}"${s}><v>${o.v}</v></c>` : `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${x(o.v)}</t></is></c>`; }).join('') + '</row>').join('');
+    const pane = sh.freeze ? `<sheetViews><sheetView workbookViewId="0"${i === 0 ? ' tabSelected="1"' : ''}><pane ySplit="${sh.freeze}" topLeftCell="A${sh.freeze + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` : '';
+    z.file(`xl/worksheets/sheet${i + 1}.xml`, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' + pane
+      + (sh.widths ? '<cols>' + sh.widths.map((w, k) => `<col min="${k + 1}" max="${k + 1}" width="${w}" customWidth="1"/>`).join('') + '</cols>' : '')
+      + `<sheetData>${rows}</sheetData>` + (sh.merges && sh.merges.length ? `<mergeCells count="${sh.merges.length}">` + sh.merges.map(m => `<mergeCell ref="${m}"/>`).join('') + '</mergeCells>' : '')
+      + '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>');
+  });
+  return z.generateAsync({ type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE' });
+}
+// every stock transaction that touched a location, oldest first: stock in/out, transfers out (sent or pending) and transfers in (accepted)
+function stockLedger(){
+  const out = [], who = o => o.approvedByName ? (o.loggedByName || o.initiatedByName || '') + (o.loggedByName || o.initiatedByName ? ' / ' : '') + 'approved: ' + o.approvedByName : (o.loggedByName || o.initiatedByName || '');
+  state.movements.forEach(m => { if(m.type !== 'in' && m.type !== 'out') return; const q = Number(m.quantity) || 0;
+    out.push({ date:m.date || '', at:m.createdAt || '', productId:m.productId, locationId:m.locationId, type:m.type === 'in' ? 'Stock in' : 'Stock out', inQ:m.type === 'in' ? q : 0, outQ:m.type === 'out' ? q : 0,
+      source:m.acquisition || '', ref:m.requestNumber || '', details:m.reason || '', dept:m.department || '', staff:m.staffName || '', by:who(m) }); });
+  (state.itemTransfers || []).forEach(t => { if(t.status !== 'accepted' && t.status !== 'pending') return; const q = Number(t.quantity) || 0, fl = getLocation(t.fromLocationId), tl = getLocation(t.toLocationId);
+    const base = { date:t.date || '', at:t.createdAt || '', productId:t.productId, source:'', ref:t.requestNumber || '', dept:'', staff:'', by:who(t) };
+    out.push(Object.assign({}, base, { locationId:t.fromLocationId, type:'Transfer out' + (t.status === 'pending' ? ' (awaiting acceptance)' : ''), inQ:0, outQ:q, details:'To ' + (tl ? tl.name : '—') + (t.reason ? ' — ' + t.reason : '') }));
+    if(t.status === 'accepted') out.push(Object.assign({}, base, { date:(t.respondedAt || '').slice(0, 10) || t.date || '', at:t.respondedAt || t.createdAt || '', locationId:t.toLocationId, type:'Transfer in', inQ:q, outQ:0, details:'From ' + (fl ? fl.name : '—') + (t.reason ? ' — ' + t.reason : '') }));
+  });
+  return out.sort((a, b) => (a.date + '|' + a.at).localeCompare(b.date + '|' + b.at));
+}
+async function exportStockReportXlsx(){
+  if(!state.products.length){ toast('There are no items to report on yet.', true); return; }
+  toast('Building the stock report…');
+  try{
+    const { balOf, locSrc } = slSourceBalances(), ledger = stockLedger(), prods = [...state.products].sort(byDisplayName), today = fmtDate(todayStr());
+    const srcTxt = (p, locId) => locSrc(p, locId).map(([a, s, n]) => s + ' ' + fmtNum(n)).join(', ');
+    const by = {}; ledger.forEach(r => { const k = r.locationId + '|' + r.productId; (by[k] = by[k] || []).push(r); });
+    const locs = LOCATIONS.filter(l => prods.some(p => qtyAt(p, l.id) || by[l.id + '|' + p.id]));
+    const SRC = SL_SOURCES, sheets = [];
+    // 1. balances: every item × every location, plus what is left from CSR / PO / Petty Cash
+    const sumHead = ['Item', 'SKU', 'Category', ...locs.map(l => l.code || l.name), 'Total', ...SRC.map(([, s]) => s + ' balance')];
+    sheets.push({ name:'Balances', freeze:4, widths:[34, 13, 18, ...locs.map(() => 9), 10, ...SRC.map(() => 12)], merges:['A1:F1'],
+      rows:[[{ v:'Stock balances by location', s:XS.title }], [{ v:'Generated ' + today + (authUser ? ' by ' + authUser.name : '') + ' · ' + locs.map(l => (l.code || '') + ' = ' + l.name).join(', '), s:XS.note }], [],
+        sumHead.map(v => ({ v, s:XS.head })),
+        ...prods.map(p => [displayName(p), p.sku || '', p.category || '', ...locs.map(l => qtyAt(p, l.id)), { v:productTotalQty(p), s:XS.totNum }, ...SRC.map(([a]) => Math.max(0, balOf(p, a)))]),
+        [{ v:'Total', s:XS.tot }, { v:'', s:XS.tot }, { v:'', s:XS.tot }, ...locs.map(l => ({ v:prods.reduce((s, p) => s + qtyAt(p, l.id), 0), s:XS.totNum })), { v:prods.reduce((s, p) => s + productTotalQty(p), 0), s:XS.totNum }, ...SRC.map(([a]) => ({ v:prods.reduce((s, p) => s + Math.max(0, balOf(p, a)), 0), s:XS.totNum }))]] });
+    // 2. every transaction in one list (easy to filter in Excel)
+    const txHead = ['Date', 'Location', 'Item', 'SKU', 'Type', 'Source', 'In', 'Out', 'Request no.', 'Reason / details', 'Department', 'Staff', 'Logged / approved by'];
+    sheets.push({ name:'All transactions', freeze:4, widths:[11, 18, 32, 13, 22, 14, 8, 8, 13, 36, 18, 18, 28], merges:['A1:F1'],
+      rows:[[{ v:'All stock transactions', s:XS.title }], [{ v:'Generated ' + today + ' · ' + fmtNum(ledger.length) + ' transactions, oldest first', s:XS.note }], [], txHead.map(v => ({ v, s:XS.head })),
+        ...ledger.map(r => { const p = getProduct(r.productId), l = getLocation(r.locationId); return [fmtDate(r.date), l ? l.name : '', p ? displayName(p) : '(deleted item)', p ? p.sku || '' : '', r.type, r.source, r.inQ || '', r.outQ || '', r.ref, r.details, r.dept, r.staff, r.by]; })] });
+    // 3. one sheet per location: each item with its transactions, running balance and closing balance
+    locs.forEach(l => {
+      const head = ['Date', 'Type', 'Source', 'In', 'Out', 'Balance', 'Request no.', 'Reason / details', 'Department', 'Staff', 'Logged / approved by'];
+      const rows = [[{ v:'Stock report — ' + l.name + (l.code ? ' (' + l.code + ')' : ''), s:XS.title }], [{ v:'Generated ' + today + ' · every transaction and the balance for each item at this location', s:XS.note }], [], head.map(v => ({ v, s:XS.head }))];
+      let items = 0, units = 0;
+      prods.forEach(p => {
+        const tx = by[l.id + '|' + p.id] || [], have = qtyAt(p, l.id); if(!tx.length && !have) return; items++; units += have;
+        rows.push([{ v:displayName(p) + (p.sku ? '  ·  ' + p.sku : '') + (p.category ? '  ·  ' + p.category : ''), s:XS.group }, ...Array(10).fill({ v:'', s:XS.group })]);
+        const net = tx.reduce((s, r) => s + r.inQ - r.outQ, 0), opening = have - net; let bal = opening;
+        if(opening) rows.push(['', { v:'Opening balance (before the recorded transactions)', s:XS.note }, '', '', '', opening]);
+        tx.forEach(r => { bal += r.inQ - r.outQ; rows.push([fmtDate(r.date), r.type, r.source, r.inQ || '', r.outQ || '', bal, r.ref, r.details, r.dept, r.staff, r.by]); });
+        rows.push(['', { v:'Closing balance', s:XS.tot }, { v:srcTxt(p, l.id), s:XS.tot }, { v:tx.reduce((s, r) => s + r.inQ, 0), s:XS.totNum }, { v:tx.reduce((s, r) => s + r.outQ, 0), s:XS.totNum }, { v:have, s:XS.totNum }]);
+        rows.push([]);
+      });
+      rows.push(['', { v:'Location total', s:XS.tot }, { v:fmtNum(items) + ' item' + (items === 1 ? '' : 's'), s:XS.tot }, { v:'', s:XS.tot }, { v:'', s:XS.tot }, { v:units, s:XS.totNum }]);
+      sheets.push({ name:l.code || l.name, freeze:4, widths:[11, 26, 18, 8, 8, 10, 13, 36, 18, 18, 28], merges:['A1:H1'], rows });
+    });
+    downloadBlob(await xlsxSimple(sheets), 'Stock report ' + todayStr() + '.xlsx');
+    toast('Stock report downloaded — ' + locs.length + ' location sheet' + (locs.length === 1 ? '' : 's') + '.');
+  }catch(e){ console.error(e); toast('Could not build the stock report: ' + (e && e.message || e), true); }
+}
+const SL_SOURCES = [['CSR', 'CSR'], ['Purchase Order', 'PO'], ['Petty Cash', 'Petty Cash']];
+function slSourceBalances(){
+  // balance left from each way of buying (CSR / PO / Petty Cash), per item and per location. Stock movements are replayed in date order;
+  // transfers carry the split with them (taken from the source location's largest balance first), so stock moved from HO to T15 keeps its PO/CSR label
+  const SL_SRC = SL_SOURCES, srcBal = {}, locBal = {};
+  const bk = (pid, loc) => { const o = locBal[pid] || (locBal[pid] = {}); return o[loc] || (o[loc] = {}); };
+  const take = (b, qty, acq) => { const got = {}; let left = qty;
+    if(acq){ const n = Math.min(left, Math.max(0, b[acq] || 0)); if(n){ b[acq] -= n; got[acq] = n; left -= n; } return got; }
+    Object.keys(b).sort((x, y) => b[y] - b[x]).forEach(k => { if(left <= 0) return; const n = Math.min(left, Math.max(0, b[k])); if(n){ b[k] -= n; got[k] = (got[k] || 0) + n; left -= n; } });
+    return got; };
+  const when = x => String(x.date || '') + '|' + String(x.createdAt || '');
+  [...state.movements.filter(m => m.type === 'in' || m.type === 'out').map(m => ['m', m]), ...(state.itemTransfers || []).filter(t => t.status === 'accepted' || t.status === 'pending').map(t => ['t', t])]
+    .sort((x, y) => when(x[1]).localeCompare(when(y[1])))
+    .forEach(([k, x]) => { const q = Number(x.quantity) || 0; if(!q) return;
+      if(k === 'm'){ if(x.acquisition){ const o = srcBal[x.productId] || (srcBal[x.productId] = {}); o[x.acquisition] = (o[x.acquisition] || 0) + (x.type === 'in' ? q : -q); }
+        if(!x.locationId) return; const b = bk(x.productId, x.locationId);
+        if(x.type === 'in'){ if(x.acquisition) b[x.acquisition] = (b[x.acquisition] || 0) + q; } else take(b, q, x.acquisition); }
+      else { const got = take(bk(x.productId, x.fromLocationId), q, '');
+        if(x.status === 'accepted'){ const d = bk(x.productId, x.toLocationId); Object.keys(got).forEach(a => d[a] = (d[a] || 0) + got[a]); } } });
+  // never show more than is actually on hand at the location
+  const locSrc = (p, locId) => { const b = Object.assign({}, (locBal[p.id] || {})[locId] || {}), have = qtyAt(p, locId);
+    let sum = SL_SRC.reduce((s, [a]) => s + Math.max(0, b[a] || 0), 0);
+    if(sum > have){ let over = sum - have; Object.keys(b).sort((x, y) => b[y] - b[x]).forEach(a => { if(over <= 0) return; const n = Math.min(over, Math.max(0, b[a])); b[a] -= n; over -= n; }); }
+    return SL_SRC.map(([a, s]) => [a, s, Math.max(0, b[a] || 0)]).filter(r => r[2] > 0); };
+  const balOf = (p, a) => (srcBal[p.id] || {})[a] || 0;
+  return { balOf, locSrc };
+}
 function viewStockLevels(){
   const valuationLocations = LOCATIONS.filter(l=>l.stockValuation!==false);
   const hiddenCount = LOCATIONS.length - valuationLocations.length;
   const all = [...state.products].sort(byDisplayName), slq = String(vehUi.slQ || '').toLowerCase().trim(), slc = vehUi.slCat || '', sll = vehUi.slLow || '';
   const cats = [...new Set(all.map(p => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  // balance left from each way of buying (CSR / PO / Petty Cash): stock in minus stock out, per item — one pass over the movements
-  const SL_SRC = [['CSR', 'CSR'], ['Purchase Order', 'PO'], ['Petty Cash', 'Petty Cash']], sls = vehUi.slSrc || '', srcBal = {};
-  state.movements.forEach(m => { if(!m.acquisition || (m.type !== 'in' && m.type !== 'out')) return;
-    const o = srcBal[m.productId] || (srcBal[m.productId] = {}); o[m.acquisition] = (o[m.acquisition] || 0) + (m.type === 'in' ? 1 : -1) * (Number(m.quantity) || 0); });
-  const balOf = (p, a) => (srcBal[p.id] || {})[a] || 0;
+  const SL_SRC = SL_SOURCES, sls = vehUi.slSrc || '', { balOf, locSrc } = slSourceBalances();
   const list = all.filter(p => (!slc || p.category === slc) && (!sll || (sll === 'low' ? isLowStock(p) : sll === 'out' ? !productTotalQty(p) : productTotalQty(p) > 0))
     && (!sls || balOf(p, sls) > 0)
     && (!slq || [displayName(p), p.name, p.sku, p.category, p.description].join(' ').toLowerCase().includes(slq)));
-  const srcChips = p => SL_SRC.filter(([a]) => balOf(p, a) > 0).map(([a, s]) => `<span class="inline-flex items-center gap-1 px-1.5 py-px rounded-md border border-slate-200 bg-slate-50 text-[10.5px] text-slate-500" title="${esc(a)} balance">${esc(s)} <b class="num text-slate-700">${fmtNum(balOf(p, a))}</b></span>`).join('');
+  const srcChips = p => SL_SRC.filter(([a]) => balOf(p, a) > 0).map(([a, s]) => `<span class="inline-flex items-center gap-1 px-1.5 py-px rounded-md border border-slate-200 bg-slate-50 text-[10.5px] text-slate-500" title="${esc(a)} balance, all locations">${esc(s)} <b class="num text-slate-700">${fmtNum(balOf(p, a))}</b></span>`).join('');
   const rows = list.map(p=>{
     const total = productTotalQty(p);
     const low = isLowStock(p);
@@ -17615,7 +17723,8 @@ function viewStockLevels(){
       const q = qtyAt(p, l.id);
       const rl = reorderLevelAt(p, l.id);
       const cellLow = rl!=null && q <= rl;
-      return `<td class="py-3 text-right num${cellLow?' text-amber-700 font-semibold':''}">${q ? fmtNum(q) : '<span class="text-slate-300">—</span>'}${cellLow?' <span class="text-[10px] align-top">●</span>':''}</td>`;
+      const sp = q ? locSrc(p, l.id) : [];
+      return `<td class="py-3 pl-3 text-right num align-top${cellLow?' text-amber-700 font-semibold':''}">${q ? fmtNum(q) : '<span class="text-slate-300">—</span>'}${cellLow?' <span class="text-[10px] align-top">●</span>':''}${sp.length ? `<div class="mt-0.5 leading-tight">${sp.map(([a, s, n]) => `<div class="text-[10.5px] font-normal text-slate-400 whitespace-nowrap" title="${esc(a)} balance at ${esc(l.name)}">${esc(s)} <b class="text-slate-600">${fmtNum(n)}</b></div>`).join('')}</div>` : ''}</td>`;
     }).join('');
     return `
       <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
@@ -17635,6 +17744,7 @@ function viewStockLevels(){
         <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Stock Levels</h1>
         <p class="text-sm text-slate-500 mt-0.5">Quantity on hand for every item, by location.${hiddenCount ? ` ${hiddenCount} location${hiddenCount===1?'':'s'} hidden (stock valuation off).` : ''}</p>
       </div>
+      <button onclick="exportStockReportXlsx()" title="Excel: balances, all transactions, and a sheet for each location" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export stock report (Excel)</button>
     </div>
 
     ${stkNotifyBar()}
@@ -19036,6 +19146,7 @@ function viewMovements(mode){
         <p class="text-sm text-slate-500 mt-0.5">${report ? 'Stock on hand, consumption and transfers by location, and what consumption has cost.' : 'Log stock coming in and going out.'}</p>
       </div>
       <div class="flex gap-2.5 flex-wrap">
+        <button onclick="exportStockReportXlsx()" title="Excel: balances, all transactions, and a sheet for each location" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold ${report ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm' : 'border border-slate-300 text-slate-700 bg-white hover:bg-slate-50'}">Export stock report (Excel)</button>
         ${!report ? `<button onclick="exportMovementsCSV()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export report (CSV)</button>` : ''}
         ${report ? '' : `<button onclick="openMovementForm('in')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">+ Stock In</button>
         <button onclick="openMovementForm('out')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-rose-600 text-white hover:bg-rose-700 shadow-sm">+ Stock Out</button>

@@ -2000,7 +2000,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.356';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.357';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -4101,11 +4101,13 @@ const isLines = t => String(t || '').split('\n').map(x => x.replace(/^\s*[-•*�
 function isData(r){
   const pr = r.prId ? (state.purchaseRequisitions || []).find(p => p.id === r.prId) : null;
   return { no:r.no || '', title:r.title || 'Item specification', date:r.date ? pcOrdinalDate(r.date) : '', department:r.department || '', purpose:String(r.purpose || '').trim(), pr:pr ? pr.prNumber : (r.prRef || ''),
-    items:(r.items || []).filter(i => i && (i.name || i.spec)).map(i => ({ name:String(i.name || '').trim(), spec:isLines(i.spec), qty:i.qty, unit:String(i.unit || '').trim(), brand:String(i.brand || '').trim() })),
+    items:(r.items || []).filter(i => i && (i.name || i.spec)).map(i => ({ name:String(i.name || '').trim(), spec:isLines(i.spec), qty:i.qty, unit:String(i.unit || '').trim(), brand:String(i.brand || '').trim(), photos:(i.photos || []).filter(p => p && p.fileId) })),
     warranty:String(r.warranty || '').trim(), delivery:String(r.delivery || '').trim(), deliveryLocation:String(r.deliveryLocation || '').trim(), other:isLines(r.other), status:r.status || 'Draft',
     by:r.preparedBy || '', byDesig:r.preparedDesig || '', byDept:r.preparedDept || '', ap:r.approvedBy || '', apDesig:r.approvedDesig || '' };
 }
 async function buildIsPdf(D){
+  for(const it of D.items) it.ph = await irPhotoData(it.photos);
+  const images = {};
   const K = [0, 0, 0], G = [0.42, 0.45, 0.5], LINE = [0.8, 0.82, 0.86], SOFT = [0.95, 0.96, 0.97], HEAD = [0.2, 0.25, 0.33];
   const L = 72, R = 523.3, FS = 9.8, LH = 14.2, TOP = 112, BOT = 760;
   const pages = [new PdfPage(PCA4_H)]; let pg = pages[0], y = 126;
@@ -4135,7 +4137,10 @@ async function buildIsPdf(D){
     const ln = []; pdfWrap(it.name || '—', true, 10, IW).forEach(t => ln.push({ t, b:true }));
     if(it.brand) pdfWrap('Brand / model: ' + it.brand, false, 8.8, IW).forEach(t => ln.push({ t, sz:8.8, c:G }));
     it.spec.forEach(sp => pdfWrap(sp, false, FS, IW - 12).forEach((t, k) => ln.push({ t, ind:12, dot:k === 0 })));
-    const h = ln.length * LH + 10;
+    // the item's pictures, up to three side by side per row
+    const IH = 96, per = 3, gw = 8, cw = (IW - gw * (per - 1)) / per;
+    for(let s = 0; s < (it.ph || []).length; s += per) ln.push({ imgs:it.ph.slice(s, s + per), h:IH + 8, n0:s });
+    const h = ln.reduce((s, l) => s + (l.h || LH), 0) + 10;
     if(y + Math.min(h, LH * 4) > BOT){ newPage(); thead(); }
     let top = y - 2, k = 0;
     const box = (t0, t1, first) => { pg.line(L, t0, L, t1, LINE, 0.6); pg.line(R, t0, R, t1, LINE, 0.6); [C[1], C[2], C[3]].forEach(x => pg.line(x, t0, x, t1, LINE, 0.6)); pg.line(L, t1, R, t1, LINE, 0.6);
@@ -4144,8 +4149,12 @@ async function buildIsPdf(D){
         if(it.unit){ const u = pdfWrap(it.unit, false, 8.8, C[4] - C[3] - 6)[0]; pg.text(C[3] + (C[4] - C[3] - pdfTextWidth(u, false, 8.8)) / 2, t0 + 14, u, { size:8.8 }); } } };
     let first = true; y += 12;
     while(k < ln.length){
-      if(y + LH > BOT){ box(top, y - 8, first); first = false; newPage(); thead(); top = y - 2; y += 12; }
-      const l = ln[k++]; if(l.dot) pg.text(C[1] + 6, y, '•', { size:FS }); pg.text(C[1] + 6 + (l.ind || 0), y, l.t, { size:l.sz || (l.b ? 10 : FS), bold:!!l.b, color:l.c || K }); y += LH;
+      const lh = ln[k].h || LH;
+      if(y + lh > BOT){ box(top, y - 8, first); first = false; newPage(); thead(); top = y - 2; y += 12; }
+      const l = ln[k++];
+      if(l.imgs){ const t0 = y - 4; l.imgs.forEach((p, j) => { const key = 'IsPh' + i + '_' + (l.n0 + j), x = C[1] + 6 + j * (cw + gw), sc = Math.min(cw / p.w, IH / p.h), w = p.w * sc, hh = p.h * sc; images[key] = { w:p.w, h:p.h, jpeg:pdfB64(p.b64) };
+          pg.fill(x, t0, cw, IH, SOFT); pg.image(key, x + (cw - w) / 2, t0 + (IH - hh) / 2, w, hh); }); y += lh; continue; }
+      if(l.dot) pg.text(C[1] + 6, y, '•', { size:FS }); pg.text(C[1] + 6 + (l.ind || 0), y, l.t, { size:l.sz || (l.b ? 10 : FS), bold:!!l.b, color:l.c || K }); y += LH;
     }
     box(top, y - 2, first); y += 2;
   });
@@ -4158,9 +4167,14 @@ async function buildIsPdf(D){
   y += 16; need(128); const half = (R - L) / 2, SG = 58;
   [[L, 'Prepared by', [D.by, D.byDesig, D.byDept], !!D.by]].forEach(([x, lab, ls, named]) => {
     pg.text(x, y, lab, { font:'F11', size:10 }); pg.line(x, y + SG, x + half - 30, y + SG, K, 0.6); ls.filter(Boolean).forEach((l, i) => pg.text(x, y + SG + 16 + i * 13, l, { size:9.5, bold:i === 0 && named })); });
-  return lhPdfFinish(pages, 'Item Specification ' + (D.no || ''), R, { black:true });
+  return lhPdfFinish(pages, 'Item Specification ' + (D.no || ''), R, { black:true, images });
 }
 async function buildIsDocx(D){
+  for(const it of D.items) it.ph = await irPhotoData(it.photos);
+  const media = [], EMU = 635;
+  const pics = (it, i) => !(it.ph || []).length ? '' : wP(it.ph.map((p, j) => { const n = i * 50 + j + 1, rid = 'rIdIsPh' + n, maxW = 1700 * EMU, maxH = 1300 * EMU, sc = Math.min(maxW / p.w, maxH / p.h), cx = Math.round(p.w * sc), cy = Math.round(p.h * sc);
+      media.push({ rid, name:'item_photo_' + n + '.jpg', b64:p.b64 });
+      return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${300 + n}" name="Item photo ${n}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${300 + n}" name="item_photo_${n}.jpg"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>` + (j < it.ph.length - 1 ? '<w:r><w:t xml:space="preserve">  </w:t></w:r>' : ''); }).join(''), { before:80, after:40 });
   const PF = 'Poppins', HF = 'Segoe UI Black', TW = 9026;
   const T = (t, o) => wR(String(t == null ? '' : t), Object.assign({ font:PF, sz:19 }, o || {})), Hd = (t, o) => wR(t, Object.assign({ font:HF, sz:24 }, o || {}));
   const P = (inner, o) => wP(inner, Object.assign({ after:60, line:264 }, o || {})), keep = x => x.replace('<w:pPr>', '<w:pPr><w:keepNext/>');
@@ -4179,7 +4193,7 @@ async function buildIsDocx(D){
   if(D.purpose){ head('Purpose / Background', ++n); para(D.purpose); }
   head('Items and Specifications', ++n);
   const W = [520, TW - 520 - 900 - 1000, 900, 1000], hc = (t, w) => cell(wP(T(t, { b:true, sz:17, color:'FFFFFF' }), { jc:'center' }), w, { fill:'334155', vc:1 });
-  const rows = D.items.map((it, i) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cell(wP(T(i + 1), { jc:'center' }), W[0])}${cell(wP(T(it.name || '—', { b:true, sz:20 }), { after:40 }) + (it.brand ? wP(T('Brand / model: ' + it.brand, { sz:17, color:'64748B' }), { after:40 }) : '') + it.spec.map(sp => wP(T('•') + '<w:r><w:tab/></w:r>' + T(sp), { after:20, ind:'<w:ind w:left="300" w:hanging="300"/>' })).join(''), W[1])}${cell(wP(T(it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—', { b:true }), { jc:'center' }), W[2])}${cell(wP(T(it.unit || ''), { jc:'center' }), W[3])}</w:tr>`).join('');
+  const rows = D.items.map((it, i) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cell(wP(T(i + 1), { jc:'center' }), W[0])}${cell(wP(T(it.name || '—', { b:true, sz:20 }), { after:40 }) + (it.brand ? wP(T('Brand / model: ' + it.brand, { sz:17, color:'64748B' }), { after:40 }) : '') + it.spec.map(sp => wP(T('•') + '<w:r><w:tab/></w:r>' + T(sp), { after:20, ind:'<w:ind w:left="300" w:hanging="300"/>' })).join('') + pics(it, i), W[1])}${cell(wP(T(it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—', { b:true }), { jc:'center' }), W[2])}${cell(wP(T(it.unit || ''), { jc:'center' }), W[3])}</w:tr>`).join('');
   out.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/>${B('CBD5E1')}<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${W.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid><w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>${hc('No.', W[0])}${hc('Item and specification', W[1])}${hc('Qty', W[2])}${hc('Unit', W[3])}</w:tr>${rows || `<w:tr>${cell(wP(''), W[0])}${cell(wP(T('No items.')), W[1])}${cell(wP(''), W[2])}${cell(wP(''), W[3])}</w:tr>`}</w:tbl>`, P('', { after:60 }));
   const gen = [['Warranty', D.warranty], ['Delivery period', D.delivery], ['Delivery location', D.deliveryLocation]].filter(x => x[1]);
   if(gen.length || D.other.length){ head('General Requirements', ++n);
@@ -4188,7 +4202,7 @@ async function buildIsDocx(D){
   const sc = (lab, ls, named) => `<w:tc><w:tcPr><w:tcW w:w="${TW / 2}" w:type="dxa"/></w:tcPr>${wP(wR(lab, { font:HF, sz:20 }), { after:1000 })}<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="6" w:space="4" w:color="000000"/></w:pBdr><w:spacing w:after="40"/><w:ind w:right="500"/></w:pPr>${T(ls[0], { b:named })}</w:p>${ls.slice(1).map(l => wP(T(l, { sz:18 }), { after:20 })).join('')}</w:tc>`;
   out.push(P('', { after:240 }), `<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${TW / 2}"/><w:gridCol w:w="${TW / 2}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${sc('Prepared by', [D.by || 'Name:', D.byDesig, D.byDept].filter(Boolean), !!D.by)}<w:tc><w:tcPr><w:tcW w:w="${TW / 2}" w:type="dxa"/></w:tcPr>${wP('')}</w:tc></w:tr></w:tbl>`);
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${LH_NS}><w:body>${out.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2160" w:right="1440" w:bottom="1700" w:left="1440" w:header="0" w:footer="300" w:gutter="0"/><w:pgNumType w:start="1"/></w:sectPr></w:body></w:document>`;
-  return lhDocx(doc, LH_NS);
+  return lhDocx(doc, LH_NS, media);
 }
 async function isDownload(id, kind, btn){
   const r = isById(id); if(!r) return; const D = isData(r), lbl = btn ? btn.innerHTML : ''; if(btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
@@ -4221,14 +4235,15 @@ function openIsView(id){
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">${item('Date', esc(D.date || '—'))}${item('Department', esc(D.department || '—'))}${item('Prepared by', esc(D.by || '—'))}${item('Related PR', esc(D.pr || '—'))}</div>
     ${D.purpose ? `${vSec('Purpose / background')}<div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(D.purpose)}</div>` : ''}
     ${vSec('Items and specifications')}
-    <div class="space-y-2.5">${D.items.map((it, i) => `<div class="rounded-lg border border-slate-200 px-4 py-3"><div class="flex items-start justify-between gap-3"><div class="font-semibold text-slate-800">${i + 1}. ${esc(it.name || '—')}</div><div class="text-sm font-bold num whitespace-nowrap">${it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—'} ${esc(it.unit || '')}</div></div>${it.brand ? `<div class="text-xs text-slate-500">Brand / model: ${esc(it.brand)}</div>` : ''}${it.spec.length ? `<ul class="list-disc pl-5 mt-1.5 text-sm text-slate-700 space-y-0.5">${it.spec.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}</div>`).join('') || '<div class="text-sm text-slate-400">No items.</div>'}</div>
+    <div class="space-y-2.5">${D.items.map((it, i) => `<div class="rounded-lg border border-slate-200 px-4 py-3"><div class="flex items-start justify-between gap-3"><div class="font-semibold text-slate-800">${i + 1}. ${esc(it.name || '—')}</div><div class="text-sm font-bold num whitespace-nowrap">${it.qty != null && it.qty !== '' ? fmtNum(it.qty) : '—'} ${esc(it.unit || '')}</div></div>${it.brand ? `<div class="text-xs text-slate-500">Brand / model: ${esc(it.brand)}</div>` : ''}${it.spec.length ? `<ul class="list-disc pl-5 mt-1.5 text-sm text-slate-700 space-y-0.5">${it.spec.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}${it.photos.length ? `<div class="flex flex-wrap gap-2 mt-2.5">${it.photos.map(p => `<button type="button" class="rounded-md overflow-hidden border border-slate-200 bg-slate-100" style="width:96px;height:72px" onclick="isPhotoOpen('${esc(p.fileId)}')" title="Open the picture"><span data-is-thumb="${esc(p.fileId)}" class="w-full h-full flex items-center justify-center text-[10px] text-slate-400">Loading…</span></button>`).join('')}</div>` : ''}</div>`).join('') || '<div class="text-sm text-slate-400">No items.</div>'}</div>
     ${D.warranty || D.delivery || D.deliveryLocation || D.other.length ? `${vSec('General requirements')}<div class="text-sm text-slate-700 space-y-1">${[['Warranty', D.warranty], ['Delivery period', D.delivery], ['Delivery location', D.deliveryLocation]].filter(x => x[1]).map(([k, v]) => `<div><b>${k}:</b> ${esc(v)}</div>`).join('')}${D.other.length ? `<ul class="list-disc pl-5">${D.other.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}</div>` : ''}
     <div class="flex justify-end gap-2.5 mt-6">${vBtnPlain('Download Word', `isDownload('${id}', 'word', this)`)}${vBtnPrimary('Download PDF', `isDownload('${id}', 'pdf', this)`)}</div>`, true);
+  isThumbsLoad();
   if(can){ const t = document.getElementById('modal-title'), b = document.createElement('button'); b.type = 'button'; b.id = 'modal-edit'; b.textContent = '✎ Edit'; b.title = 'Edit this specification';
     b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700'; b.style.cssText = 'margin-left:auto;margin-right:10px'; b.onclick = () => openIsForm(id); t.after(b); }
 }
 // ---- the form: details, then one block per item (name, brand / model, quantity, unit, specification points)
-const isItemHtml = (i, it) => `<div class="is-item rounded-lg border border-slate-200 p-3.5 mb-3" data-i="${i}">
+const isItemHtml = (i, it, k) => `<div class="is-item rounded-lg border border-slate-200 p-3.5 mb-3" data-i="${i}" data-k="${k}">
     <div class="flex items-center justify-between mb-2"><span class="is-num text-xs font-bold uppercase tracking-wide text-slate-400">Item ${i + 1}</span><button type="button" onclick="isRemoveItem(this)" class="text-slate-400 hover:text-rose-600 text-sm" title="Remove this item">✕ Remove</button></div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2.5">
       <input class="is-name ${VEH_FIELD} col-span-2" value="${esc(it.name || '')}" placeholder="Item, e.g. Office chair (ergonomic)">
@@ -4237,14 +4252,52 @@ const isItemHtml = (i, it) => `<div class="is-item rounded-lg border border-slat
       <input class="is-unit ${VEH_FIELD}" value="${esc(it.unit || '')}" list="is-units" placeholder="Unit">
     </div>
     <textarea class="is-spec ${VEH_FIELD} text-sm" rows="${Math.max(3, String(it.spec || '').split('\n').length + 1)}" placeholder="Specification — one point per line, e.g.&#10;Mesh back with adjustable lumbar support&#10;Height-adjustable seat, 360° swivel&#10;Load capacity at least 120 kg">${esc(it.spec || '')}</textarea>
+    <div class="flex flex-wrap items-center gap-2 mt-2.5"><div class="is-ph flex flex-wrap gap-2" data-k="${k}"></div>
+      <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-xs font-semibold text-slate-600 hover:border-brand-500 hover:text-brand-600 cursor-pointer"><input type="file" accept="image/*" multiple class="hidden" onchange="isPhotoPick(this, '${k}')">📷 Add image</label>
+      <span class="text-[11px] text-slate-400">Up to ${IS_PHOTO_MAX} pictures — shown under the item in the PDF and Word</span></div>
   </div>`;
-function isAddItem(){ const box = document.getElementById('is-items'); if(!box) return; const i = box.querySelectorAll('.is-item').length; box.insertAdjacentHTML('beforeend', isItemHtml(i, {})); isRenumber(); const n = box.querySelectorAll('.is-name'); n[n.length - 1].focus(); }
-function isRemoveItem(btn){ const el = btn.closest('.is-item'); if(!el) return; if(document.querySelectorAll('#is-items .is-item').length <= 1){ el.querySelectorAll('input,textarea').forEach(x => x.value = ''); return; } el.remove(); isRenumber(); }
+function isAddItem(){ const box = document.getElementById('is-items'); if(!box) return; const i = box.querySelectorAll('.is-item').length, k = uid(); if(isPh) isPh[k] = { keep:[], add:[] }; box.insertAdjacentHTML('beforeend', isItemHtml(i, {}, k)); isRenumber(); const n = box.querySelectorAll('.is-name'); n[n.length - 1].focus(); }
+function isRemoveItem(btn){ const el = btn.closest('.is-item'); if(!el) return; const s = isPh && isPh[el.dataset.k]; if(s){ s.keep.forEach(p => isPhDrop.push(p.fileId)); s.keep = []; s.add = []; isPhotoRender(el.dataset.k); }
+  if(document.querySelectorAll('#is-items .is-item').length <= 1){ el.querySelectorAll('input,textarea').forEach(x => x.value = ''); return; } el.remove(); isRenumber(); }
+/* ---- pictures of each item: kept as files (like incident photos); new ones are uploaded after Save */
+let isPh = null, isPhDrop = []; const IS_PHOTO_MAX = 6, isThumbCache = {};
+function isThumb(fileId){ if(isThumbCache[fileId]) return Promise.resolve(isThumbCache[fileId]); return pcFileLoad(fileId).then(d => { const pg = d && d.pages && d.pages[0]; return isThumbCache[fileId] = pg ? pg.jpeg : ''; }).catch(() => ''); }
+function isThumbsLoad(){ document.querySelectorAll('[data-is-thumb]').forEach(el => { const fid = el.dataset.isThumb; isThumb(fid).then(src => { if(!el.isConnected) return; el.outerHTML = src ? `<img src="${src}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : '<span class="text-[10px] text-slate-400">Not found</span>'; }); }); }
+function isPhotoOpen(fileId){ isThumb(fileId).then(src => { if(!src) return toast('The picture could not be loaded.', true); const w = window.open('', '_blank'); if(!w) return; w.document.write(`<!doctype html><title>Item picture</title><body style="margin:0;background:#525659"><img src="${src}" style="max-width:100%;max-height:96vh;margin:12px auto;display:block;box-shadow:0 2px 8px #0006"></body>`); w.document.close(); }); }
+function isPhotoRender(k){
+  const box = document.querySelector(`.is-ph[data-k="${k}"]`), s = isPh && isPh[k]; if(!box || !s) return;
+  const card = (src, kind, j, fid) => `<div style="position:relative;width:84px;height:64px" class="rounded-md overflow-hidden border border-slate-200 bg-slate-100">${src ? `<img src="${src}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : `<span data-is-thumb="${esc(fid)}" class="w-full h-full flex items-center justify-center text-[10px] text-slate-400">Loading…</span>`}
+    <button type="button" title="Remove picture" onclick="isPhotoRemove('${k}', '${kind}', ${j})" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:13px;line-height:1">×</button>${kind === 'add' ? '<span style="position:absolute;bottom:2px;left:2px;font-size:9px;padding:0 4px;border-radius:3px;background:rgba(0,0,0,.6);color:#fff">new</span>' : ''}</div>`;
+  box.innerHTML = s.keep.map((p, j) => card(isThumbCache[p.fileId] || '', 'keep', j, p.fileId)).join('') + s.add.map((p, j) => card(p.thumb, 'add', j)).join('');
+  isThumbsLoad();
+}
+async function isPhotoPick(input, k){
+  const files = [...input.files].filter(x => /^image\//.test(x.type || '')); input.value = ''; const s = isPh && isPh[k]; if(!files.length || !s) return toast('Choose pictures (JPG or PNG).', true);
+  const room = IS_PHOTO_MAX - s.keep.length - s.add.length; if(room <= 0) return toast('Up to ' + IS_PHOTO_MAX + ' pictures per item.', true);
+  let bad = 0; for(const x of files.slice(0, room)){ try{ const att = await pcPrepareAttachment([x]); s.add.push({ att, thumb:att.pages[0].jpeg, name:x.name }); isPhotoRender(k); }catch(e){ bad++; } }
+  if(files.length > room) toast('Only ' + room + ' more picture' + (room === 1 ? '' : 's') + ' could be added to this item.', true);
+  if(bad) toast(bad + ' picture' + (bad === 1 ? '' : 's') + ' could not be read.', true);
+}
+function isPhotoRemove(k, kind, j){ const s = isPh && isPh[k]; if(!s) return; const [p] = s[kind].splice(j, 1); if(kind === 'keep' && p) isPhDrop.push(p.fileId); isPhotoRender(k); }
+// after Save: each new picture is uploaded as its own file and added to its item (found by the item's key)
+async function isPhotoUpload(id, no, jobs){
+  const total = jobs.reduce((s, j) => s + j.list.length, 0), key = uid(); agUploads[key] = { name:total + ' item picture' + (total === 1 ? '' : 's'), f:0 }; agUploadBar(); let done = 0, ok = 0;
+  try{ for(const job of jobs) for(const p of job.list){
+      try{ const st = await agStore(p.att, no || '', fr => { agUploads[key].f = (done + fr) / total; agUploadBar(); });
+        const r = isById(id); if(!r){ agFileDel(st.fileId); return; }
+        const items = (r.items || []).map(it => it.key === job.k ? Object.assign({}, it, { photos:(it.photos || []).concat([{ fileId:st.fileId, fileName:p.name || st.fileName }]) }) : it);
+        await vehSave('itemSpecs', { id, items }); ok++; }
+      catch(e){ toast('The picture ' + (p.name || '') + ' could not be uploaded: ' + (e && e.message ? e.message : e), true); }
+      done++; }
+    if(ok) toast(ok + ' picture' + (ok === 1 ? '' : 's') + ' added to item specification ' + (no || '') + '.');
+  } finally { delete agUploads[key]; agUploadBar(); }
+}
 function isRenumber(){ document.querySelectorAll('#is-items .is-item').forEach((el, i) => { const s = el.querySelector('.is-num'); if(s) s.textContent = 'Item ' + (i + 1); }); }
 function openIsForm(id){
   const r = id ? isById(id) : null; if(id && !r) return;
   const me = authUser || {}, d = r || { date:vToday(), status:'Draft', department:me.department || 'Administration', preparedBy:me.name || '', preparedDesig:me.designation || '', preparedDept:me.department || '' };
-  const items = (d.items && d.items.length ? d.items : [{}]);
+  const items = (d.items && d.items.length ? d.items : [{}]).map(it => Object.assign({}, it, { key:it.key || uid() }));
+  isPh = {}; isPhDrop = []; items.forEach(it => { isPh[it.key] = { keep:(it.photos || []).filter(p => p && p.fileId).map(p => ({ fileId:p.fileId, fileName:p.fileName })), add:[] }; });
   const prs = (state.purchaseRequisitions || []).slice().sort((a, b) => String(b.prNumber || '').localeCompare(String(a.prNumber || ''), undefined, { numeric:true }));
   const names = sdAll().map(p => `<option value="${esc(p.name)}">${esc(p.designation || '')}</option>`).join('');
   openModal(r ? 'Edit item specification ' + (r.no || '') : 'New item specification', vFormOpen + `<datalist id="is-staff">${names}</datalist><datalist id="is-units">${['Nos', 'Pcs', 'Set', 'Box', 'Pack', 'Pair', 'Ream', 'Roll', 'Litre', 'Kg', 'Metre', 'Unit', 'Lot'].map(u => `<option value="${u}"></option>`).join('')}</datalist>` +
@@ -4253,26 +4306,31 @@ function openIsForm(id){
       vF('Date', 'date', d.date, 'date', { req:1 }) + vF('Department', 'department', d.department) +
       `<div class="sm:col-span-2"><label class="${VEH_LBL}">Related purchase requisition (optional)</label><select name="prId" class="${VEH_FIELD} bg-white"><option value="">None</option>${prs.map(p => `<option value="${esc(p.id)}" ${p.id === d.prId ? 'selected' : ''}>${esc(p.prNumber || '—')}${prFirstItem(p) ? ' — ' + esc(prFirstItem(p)) : ''}</option>`).join('')}</select></div>` +
       vTa('Purpose / background (optional)', 'purpose', d.purpose || '', { span:'sm:col-span-2', rows:2, ph:'Why these items are needed' })) +
-    vSec('Items and specifications') + `<div id="is-items">${items.map((it, i) => isItemHtml(i, it)).join('')}</div><button type="button" onclick="isAddItem()" class="text-sm font-semibold text-brand-600 hover:underline mb-2">+ Add another item</button>` +
+    vSec('Items and specifications') + `<div id="is-items">${items.map((it, i) => isItemHtml(i, it, it.key)).join('')}</div><button type="button" onclick="isAddItem()" class="text-sm font-semibold text-brand-600 hover:underline mb-2">+ Add another item</button>` +
     vSec('General requirements') + vGrid(2, vF('Warranty', 'warranty', d.warranty, 'text', { attrs:' placeholder="e.g. At least 1 year from delivery"' }) + vF('Delivery period', 'delivery', d.delivery, 'text', { attrs:' placeholder="e.g. Within 14 days of the PO"' }) +
       vF('Delivery location', 'deliveryLocation', d.deliveryLocation, 'text', { span:'sm:col-span-2', attrs:' placeholder="e.g. FDC Head Office, Malé"' }) +
       vTa('Other requirements (optional)', 'other', d.other || '', { span:'sm:col-span-2', rows:3, ph:'One per line, e.g.\nQuotation must be valid for 30 days\nInstallation included' })) +
     vSec('Prepared by') + vGrid(2, vF('Prepared by', 'preparedBy', d.preparedBy, 'text', { attrs:' list="is-staff" oninput="irFillDesig(this, \'preparedDesig\')"' }) + vF('Designation', 'preparedDesig', d.preparedDesig) +
       vF('Department', 'preparedDept', d.preparedDept)) +
     vFoot(r ? 'Save' : 'Save specification', `saveIsForm('${id || ''}')`, r && canManageInventory() ? `deleteIs('${id}')` : ''), true);
+  items.forEach(it => isPhotoRender(it.key));
 }
 async function saveIsForm(id){
   const f = document.getElementById('vform'), o = vehFormObj(f), old = id ? isById(id) : null;
   const no = String(o.no || '').trim().toUpperCase(); if(!no) return vFail('Enter the reference number.');
   if(isAll().some(x => x.id !== id && String(x.no || '').toUpperCase() === no)) return vFail('Reference ' + no + ' is already used.');
   if(!String(o.title || '').trim()) return vFail('Enter the subject.'); if(!o.date) return vFail('Enter the date.');
-  const items = [...f.querySelectorAll('.is-item')].map(el => ({ name:el.querySelector('.is-name').value.trim(), brand:el.querySelector('.is-brand').value.trim(), qty:el.querySelector('.is-qty').value === '' ? '' : +el.querySelector('.is-qty').value, unit:el.querySelector('.is-unit').value.trim(), spec:el.querySelector('.is-spec').value.trim() })).filter(i => i.name || i.spec);
+  const ph = isPh || {}, items = [...f.querySelectorAll('.is-item')].map(el => ({ key:el.dataset.k || uid(), name:el.querySelector('.is-name').value.trim(), brand:el.querySelector('.is-brand').value.trim(), qty:el.querySelector('.is-qty').value === '' ? '' : +el.querySelector('.is-qty').value, unit:el.querySelector('.is-unit').value.trim(), spec:el.querySelector('.is-spec').value.trim(),
+    photos:((ph[el.dataset.k] || {}).keep || []).map(p => ({ fileId:p.fileId, fileName:p.fileName || '' })) })).filter(i => i.name || i.spec || i.photos.length || ((ph[i.key] || {}).add || []).length);
   if(!items.length) return vFail('Add at least one item.'); if(items.some(i => !i.name)) return vFail('Give every item a name.');
   const rec = { id:id || undefined, no, status:IS_STATUSES.includes(o.status) ? o.status : 'Draft', title:o.title.trim(), date:o.date, department:o.department || '', prId:o.prId || '', purpose:o.purpose || '', items,
     warranty:o.warranty || '', delivery:o.delivery || '', deliveryLocation:o.deliveryLocation || '', other:o.other || '', preparedBy:o.preparedBy || '', preparedDesig:o.preparedDesig || '', preparedDept:o.preparedDept || '', approvedBy:o.approvedBy || '', approvedDesig:o.approvedDesig || '' };
   if(!old){ rec.createdBy = authUser ? authUser.name : ''; rec.createdAt = Date.now(); }
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
-  const nid = await vehSave('itemSpecs', rec); closeModal(); rerenderMain(); toast('Item specification ' + no + ' saved.'); openIsView(id || nid);
+  const jobs = items.map(it => ({ k:it.key, list:((ph[it.key] || {}).add || []).slice() })).filter(j => j.list.length), drop = isPhDrop.slice();
+  const nid = await vehSave('itemSpecs', rec); isPh = null; isPhDrop = []; closeModal(); rerenderMain(); toast('Item specification ' + no + ' saved.' + (jobs.length ? ' Uploading the pictures…' : '')); openIsView(id || nid);
+  drop.forEach(fid => { try{ agFileDel(fid); }catch(e){} });
+  if(jobs.length) isPhotoUpload(id || nid, no, jobs).then(() => { if(document.getElementById('modal-title') && /Item specification/.test(document.getElementById('modal-title').textContent)) openIsView(id || nid); });
 }
 function deleteIs(id){ const r = isById(id); if(!r) return; closeModal(); confirmAction('Delete item specification ' + (r.no || '') + '?', async () => { await vehDelete('itemSpecs', id); rerenderMain(); toast('Deleted.'); }); }
 

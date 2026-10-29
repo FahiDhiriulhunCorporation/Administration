@@ -1974,7 +1974,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.346';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.347';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -17637,47 +17637,70 @@ function stockLedger(){
   });
   return out.sort((a, b) => (a.date + '|' + a.at).localeCompare(b.date + '|' + b.at));
 }
-async function exportStockReportXlsx(){
+// asks which location and period, then builds that location's report
+function exportStockReportXlsx(){
   if(!state.products.length){ toast('There are no items to report on yet.', true); return; }
-  toast('Building the stock report…');
-  try{
-    const { balOf, locSrc } = slSourceBalances(), ledger = stockLedger(), prods = [...state.products].sort(byDisplayName), today = fmtDate(todayStr());
-    const srcTxt = (p, locId) => locSrc(p, locId).map(([a, s, n]) => s + ' ' + fmtNum(n)).join(', ');
-    const by = {}; ledger.forEach(r => { const k = r.locationId + '|' + r.productId; (by[k] = by[k] || []).push(r); });
-    const locs = LOCATIONS.filter(l => prods.some(p => qtyAt(p, l.id) || by[l.id + '|' + p.id]));
-    const SRC = SL_SOURCES, sheets = [];
-    // 1. balances: every item × every location, plus what is left from CSR / PO / Petty Cash
-    const sumHead = ['Item', 'SKU', 'Category', ...locs.map(l => l.code || l.name), 'Total', ...SRC.map(([, s]) => s + ' balance')];
-    sheets.push({ name:'Balances', freeze:4, widths:[34, 13, 18, ...locs.map(() => 9), 10, ...SRC.map(() => 12)], merges:['A1:F1'],
-      rows:[[{ v:'Stock balances by location', s:XS.title }], [{ v:'Generated ' + today + (authUser ? ' by ' + authUser.name : '') + ' · ' + locs.map(l => (l.code || '') + ' = ' + l.name).join(', '), s:XS.note }], [],
-        sumHead.map(v => ({ v, s:XS.head })),
-        ...prods.map(p => [displayName(p), p.sku || '', p.category || '', ...locs.map(l => qtyAt(p, l.id)), { v:productTotalQty(p), s:XS.totNum }, ...SRC.map(([a]) => Math.max(0, balOf(p, a)))]),
-        [{ v:'Total', s:XS.tot }, { v:'', s:XS.tot }, { v:'', s:XS.tot }, ...locs.map(l => ({ v:prods.reduce((s, p) => s + qtyAt(p, l.id), 0), s:XS.totNum })), { v:prods.reduce((s, p) => s + productTotalQty(p), 0), s:XS.totNum }, ...SRC.map(([a]) => ({ v:prods.reduce((s, p) => s + Math.max(0, balOf(p, a)), 0), s:XS.totNum }))]] });
-    // 2. every transaction in one list (easy to filter in Excel)
-    const txHead = ['Date', 'Location', 'Item', 'SKU', 'Type', 'Source', 'In', 'Out', 'Request no.', 'Reason / details', 'Department', 'Staff', 'Logged / approved by'];
-    sheets.push({ name:'All transactions', freeze:4, widths:[11, 18, 32, 13, 22, 14, 8, 8, 13, 36, 18, 18, 28], merges:['A1:F1'],
-      rows:[[{ v:'All stock transactions', s:XS.title }], [{ v:'Generated ' + today + ' · ' + fmtNum(ledger.length) + ' transactions, oldest first', s:XS.note }], [], txHead.map(v => ({ v, s:XS.head })),
-        ...ledger.map(r => { const p = getProduct(r.productId), l = getLocation(r.locationId); return [fmtDate(r.date), l ? l.name : '', p ? displayName(p) : '(deleted item)', p ? p.sku || '' : '', r.type, r.source, r.inQ || '', r.outQ || '', r.ref, r.details, r.dept, r.staff, r.by]; })] });
-    // 3. one sheet per location: each item with its transactions, running balance and closing balance
-    locs.forEach(l => {
-      const head = ['Date', 'Type', 'Source', 'In', 'Out', 'Balance', 'Request no.', 'Reason / details', 'Department', 'Staff', 'Logged / approved by'];
-      const rows = [[{ v:'Stock report — ' + l.name + (l.code ? ' (' + l.code + ')' : ''), s:XS.title }], [{ v:'Generated ' + today + ' · every transaction and the balance for each item at this location', s:XS.note }], [], head.map(v => ({ v, s:XS.head }))];
-      let items = 0, units = 0;
-      prods.forEach(p => {
-        const tx = by[l.id + '|' + p.id] || [], have = qtyAt(p, l.id); if(!tx.length && !have) return; items++; units += have;
-        rows.push([{ v:displayName(p) + (p.sku ? '  ·  ' + p.sku : '') + (p.category ? '  ·  ' + p.category : ''), s:XS.group }, ...Array(10).fill({ v:'', s:XS.group })]);
-        const net = tx.reduce((s, r) => s + r.inQ - r.outQ, 0), opening = have - net; let bal = opening;
-        if(opening) rows.push(['', { v:'Opening balance (before the recorded transactions)', s:XS.note }, '', '', '', opening]);
-        tx.forEach(r => { bal += r.inQ - r.outQ; rows.push([fmtDate(r.date), r.type, r.source, r.inQ || '', r.outQ || '', bal, r.ref, r.details, r.dept, r.staff, r.by]); });
-        rows.push(['', { v:'Closing balance', s:XS.tot }, { v:srcTxt(p, l.id), s:XS.tot }, { v:tx.reduce((s, r) => s + r.inQ, 0), s:XS.totNum }, { v:tx.reduce((s, r) => s + r.outQ, 0), s:XS.totNum }, { v:have, s:XS.totNum }]);
-        rows.push([]);
-      });
-      rows.push(['', { v:'Location total', s:XS.tot }, { v:fmtNum(items) + ' item' + (items === 1 ? '' : 's'), s:XS.tot }, { v:'', s:XS.tot }, { v:'', s:XS.tot }, { v:units, s:XS.totNum }]);
-      sheets.push({ name:l.code || l.name, freeze:4, widths:[11, 26, 18, 8, 8, 10, 13, 36, 18, 18, 28], merges:['A1:H1'], rows });
-    });
-    downloadBlob(await xlsxSimple(sheets), 'Stock report ' + todayStr() + '.xlsx');
-    toast('Stock report downloaded — ' + locs.length + ' location sheet' + (locs.length === 1 ? '' : 's') + '.');
-  }catch(e){ console.error(e); toast('Could not build the stock report: ' + (e && e.message || e), true); }
+  const mf = ui.movementsFilter || {}, inp = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white';
+  const locs = LOCATIONS.filter(l => state.products.some(p => qtyAt(p, l.id)) || state.movements.some(m => m.locationId === l.id) || (state.itemTransfers || []).some(t => t.fromLocationId === l.id || t.toLocationId === l.id));
+  const sel = mf.locationId || (stkMyLocations && stkMyLocations()[0] || {}).id || '';
+  openModal('Export stock report', `
+    <div class="space-y-4">
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Location *</label>
+        <select id="srx-loc" class="${inp}"><option value="">Choose a location…</option>${(locs.length ? locs : LOCATIONS).map(l => `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${esc(l.name)}${l.code ? ' (' + esc(l.code) + ')' : ''}</option>`).join('')}</select></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">From</label><input type="date" id="srx-from" value="${esc(mf.dateFrom || '')}" class="${inp}"></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">To</label><input type="date" id="srx-to" value="${esc(mf.dateTo || todayStr())}" class="${inp}"></div>
+      </div>
+      <p class="text-[12px] text-slate-500">Shows each item's balance on the start date, every transaction at this location in the period, and the balance at the end. Leave “From” empty to start from the first transaction.</p>
+      <div id="srx-err" class="hidden text-sm text-red-600"></div>
+      <div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Cancel</button>
+        <button type="button" id="srx-go" onclick="exportStockReportGo()" class="px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Download Excel</button></div>
+    </div>`);
+}
+async function exportStockReportGo(){
+  const locId = document.getElementById('srx-loc').value, from = document.getElementById('srx-from').value, to = document.getElementById('srx-to').value, err = document.getElementById('srx-err');
+  const fail = m => { err.textContent = m; err.classList.remove('hidden'); };
+  if(!locId) return fail('Choose a location.');
+  if(from && to && from > to) return fail('“From” is after “To”.');
+  const btn = document.getElementById('srx-go'); btn.disabled = true; btn.textContent = 'Building…';
+  try{ const n = await buildLocationStockReport(locId, from, to); closeModal(); toast('Stock report downloaded — ' + n + ' item' + (n === 1 ? '' : 's') + '.'); }
+  catch(e){ console.error(e); fail('Could not build the report: ' + (e && e.message || e)); btn.disabled = false; btn.textContent = 'Download Excel'; }
+}
+// one location: opening balance on the start date, the transactions in the period, closing balance at the end.
+// Balances are worked back from today's quantity on hand, so they always agree with Stock Levels.
+async function buildLocationStockReport(locId, from, to){
+  const l = getLocation(locId), today = todayStr(), end = to || today;
+  const ledger = stockLedger().filter(r => r.locationId === locId), prods = [...state.products].sort(byDisplayName);
+  const by = {}; ledger.forEach(r => (by[r.productId] = by[r.productId] || []).push(r));
+  const period = (from ? fmtDate(from) : 'first transaction') + ' to ' + fmtDate(end);
+  const lines = prods.map(p => {
+    const tx = by[p.id] || [], now = qtyAt(p, locId), net = list => list.reduce((s, r) => s + r.inQ - r.outQ, 0);
+    const inRange = tx.filter(r => (!from || r.date >= from) && r.date <= end);
+    const closing = now - net(tx.filter(r => r.date > end)), opening = closing - net(inRange);
+    return { p, inRange, opening, closing, inQ:inRange.reduce((s, r) => s + r.inQ, 0), outQ:inRange.reduce((s, r) => s + r.outQ, 0) };
+  }).filter(x => x.inRange.length || x.opening || x.closing);
+  if(!lines.length) throw new Error('No stock or transactions at ' + (l ? l.name : 'this location') + ' for this period.');
+  const T = { v:'', s:XS.tot }, title = 'Stock report — ' + (l ? l.name : '') + (l && l.code ? ' (' + l.code + ')' : '');
+  const note = 'Period: ' + period + ' · generated ' + fmtDate(today) + (authUser ? ' by ' + authUser.name : '');
+  const sum = (k) => lines.reduce((s, x) => s + x[k], 0);
+  const summary = { name:'Summary', freeze:4, widths:[34, 13, 18, 14, 10, 10, 14], merges:['A1:G1', 'A2:G2'],
+    rows:[[{ v:title, s:XS.title }], [{ v:note, s:XS.note }], [], ['Item', 'SKU', 'Category', 'Opening balance', 'In', 'Out', 'Closing balance'].map(v => ({ v, s:XS.head })),
+      ...lines.map(x => [displayName(x.p), x.p.sku || '', x.p.category || '', x.opening, x.inQ || '', x.outQ || '', { v:x.closing, s:XS.totNum }]),
+      [{ v:'Total (' + lines.length + ' item' + (lines.length === 1 ? '' : 's') + ')', s:XS.tot }, T, T, { v:sum('opening'), s:XS.totNum }, { v:sum('inQ'), s:XS.totNum }, { v:sum('outQ'), s:XS.totNum }, { v:sum('closing'), s:XS.totNum }]] };
+  const rows = [[{ v:title + ' — transactions', s:XS.title }], [{ v:note, s:XS.note }], [], ['Date', 'Type', 'Source', 'In', 'Out', 'Balance', 'Request no.', 'Reason / details', 'Department', 'Staff', 'Logged / approved by'].map(v => ({ v, s:XS.head }))];
+  lines.forEach(x => {
+    rows.push([{ v:displayName(x.p) + (x.p.sku ? '  ·  ' + x.p.sku : '') + (x.p.category ? '  ·  ' + x.p.category : ''), s:XS.group }, ...Array(10).fill({ v:'', s:XS.group })]);
+    rows.push([from ? fmtDate(from) : '', { v:'Opening balance', s:XS.tot }, T, T, T, { v:x.opening, s:XS.totNum }]);
+    let bal = x.opening;
+    x.inRange.forEach(r => { bal += r.inQ - r.outQ; rows.push([fmtDate(r.date), r.type, r.source, r.inQ || '', r.outQ || '', bal, r.ref, r.details, r.dept, r.staff, r.by]); });
+    if(!x.inRange.length) rows.push(['', { v:'No transactions in this period', s:XS.note }]);
+    rows.push([fmtDate(end), { v:'Closing balance', s:XS.tot }, T, { v:x.inQ, s:XS.totNum }, { v:x.outQ, s:XS.totNum }, { v:x.closing, s:XS.totNum }]);
+    rows.push([]);
+  });
+  const tx = { name:'Transactions', freeze:4, widths:[11, 26, 15, 8, 8, 10, 13, 36, 18, 18, 28], merges:['A1:H1', 'A2:H2'], rows };
+  const fname = 'Stock report ' + (l ? (l.code || l.name) : '') + ' ' + (from || 'start') + ' to ' + end + '.xlsx';
+  downloadBlob(await xlsxSimple([summary, tx]), fname.replace(/[\\\/:*?"<>|]/g, '-'));
+  return lines.length;
 }
 const SL_SOURCES = [['CSR', 'CSR'], ['Purchase Order', 'PO'], ['Petty Cash', 'Petty Cash']];
 function slSourceBalances(){
@@ -17744,7 +17767,6 @@ function viewStockLevels(){
         <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Stock Levels</h1>
         <p class="text-sm text-slate-500 mt-0.5">Quantity on hand for every item, by location.${hiddenCount ? ` ${hiddenCount} location${hiddenCount===1?'':'s'} hidden (stock valuation off).` : ''}</p>
       </div>
-      <button onclick="exportStockReportXlsx()" title="Excel: balances, all transactions, and a sheet for each location" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export stock report (Excel)</button>
     </div>
 
     ${stkNotifyBar()}
@@ -19146,7 +19168,7 @@ function viewMovements(mode){
         <p class="text-sm text-slate-500 mt-0.5">${report ? 'Stock on hand, consumption and transfers by location, and what consumption has cost.' : 'Log stock coming in and going out.'}</p>
       </div>
       <div class="flex gap-2.5 flex-wrap">
-        <button onclick="exportStockReportXlsx()" title="Excel: balances, all transactions, and a sheet for each location" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold ${report ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm' : 'border border-slate-300 text-slate-700 bg-white hover:bg-slate-50'}">Export stock report (Excel)</button>
+        ${report ? `<button onclick="exportStockReportXlsx()" title="Excel: opening balance, transactions and closing balance for one location" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">Export stock report (Excel)</button>` : ''}
         ${!report ? `<button onclick="exportMovementsCSV()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Export report (CSV)</button>` : ''}
         ${report ? '' : `<button onclick="openMovementForm('in')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">+ Stock In</button>
         <button onclick="openMovementForm('out')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-rose-600 text-white hover:bg-rose-700 shadow-sm">+ Stock Out</button>

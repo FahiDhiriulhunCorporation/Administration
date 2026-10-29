@@ -2000,7 +2000,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.354';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.355';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -23446,6 +23446,7 @@ function viewAssetDetail(){
           <div class="flex flex-wrap justify-center sm:justify-start gap-2.5">
             <a href="${qrCodeImgUrl(asset.departmentAssetCode, 600)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Open full size</a>
             <a href="${qrCodeImgUrl(asset.departmentAssetCode, 600)}" download="${esc(asset.departmentAssetCode)}-qr.png" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">Download</a>
+            ${canManageInventory() ? `<button type="button" onclick="openAssetCodeEdit('${asset.id}')" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700">✎ Change code</button>` : ''}
           </div>
         </div>
       </div>` : `
@@ -23533,6 +23534,36 @@ function removeImage(prefix){
   if(preview){ preview.src = ''; preview.classList.add('hidden'); }
   if(removeBtn) removeBtn.classList.add('hidden');
   if(fileInput) fileInput.value = '';
+}
+// another asset already using this department asset code (ignoring case and spaces)
+function assetCodeTaken(code, exceptId){ const c = String(code || '').trim().toLowerCase().replace(/\s+/g, ''); return c ? state.assets.find(a => a.id !== exceptId && String(a.departmentAssetCode || '').trim().toLowerCase().replace(/\s+/g, '') === c) : null; }
+// admins: change just the department asset code (the QR code and asset card follow it)
+function openAssetCodeEdit(id){
+  if(!canManageInventory()){ toast('Only admins can change the department asset code.', true); return; }
+  const a = getAsset(id); if(!a) return;
+  openModal('Change department asset code', `
+    <div class="space-y-4">
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Department asset code *</label>
+        <input type="text" id="acx-code" value="${esc(a.departmentAssetCode || '')}" data-no-clear="1" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm num" onkeydown="if(event.key==='Enter') saveAssetCodeEdit('${a.id}')">
+        <div class="text-[11.5px] text-slate-500 mt-1.5">${esc(a.name || '')}${a.tag ? ' · tag ' + esc(a.tag) : ''}. The QR code and the asset card change with it; print a new label afterwards. Next free code: <button type="button" class="font-semibold text-brand-600 hover:underline" onclick="document.getElementById('acx-code').value='${nextDepartmentAssetCode()}'">${nextDepartmentAssetCode()}</button></div></div>
+      <div id="acx-err" class="hidden text-sm text-red-600"></div>
+      <div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Cancel</button>
+        <button type="button" onclick="saveAssetCodeEdit('${a.id}')" class="px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Save</button></div>
+    </div>`);
+  setTimeout(() => { const i = document.getElementById('acx-code'); if(i){ i.focus(); i.select(); } }, 50);
+}
+function saveAssetCodeEdit(id){
+  const a = getAsset(id), code = (document.getElementById('acx-code').value || '').trim(), err = document.getElementById('acx-err');
+  const fail = m => { err.textContent = m; err.classList.remove('hidden'); };
+  if(!a) return closeModal();
+  if(!code) return fail('Enter a code.');
+  const dup = assetCodeTaken(code, id); if(dup) return fail(code + ' is already used by ' + (dup.name || 'another asset') + '.');
+  const old = a.departmentAssetCode || '';
+  if(old === code) return closeModal();
+  a.departmentAssetCode = code;
+  a.codeHistory = (a.codeHistory || []).concat([{ from:old, to:code, at:nowISO(), by:authUser ? authUser.name : '' }]);
+  persistAssetDoc(a); closeModal(); rerenderMain();
+  toast('Department asset code changed' + (old ? ' from ' + old : '') + ' to ' + code + '.');
 }
 function nextDepartmentAssetCode(){
   let max = 0;
@@ -23626,6 +23657,8 @@ function saveAsset(id){
   const locationId = document.getElementById('af-location').value;
   if(!name){ errEl.textContent='Asset name is required.'; errEl.classList.remove('hidden'); return; }
   if(!locationId){ errEl.textContent='Choose a location.'; errEl.classList.remove('hidden'); return; }
+  const dupCode = assetCodeTaken(document.getElementById('af-dept-code').value, id);
+  if(dupCode){ errEl.textContent = 'Department asset code ' + dupCode.departmentAssetCode + ' is already used by ' + (dupCode.name || 'another asset') + '.'; errEl.classList.remove('hidden'); return; }
   const data = {
     name,
     tag: document.getElementById('af-tag').value.trim(),

@@ -2000,7 +2000,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.358';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.359';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -3040,7 +3040,7 @@ function viewServicing(){
       ${vTd(`<button onclick="openVehServiceForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right' })}</tr>`; }).join('')}</tbody></table>`);
   else body = vTableWrap(`<table class="w-full text-sm">${vTHead([{ t:'Date of issue' }, { t:'Vehicle' }, { t:'Issue' }, { t:'Status' }, { t:'Vendor' }, { t:'Cost', n:1 }, { t:'' }])}<tbody>${rows.map(r => {
     const v = vehById(r.vehicleId), k = r.status === 'Resolved' ? 'good' : r.status === 'In progress' ? 'warn' : 'crit';
-    return `<tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(`<div class="max-w-xs">${esc(r.issue || '—')}</div>${attView(r.docFile, r.docUrl, 'Report / invoice') ? `<div class="text-xs">${attView(r.docFile, r.docUrl, 'Report / invoice')}</div>` : ''}`)}${vTd(vPill(k, esc(r.status || 'Open')) + (r.resolvedDate ? `<div class="text-[11.5px] text-slate-400 mt-1">${vDate(r.resolvedDate)}</div>` : ''))}${vTd(esc(r.vendor || '—'))}${vTd(r.cost ? vMoney(r.cost) : '—', { n:1 })}
+    return `<tr class="${vTr}">${vTd(vDate(r.date), { first:1 })}${vTd(vVehCell(v))}${vTd(`<div class="max-w-xs">${esc(r.issue || '—')}</div>${(r.photos || []).length ? `<button type="button" onclick="vehIssuePhotos('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">📷 ${r.photos.length} photo${r.photos.length === 1 ? '' : 's'}</button>` : ''}${attView(r.docFile, r.docUrl, 'Report / invoice') ? `<div class="text-xs">${attView(r.docFile, r.docUrl, 'Report / invoice')}</div>` : ''}`)}${vTd(vPill(k, esc(r.status || 'Open')) + (r.resolvedDate ? `<div class="text-[11.5px] text-slate-400 mt-1">${vDate(r.resolvedDate)}</div>` : ''))}${vTd(esc(r.vendor || '—'))}${vTd(r.cost ? vMoney(r.cost) : '—', { n:1 })}
       ${vTd(`<button onclick="openVehServiceForm('${r.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Edit</button>`, { last:1, cls:'text-right whitespace-nowrap' })}</tr>`; }).join('')}</tbody></table>`);
   return `
     ${vHead('Servicing', 'Periodic maintenance and incidental repairs.', admin ? vBtnPlain('+ Report Issue', "openVehServiceForm(null,'incident')") + vBtnPrimary('+ Periodic Service', "openVehServiceForm(null,'periodic')") : '')}
@@ -3617,8 +3617,12 @@ function openVehServiceForm(id, kind){
         vF('Cost (' + esc(vehSettings.currency) + ')', 'cost', r.cost, 'number') + `<div><label class="${VEH_LBL}">Invoice</label>${attRow('vdoc', r.docFile, 'Attach the invoice (PDF or photo)', r.docUrl)}</div>` + vF('Next service date', 'nextDate', r.nextDate, 'date') + vF('Next service odometer', 'nextOdometer', r.nextOdometer, 'number') + vTa('Work done / notes', 'notes', r.notes, { span:'sm:col-span-2' }))
     : vGrid(2, vehSel + vF('Date of the issue', 'date', r.date, 'date', { req:1 }) + vS('Status', 'status', VEH_ISSUE_STATUSES, r.status || 'Open') + vTa('Issue', 'issue', r.issue, { span:'sm:col-span-2', req:1, ph:'Describe what happened / what is wrong' }) +
         vF('Reported by', 'reportedBy', r.reportedBy || (authUser ? authUser.name : '')) + vF('Resolved date', 'resolvedDate', r.resolvedDate, 'date') + vF('Workshop / vendor', 'vendor', r.vendor) + vF('Repair cost (' + esc(vehSettings.currency) + ')', 'cost', r.cost, 'number') +
+        `<div class="sm:col-span-2"><label class="${VEH_LBL}">Photos of the condition / damage <span class="font-normal text-slate-400">(optional — several at once, each with a caption)</span></label>
+          <div id="ir-photos" class="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+          <div class="mt-2 rounded-lg border border-dashed border-slate-300 px-3.5 py-2.5 text-sm flex items-center gap-3 flex-wrap"><label class="font-semibold text-brand-600 hover:underline cursor-pointer"><input type="file" accept="image/*" multiple class="hidden" onchange="irPhotoPick(this)">📷 Add photos</label><span id="ir-photo-info" class="text-xs text-slate-500"></span></div></div>` +
         `<div class="sm:col-span-2"><label class="${VEH_LBL}">Report / invoice</label>${attRow('vdoc', r.docFile, 'Attach the report or invoice (PDF or photo)', r.docUrl)}</div>` + vTa('Action taken', 'notes', r.notes, { span:'sm:col-span-2' })) + irFormFields(r);
-  openModal((id ? 'Edit ' : '') + (kind === 'periodic' ? 'periodic service' : 'incidental issue'), vFormOpen + body + vFoot(id ? 'Save changes' : 'Save record', `saveVehService('${id || ''}','${kind}')`, id && canManageInventory() ? `vehConfirmDeleteService('${id}')` : ''), true);
+  openModal(id ? 'Edit ' + (kind === 'periodic' ? 'periodic service' : 'incidental issue') : (kind === 'periodic' ? 'Periodic service' : 'Incidental issue'), vFormOpen + body + vFoot(id ? 'Save changes' : 'Save record', `saveVehService('${id || ''}','${kind}')`, id && canManageInventory() ? `vehConfirmDeleteService('${id}')` : ''), true);
+  if(kind === 'incident'){ irPh = { keep:((r && r.photos) || []).filter(x => x && x.fileId).map(x => Object.assign({}, x)), add:[], drop:[] }; setTimeout(irPhotoRender, 0); } else irPh = null;
 }
 async function saveVehService(id, kind){
   const o = vehFormObj(document.getElementById('vform')); o.kind = kind;
@@ -3629,8 +3633,17 @@ async function saveVehService(id, kind){
   if(id) o.id = id;
   if(vNum(o.odometer)){ const v = vehById(o.vehicleId); if(v && vNum(o.odometer) > vNum(v.mileage)) await vehSave('vehicles', { id:v.id, mileage:o.odometer }); }
   vehUi.svcTab = kind;
+  const ph = kind === 'incident' ? (irPh || { keep:[], add:[], drop:[] }) : null; irPh = null;
+  if(ph) o.photos = ph.keep.map(x => ({ fileId:x.fileId, fileName:x.fileName || '', caption:String(x.caption || '').trim() }));
   const srId = await vehSave('serviceRecords', o); attSaveTo('serviceRecords', srId || id, 'docFile', 'vdoc', kind);
+  if(ph){ ph.drop.forEach(fid => agFileDel(fid)); if(ph.add.length){ const v = vehById(o.vehicleId); toast('Uploading ' + ph.add.length + ' photo' + (ph.add.length === 1 ? '' : 's') + '…'); irPhotoJobs[srId || id] = irPhotoUpload(srId || id, o.irNo || (v ? v.plate : ''), ph.add, 'serviceRecords'); } }
   closeModal(); if(ui.tab === 'incident-reports'){ rerenderMain(); toast('Saved.'); } else { goTo('servicing'); toast('Record saved.'); }
+}
+// the photos of an issue, in a gallery (click one to open it full size)
+async function vehIssuePhotos(id){
+  const r = state.serviceRecords.find(x => x.id === id); if(!r || !(r.photos || []).length) return; const v = vehById(r.vehicleId);
+  openModal('Photos — ' + (v ? v.plate : 'issue'), `<div class="text-sm text-slate-600 mb-3">${esc(r.issue || '')}</div><div id="vi-ph" class="grid grid-cols-2 sm:grid-cols-3 gap-3">${r.photos.map((p, i) => `<div class="rounded-lg border border-slate-200 overflow-hidden bg-white"><button type="button" class="block w-full bg-slate-100 cursor-zoom-in" style="height:130px" onclick="isPhotoOpen('${esc(p.fileId)}')"><span data-is-thumb="${esc(p.fileId)}" class="w-full h-full flex items-center justify-center text-xs text-slate-400">Loading…</span></button><div class="px-2.5 py-1.5 text-xs text-slate-600">Photo ${i + 1}${p.caption ? ' — ' + esc(p.caption) : ''}</div></div>`).join('')}</div>`, true);
+  isThumbsLoad();
 }
 function vehConfirmDeleteService(id){ closeModal(); confirmAction('Delete this service record?', async () => { await vehDelete('serviceRecords', id); toast('Deleted.'); }); }
 
@@ -3658,7 +3671,7 @@ function irData(r, src){
   return { no:(fleet ? r.irNo : r.no) || '', type, subject:subj, date:r.date ? pcOrdinalDate(r.date) : '', time:x.time || '', location:x.location || '', reportDate:x.reportDate ? pcOrdinalDate(x.reportDate) : (r.date ? pcOrdinalDate(r.date) : ''),
     vehicle, persons, desc:String((fleet ? r.issue : r.description) || '').trim(), damage:irLines(x.damage), injuries:irLines(x.injuries), cause:String(x.cause || '').trim(), actions:irLines(fleet ? (x.actions || r.notes) : x.actions), remarks:String(x.remarks || '').trim(),
     by:x.reportedBy || r.reportedBy || '', byDesig:x.reportedDesig || '', byDept:x.reportedDept || '', status:r.status || 'Open',
-    photos:fleet ? [] : (Array.isArray(r.photos) ? r.photos.filter(x => x && x.fileId) : []),
+    photos:Array.isArray(r.photos) ? r.photos.filter(x => x && x.fileId) : [],
     rev:fleet ? null : r.reviewSame ? { n:r.reportedBy || '', d:r.reportedDesig || '', dep:r.reportedDept || '', dt:r.reportDate ? pcOrdinalDate(r.reportDate) : '' } : (r.reviewedBy || r.reviewedDesig) ? { n:r.reviewedBy || '', d:r.reviewedDesig || '', dep:r.reviewedDept || '', dt:r.reviewDate ? pcOrdinalDate(r.reviewDate) : '' } : null };
 }
 function irDamageItems(lines){ const out = []; lines.forEach(l => { if(irSub(l) && out.length) out[out.length - 1].pts.push(irStrip(l)); else out.push({ t:irStrip(l), pts:[] }); }); return out; }
@@ -4002,16 +4015,17 @@ function irPhotoRemove(kind, i){ if(!irPh) return; const [p] = irPh[kind].splice
 function irPhotoView(kind, i){ const p = irPh && irPh[kind][i]; if(!p || !p.thumb) return; const w = window.open('', '_blank'); if(!w) return;
   w.document.write(`<!doctype html><title>${esc(p.caption || 'Photo')}</title><body style="margin:0;background:#525659;text-align:center;font:14px sans-serif;color:#fff"><img src="${p.thumb}" style="max-width:100%;max-height:92vh;margin:12px auto;display:block;box-shadow:0 2px 8px #0006">${esc(p.caption || '')}</body>`); w.document.close(); }
 // after saving: each new photo is uploaded as its own file and added to the report
-async function irPhotoUpload(id, no, list){
+async function irPhotoUpload(id, no, list, coll){
+  coll = coll || 'incidentReports'; const recOf = () => coll === 'serviceRecords' ? state.serviceRecords.find(x => x.id === id) : (state.incidentReports || []).find(x => x.id === id);
   const key = uid(); agUploads[key] = { name:list.length + ' incident photo' + (list.length === 1 ? '' : 's'), f:0 }; agUploadBar(); let ok = 0;
   try{
     for(const [i, p] of list.entries()){
       try{ const st = await agStore(p.att, no || '', f => { agUploads[key].f = (i + f) / list.length; agUploadBar(); });
-        const r = (state.incidentReports || []).find(x => x.id === id); if(!r){ agFileDel(st.fileId); break; }
-        await vehSave('incidentReports', { id, photos:(r.photos || []).concat([{ fileId:st.fileId, fileName:p.name || st.fileName, caption:String(p.caption || '').trim() }]) }); ok++; }
+        const r = recOf(); if(!r){ agFileDel(st.fileId); break; }
+        await vehSave(coll, { id, photos:(r.photos || []).concat([{ fileId:st.fileId, fileName:p.name || st.fileName, caption:String(p.caption || '').trim() }]) }); ok++; }
       catch(e){ toast('The photo ' + (p.name || '') + ' could not be uploaded: ' + (e && e.message ? e.message : e), true); }
     }
-    if(ok) toast(ok + ' photo' + (ok === 1 ? '' : 's') + ' added to incident report ' + (no || '') + '.');
+    if(ok) toast(ok + ' photo' + (ok === 1 ? '' : 's') + ' added' + (coll === 'serviceRecords' ? (no ? ' (' + no + ')' : '') : ' to incident report ' + (no || '')) + '.');
   } finally { delete agUploads[key]; agUploadBar(); delete irPhotoJobs[id]; }
 }
 // the saved photos as JPEG data for the PDF / Word report

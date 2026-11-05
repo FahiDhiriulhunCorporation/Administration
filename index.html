@@ -1104,7 +1104,7 @@ async function uploadUnsyncedToCloud(){
 function scheduleUnsyncedCheck(){ setTimeout(()=>{ try{ renderApp(); }catch(e){} }, UNSYNCED_GRACE_MS + 500); }
 
 function syncErrorMessage(e, collectionName, action){
-  const isPermissionError = e && (e.code==='permission-denied' || (e.message||'').toLowerCase().includes('permission'));
+  const isPermissionError = e && (e.code==='permission-denied' || String(e.message || '').toLowerCase().includes('permission'));
   const verb = action==='delete' ? 'Deleted' : 'Saved';
   if(isPermissionError){
     return `${verb} locally, but Firestore rules are blocking sync for ${collectionName} — check Firestore Database → Rules covers this collection.`;
@@ -1244,7 +1244,7 @@ function renderStorageBanner(reason){
 const CLOUD_CONFIG_KEY = STORAGE_PREFIX + 'cloud_config';
 const REQUIRED_EMAIL_DOMAIN = 'fdc.mv';
 function isAllowedEmail(email){
-  return (email||'').trim().toLowerCase().endsWith('@' + REQUIRED_EMAIL_DOMAIN);
+  return String(email || '').trim().toLowerCase().endsWith('@' + REQUIRED_EMAIL_DOMAIN);
 }
 let firestoreDb = null;
 let firestoreItemsRef = null;
@@ -1273,7 +1273,7 @@ let authUser = null; // { uid, email, name } | null
 const authUi = { mode: 'login' };
 
 function initials(name){
-  const parts = (name||'').trim().split(/\s+/).filter(Boolean);
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if(parts.length===0) return '?';
   return (parts[0][0] + (parts[1]?parts[1][0]:'')).toUpperCase();
 }
@@ -1285,16 +1285,6 @@ function setCloudConfig(cfg){
   else localStorage.removeItem(CLOUD_CONFIG_KEY);
 }
 
-function loadScriptOnce(src){
-  return new Promise((resolve, reject)=>{
-    if(document.querySelector('script[data-src="'+src+'"]')){ resolve(true); return; }
-    const s = document.createElement('script');
-    s.src = src; s.async = true; s.setAttribute('data-src', src);
-    s.onload = ()=>resolve(true);
-    s.onerror = ()=>reject(new Error('Could not load the cloud sync library. Check your connection.'));
-    document.head.appendChild(s);
-  });
-}
 async function ensureFirebase(){
   if(window.firebase && window.firebase.firestore && window.firebase.auth) return true;
   await loadScriptOnce('https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js');
@@ -1467,11 +1457,19 @@ async function unblockUid(uid){
     tx.set(metaRef, { uids, info });
   });
 }
-async function ensureOwnProfileDoc(user, extra){ if(!firestoreProfilesRef || !firestoreDb) return null; try{ if(await isUserBlocked(user.uid, user.email)) return null; try{ const bd = await firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers').get(); if(bd.exists && Array.isArray(bd.data().uids) && bd.data().uids.includes(user.uid)) unblockUid(user.uid).catch(() => {}); }catch(e){} let assignedRole = null; let pm = null; try{ const pmDoc = await firestoreDb.collection('fdc_inventory_meta').doc('pendingMembers').get(); const lst = pmDoc.exists && pmDoc.data() && pmDoc.data().list; pm = lst ? (lst[pmKey(user.email)] || null) : null; }catch(e){} const metaRef = firestoreDb.collection('fdc_inventory_meta').doc('adminStatus'); await firestoreDb.runTransaction(async (tx) => { const ref = firestoreProfilesRef.doc(user.uid); const snap = await tx.get(ref); if(snap.exists && snap.data().email) return; /* a bare record (e.g. only lastActive) is completed below */ const metaSnap = await tx.get(metaRef); const alreadyHasAdmin = metaSnap.exists && metaSnap.data().assigned; const role = alreadyHasAdmin ? 'member' : 'admin'; const data = Object.assign({ uid:user.uid, email:user.email, name:(pm&&pm.name)||user.displayName||user.email, role, designation:(pm&&pm.designation)||'', department:(pm&&pm.department)||'', createdAt: Date.now() }, extra||{}); tx.set(ref, data, { merge:true }); if(!alreadyHasAdmin) tx.set(metaRef, { assigned:true }); assignedRole = role; }); if(assignedRole && authUser && authUser.uid===user.uid){ authUser.role = assignedRole; renderApp(); } return true; }catch(e){ console.error('Could not set up the member profile', e); return false; } }
+async function ensureOwnProfileDoc(user, extra){ if(!firestoreProfilesRef || !firestoreDb) return null; try{ if(await isUserBlocked(user.uid, user.email)) return null; try{ const bd = await firestoreDb.collection('fdc_inventory_meta').doc('blockedUsers').get(); if(bd.exists && Array.isArray(bd.data().uids) && bd.data().uids.includes(user.uid)) unblockUid(user.uid).catch(() => {}); }catch(e){} let assignedRole = null; let pm = null; try{ const pmDoc = await firestoreDb.collection('fdc_inventory_meta').doc('pendingMembers').get(); const lst = pmDoc.exists && pmDoc.data() && pmDoc.data().list; pm = lst ? (lst[pmKey(user.email)] || null) : null; }catch(e){}
+    // an account that already has its member profile is fine — no need for the online-only transaction below
+    try{ const own = await firestoreProfilesRef.doc(user.uid).get(); if(own.exists && own.data() && own.data().email) return true; }catch(e){}
+    const metaRef = firestoreDb.collection('fdc_inventory_meta').doc('adminStatus'); await firestoreDb.runTransaction(async (tx) => { const ref = firestoreProfilesRef.doc(user.uid); const snap = await tx.get(ref); if(snap.exists && snap.data().email) return; /* a bare record (e.g. only lastActive) is completed below */ const metaSnap = await tx.get(metaRef); const alreadyHasAdmin = metaSnap.exists && metaSnap.data().assigned; const role = alreadyHasAdmin ? 'member' : 'admin'; const data = Object.assign({ uid:user.uid, email:user.email, name:(pm&&pm.name)||user.displayName||user.email, role, designation:(pm&&pm.designation)||'', department:(pm&&pm.department)||'', createdAt: Date.now() }, extra||{}); tx.set(ref, data, { merge:true }); if(!alreadyHasAdmin) tx.set(metaRef, { assigned:true }); assignedRole = role; }); if(assignedRole && authUser && authUser.uid===user.uid){ authUser.role = assignedRole; renderApp(); } return true; }catch(e){ console.error('Could not set up the member profile', e);
+    // a refusal by the database rules means the account really has no access; anything else (offline, slow or dropped
+    // connection at sign-in) is temporary — keep the person signed in and try again shortly
+    if(e && e.code === 'permission-denied') return false;
+    if(!user.__profRetry || user.__profRetry < 5){ user.__profRetry = (user.__profRetry || 0) + 1; setTimeout(() => { if(firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.uid === user.uid) ensureOwnProfileDoc(user, extra); }, 4000 * user.__profRetry); }
+    return null; } }
 let lastCloudErrorToastAt = 0;
 function handleCloudSyncError(err, collectionLabel){
   cloudStatus = 'error';
-  const isPermissionDenied = err && (err.code === 'permission-denied' || (err.message||'').toLowerCase().includes('permission'));
+  const isPermissionDenied = err && (err.code === 'permission-denied' || String(err.message || '').toLowerCase().includes('permission'));
   const now = Date.now();
   if(now - lastCloudErrorToastAt > 4000){
     lastCloudErrorToastAt = now;
@@ -2000,7 +1998,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.359';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.364';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2166,19 +2164,21 @@ function qrCodeImgUrl(data, size){
   size = size || 220;
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=8&data=${encodeURIComponent(data)}`;
 }
-function byName(a,b){ return (a.name||'').localeCompare(b.name||''); }
+function byName(a,b){ return String(a.name || '').localeCompare(b.name||''); }
 function byTag(a,b){
-  const ta = (a.tag||'').trim(), tb = (b.tag||'').trim();
+  const ta = String(a.tag || '').trim(), tb = String(b.tag || '').trim();
   if(!ta && !tb) return byName(a,b);
   if(!ta) return 1;  // items with no code sort after coded ones
   if(!tb) return -1;
   return ta.localeCompare(tb, undefined, { numeric: true, sensitivity: 'base' });
 }
-function displayName(p){ return (p.variant||'').trim() ? p.name + ' (' + p.variant.trim() + ')' : p.name; }
+function displayName(p){ if(!p) return ''; const n = String(p.name == null ? '' : p.name), v = String(p.variant == null ? '' : p.variant).trim(); return v ? n + ' (' + v + ')' : n; }
+// newest-first key for records with a date and a creation time (either may be missing on old records)
+const dtKey = x => String((x && x.date) || '') + String((x && x.createdAt) || '');
 function byDisplayName(a,b){ return displayName(a).localeCompare(displayName(b)); }
 function getProduct(id){ return state.products.find(p=>p.id===id); }
 function distinctCategories(){
-  return [...new Set(state.products.map(p=>(p.category||'').trim()).filter(Boolean))].sort();
+  return [...new Set(state.products.map(p=>String(p.category || '').trim()).filter(Boolean))].sort();
 }
 function toast(msg, isError){
   const wrap = document.getElementById('toast-wrap');
@@ -2595,7 +2595,7 @@ async function vehPersist(key, rec){
 }
 // add (no id) or update (id): an update keeps every field the form didn't touch. Returns the record id.
 async function vehSave(key, obj){
-  if(viewerBlock()) throw new Error('View-only access');
+  if(viewerBlock()){ const e = new Error('View-only access'); e.viewOnly = true; throw e; }
   obj = Object.assign({}, obj);
   let id = obj.id; delete obj.id;
   const who = authUser ? authUser.name : '';
@@ -2768,7 +2768,7 @@ function vRepPresetRange(p){
   else if(p === '3m') from = vIso(new Date(t.getFullYear(), t.getMonth() - 2, 1));
   else if(p === '6m') from = vIso(new Date(t.getFullYear(), t.getMonth() - 5, 1));
   else if(p === 'year') from = vIso(new Date(t.getFullYear(), 0, 1));
-  else { const ds = state.fuelRecords.map(r => r.date).filter(Boolean).sort(); from = ds[0] || vIso(new Date(t.getFullYear(), 0, 1)); if(ds.length && ds[ds.length - 1] > to) to = ds[ds.length - 1]; }
+  else { const ds = state.fuelRecords.map(r => String(r.date || '')).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort(); from = ds[0] || vIso(new Date(t.getFullYear(), 0, 1)); if(ds.length && ds[ds.length - 1] > to) to = ds[ds.length - 1]; }
   return { from, to };
 }
 function vRepRange(){
@@ -4227,7 +4227,7 @@ async function isDownload(id, kind, btn){
 }
 // ---- the page
 function viewItemSpecs(){
-  const can = !(typeof viewerBlock === 'function' && viewerBlock()), q = String(vehUi.isQ || '').toLowerCase().trim(), st = vehUi.isSt || '';
+  const can = !amIViewer(), q = String(vehUi.isQ || '').toLowerCase().trim(), st = vehUi.isSt || '';
   const all = isAll().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.no || '').localeCompare(String(a.no || '')));
   const list = all.filter(r => (!st || (r.status || 'Draft') === st) && (!q || [r.no, r.title, r.department, r.preparedBy, ...(r.items || []).map(i => i.name + ' ' + (i.spec || ''))].join(' ').toLowerCase().includes(q)));
   const rows = list.map(r => { const n = (r.items || []).filter(i => i && i.name).length, pr = r.prId ? (state.purchaseRequisitions || []).find(p => p.id === r.prId) : null;
@@ -4243,7 +4243,7 @@ function viewItemSpecs(){
 }
 // ---- the details (read only); Edit at the top right
 function openIsView(id){
-  const r = isById(id); if(!r) return; const D = isData(r), can = !(typeof viewerBlock === 'function' && viewerBlock());
+  const r = isById(id); if(!r) return; const D = isData(r), can = !amIViewer();
   const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v}</div></div>`;
   openModal('Item specification', `<div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-lg font-extrabold text-slate-900 num">${esc(D.no || '—')}</div><div class="text-sm text-slate-600">${esc(D.title)}</div></div>${vPill(D.status === 'Final' ? 'good' : '', esc(D.status))}</div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">${item('Date', esc(D.date || '—'))}${item('Department', esc(D.department || '—'))}${item('Prepared by', esc(D.by || '—'))}${item('Related PR', esc(D.pr || '—'))}</div>
@@ -4645,7 +4645,7 @@ function openPcDetails(id){
   const dl = vDl([['Voucher no.', `<b>${esc(r.number)}</b>`, 1], ['Date', vDate(r.date)], [fund && fund.id === PC_FUEL_ID ? 'Fund' : 'Location', fund ? fund.name : '(removed location)'], ['Department', r.department],
     ['Requester', `${esc(rq.name || '—')}${rq.designation ? `<div class="text-xs text-slate-400">${esc(rq.designation)}</div>` : ''}`, 1], ['HOD', `${esc(hod.name || '—')}${hod.designation ? `<div class="text-xs text-slate-400">${esc(hod.designation)}</div>` : ''}`, 1],
     ['Petty Cash Custodian', cus.name || 'Not assigned'], ['Category', r.category || '—'], ['Cash received by', `${esc(pcCashReceiver(r).name || '—')}${pcCashReceiver(r).designation ? `<div class="text-xs text-slate-400">${esc(pcCashReceiver(r).designation)}</div>` : ''}`, 1], ['Signed form', ([r.formFile && r.formFile.fileId ? `<button type="button" onclick="pcOpenForm('${esc(r.id)}')" class="text-brand-600 font-semibold hover:underline">📎 Open the signed form</button>` : '', r.formLink && vSafeUrl(r.formLink) ? `<a href="${esc(vSafeUrl(r.formLink))}" target="_blank" rel="noopener" class="text-brand-600 hover:underline">${r.formFile && r.formFile.fileId ? 'Link' : 'Open the signed form'} ↗</a>` : ''].filter(Boolean).join(' · ') || '<span class="text-slate-400">—</span>') +
-      (!viewerBlock() && pcCanEdit(r) && !pcInClosed(r) ? `<label class="block mt-1.5 text-xs font-semibold text-brand-600 hover:underline cursor-pointer w-max"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcDetailsAttachForm(this, '${esc(r.id)}')">${r.formFile && r.formFile.fileId ? '↻ Replace the signed form' : '📎 Attach the signed form'}</label><div id="pc-dform-st" class="text-xs text-slate-400 mt-1"></div>` : ''), 1]]);
+      (!amIViewer() && pcCanEdit(r) && !pcInClosed(r) ? `<label class="block mt-1.5 text-xs font-semibold text-brand-600 hover:underline cursor-pointer w-max"><input type="file" accept="application/pdf,image/*" multiple class="hidden" onchange="pcDetailsAttachForm(this, '${esc(r.id)}')">${r.formFile && r.formFile.fileId ? '↻ Replace the signed form' : '📎 Attach the signed form'}</label><div id="pc-dform-st" class="text-xs text-slate-400 mt-1"></div>` : ''), 1]]);
   const itemsHtml = items.length ? `<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-left text-slate-400"><th class="py-1.5 pr-3 font-semibold">Item / service</th><th class="py-1.5 pr-3 font-semibold">Description</th><th class="py-1.5 pr-3 font-semibold text-right">Qty</th><th class="py-1.5 pr-3 font-semibold text-right">Price</th><th class="py-1.5 font-semibold text-right">Total</th></tr></thead><tbody>${items.map(i => `<tr class="border-t border-slate-100"><td class="py-1.5 pr-3 text-slate-800">${esc(i.name)}</td><td class="py-1.5 pr-3 text-slate-500">${esc(i.description || '')}</td><td class="py-1.5 pr-3 text-right num">${esc(String(i.qty))}</td><td class="py-1.5 pr-3 text-right num">${pcMoneyPlain(i.unitPrice)}</td><td class="py-1.5 text-right num">${pcMoneyPlain(pcItemTotal(i))}</td></tr>`).join('')}<tr class="border-t border-slate-200"><td colspan="4" class="py-2 text-right font-bold text-slate-700 pr-3">Requested total</td><td class="py-2 text-right num font-bold">${fmtMVR(pcTotal(r))}</td></tr></tbody></table></div>` : '<div class="text-sm text-slate-400">No items.</div>';
   const invHtml = inv.length ? inv.map((i, invIdx) => `<div class="flex items-start justify-between gap-3 py-2 border-t border-slate-100 first:border-0"><div class="min-w-0"><div class="text-sm font-semibold text-slate-800">${esc(i.supplier)}</div><div class="text-xs text-slate-500">${i.number ? 'Invoice ' + esc(i.number) + ' · ' : ''}${i.date ? vDate(i.date) : ''}${i.link && vSafeUrl(i.link) ? ` · <a href="${esc(vSafeUrl(i.link))}" target="_blank" rel="noopener" class="text-brand-600 hover:underline">Open document ↗</a>` : ''}${i.fileId ? ` · <button type="button" onclick="openPcInvoiceView('${id}', ${invIdx})" class="text-brand-600 hover:underline">📎 View file (${esc(String(i.filePages || 1))} page${(i.filePages || 1) === 1 ? '' : 's'})</button>` : ''}</div></div><div class="text-sm font-bold num whitespace-nowrap">${fmtMVR(i.amount)}</div></div>`).join('') + (inv.length > 1 ? `<div class="flex justify-between border-t border-slate-200 pt-2 text-sm font-bold"><span>Invoice total</span><span class="num">${fmtMVR(pcInvoiceTotal(r))}</span></div>` : '') : '<div class="text-sm text-slate-400">No invoice yet.</div>';
   const btn = 'px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50';
@@ -6875,8 +6875,8 @@ async function savePcReplRequest(no){
   const dup = state.pettyStatements.find(x => x.id !== s.rec.id && x.replRequest && pcReplNo({ no:x.no, rec:x }).toLowerCase() === String(o.number).trim().toLowerCase());
   if(dup) return vFail('Form number ' + o.number + ' is already used on statement ' + dup.no + '.');
   const prev = s.rec.replRequest || {};
-  const rr = { number: String(o.number).trim() === no ? '' : String(o.number).trim(), date: o.date, reqName: o.reqName.trim(), reqDept: (o.reqDept || '').trim(), amount: pcRound(vNum(o.amount)), comments: (o.comments || '').trim(),
-    hodName: (o.hodName || '').trim(), hodDate: o.hodDate || '', hodAmount: o.hodAmount === '' || o.hodAmount == null ? null : pcRound(vNum(o.hodAmount)), hodRemarks: (o.hodRemarks || '').trim(),
+  const rr = { number: String(o.number).trim() === no ? '' : String(o.number).trim(), date: o.date, reqName: o.reqName.trim(), reqDept: String(o.reqDept || '').trim(), amount: pcRound(vNum(o.amount)), comments: String(o.comments || '').trim(),
+    hodName: String(o.hodName || '').trim(), hodDate: o.hodDate || '', hodAmount: o.hodAmount === '' || o.hodAmount == null ? null : pcRound(vNum(o.hodAmount)), hodRemarks: String(o.hodRemarks || '').trim(),
     docUrl: url, docFile: prev.docFile || null, createdAt: prev.createdAt || Date.now(), createdBy: prev.createdBy || (authUser ? authUser.name : ''), updatedAt: Date.now() };
   const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
   await vehSave('pettyStatements', { id: s.rec.id, replRequest: rr });
@@ -7375,12 +7375,12 @@ function lvStaff(year, all){
   lvExtras().forEach(s => { if(!hidden.has(s.key)) add(s.key, s.name, s.department, true); });
   state.leavePlans.filter(d => d.year === year && !hidden.has(d.staffKey)).forEach(d => add(d.staffKey, d.name, d.department, d.staffKey.startsWith('x:')));
   const order = vehSettings.leaveOrder || [];
-  return out.sort((a, b) => { const ia = order.indexOf(a.key), ib = order.indexOf(b.key); if(ia >= 0 || ib >= 0) return (ia < 0 ? 1e6 : ia) - (ib < 0 ? 1e6 : ib); return String(a.department).localeCompare(String(b.department)) || a.name.localeCompare(b.name); });
+  return out.sort((a, b) => { const ia = order.indexOf(a.key), ib = order.indexOf(b.key); if(ia >= 0 || ib >= 0) return (ia < 0 ? 1e6 : ia) - (ib < 0 ? 1e6 : ib); return String(a.department).localeCompare(String(b.department)) || String(a.name || '').localeCompare(String(b.name || '')); });
 }
 // staff grouped by level (in the order of the levels), designation then name within a level
 function lvGroups(staff){
   const ps = staff.map(s => Object.assign({}, s, (p => ({ level:p.level, designation:p.designation }))(sdPerson(s.key)))), L = sdLevels(), out = [];
-  L.concat(['Not set']).forEach(l => { const g = ps.filter(p => l === 'Not set' ? !L.includes(p.level) : p.level === l).sort((a, b) => String(a.designation).localeCompare(String(b.designation)) || a.name.localeCompare(b.name)); if(g.length) out.push([l, g]); });
+  L.concat(['Not set']).forEach(l => { const g = ps.filter(p => l === 'Not set' ? !L.includes(p.level) : p.level === l).sort((a, b) => String(a.designation).localeCompare(String(b.designation)) || String(a.name || '').localeCompare(String(b.name || ''))); if(g.length) out.push([l, g]); });
   return out;
 }
 const lvDoc = (key, year) => state.leavePlans.find(d => d.staffKey === key && d.year === year) || null;
@@ -8327,7 +8327,7 @@ function tkReportData(){
   });
   const list = Object.values(rows).filter(r => r.n), tot = list.reduce((s, r) => s + r.pts, 0);
   list.forEach(r => { r.share = tot ? r.pts / tot * 100 : 0; r.avg = r.nAct ? Math.round(r.sumP / r.nAct) : null; r.rate = r.done ? Math.round(r.onTime / r.done * 100) : null; });
-  list.sort((a, b) => b.pts - a.pts || b.done - a.done || a.name.localeCompare(b.name));
+  list.sort((a, b) => b.pts - a.pts || b.done - a.done || String(a.name || '').localeCompare(String(b.name || '')));
   return { R, tasks, list, tot };
 }
 function tkReport(){
@@ -8775,6 +8775,11 @@ function eggCode(line, sub){
 const lvCodeLabel = c => { try{ return (lvTypes().find(t => t.code === c) || {}).name || c; }catch(e){ return c; } };
 const amIViewer = () => !!authUser && authUser.role === 'viewer';
 function viewerBlock(){ if(!amIViewer()) return false; toast('You have view-only access.', true); return true; }
+// view-only users: the add / edit / delete buttons are hidden instead of failing when pressed
+function viewerTrim(root){ if(!amIViewer()) return; (root || document.getElementById('main-inner') || document).querySelectorAll('button, a[onclick]').forEach(b => {
+  const t = (b.textContent || '').trim(), oc = b.getAttribute('onclick') || '';
+  if(/^\+\s/.test(t) || /^\+[A-Z]/.test(t) || /^(✎\s*)?(edit|delete|remove)\b/i.test(t) || /\b(open\w*Form|delete\w*|confirmDelete\w*)\(/.test(oc) && !/download|pdf|word|excel|csv/i.test(t)) b.style.display = 'none'; }); }
+window.addEventListener('unhandledrejection', e => { if(e.reason && e.reason.viewOnly) e.preventDefault(); });     // the toast already told them
 
 /* ---------- Firestore: offline-friendly saves + view-only guard ---------- */
 function fsAfterInit(db){
@@ -10043,7 +10048,7 @@ async function anyaCommands(t, raw){
     return say(`Opened a new complaint: **${esc(tt)}**${lv ? ' · level ' + lv : ''}. Add the details and press **Record complaint**.`); }
   if((m = /^(?:new|add|create|write|report|log)\s+(?:an?\s+)?incident(?: report)?\s*(?:about|regarding|on|for|of)?\s*(.*)$/.exec(n))){
     anyaToggleSmall(); goTo('incident-reports'); openIrForm(''); await anyaWaitForm(2000);
-    const f = document.getElementById('vform'), s = (m[1] || '').trim(), so = anyaOrig(raw, s); if(f && s){ if(f.subject) f.subject.value = so; if(f.description) f.description.value = so + '.'; const ty = IR_TYPES.find(x => anyaNorm(x).split(' ').some(w => w.length > 3 && s.includes(w))); if(ty && f.type) f.type.value = ty; }
+    const f = document.getElementById('vform'), s = String(m[1] || '').trim(), so = anyaOrig(raw, s); if(f && s){ if(f.subject) f.subject.value = so; if(f.description) f.description.value = so + '.'; const ty = IR_TYPES.find(x => anyaNorm(x).split(' ').some(w => w.length > 3 && s.includes(w))); if(ty && f.type) f.type.value = ty; }
     return say('Opened a new incident report' + (s ? ' with the subject filled in' : '') + '. Add what happened, the damage and the action taken, then **Save report**.'); }
   if((m = /^(?:log |add |record )?(stock in|receive|received)\s+(\d+)\s+(.+?)(?:\s+(?:at|to|into|in)\s+(.+))?$/.exec(n)) && state.products.length){
     const ps = anyaSrMatch(m[3]); if(!ps.length) return say(`I couldn't find **${esc(m[3])}** in the items list.`);
@@ -10671,7 +10676,7 @@ function trParseTRF(rows){
     o.toDate = (want && cands.includes(want)) ? want : want && !cands.length ? want : cands.sort().pop() || want || ''; o.days = n; }
   // budget: the ticked box
   const tick = R.find(l => /[☒☑✔✓■]|\[x\]/i.test(l)); if(tick){ const lab = tick.replace(/^.*?(?:[☒☑✔✓■]|\[x\])\s*/i, '').replace(/\s*[☐□].*$/, '').trim(); const b = trBudgets().find(x => trNorm(lab).includes(trNorm(x)) || trNorm(x).includes(trNorm(lab))); if(b) o.budget = b; }
-  i = find(/^purpose/i); if(i >= 0){ let v = after(i, /^purpose(\s+of)?(\s+(trip|travel|visit))?/i); if(!v || /^(trip|travel)$/i.test(v)) v = (R[i + 1] || '').replace(/^(trip|travel)\b\s*/i, ''); o.purpose = v.replace(/^of\s+/i, '').replace(/\s+trip$/i, ' Trip').trim(); }
+  i = find(/^purpose/i); if(i >= 0){ let v = after(i, /^purpose(\s+of)?(\s+(trip|travel|visit))?/i); if(!v || /^(trip|travel)$/i.test(v)) v = String(R[i + 1] || '').replace(/^(trip|travel)\b\s*/i, ''); o.purpose = v.replace(/^of\s+/i, '').replace(/\s+trip$/i, ' Trip').trim(); }
   // travellers: the rows under PARTICIPANT DETAILS, up to COMMENTS
   const p0 = find(/participant\s+details/i), p1 = find(/comments\s*\/|additional\s+requests/i);
   if(p0 >= 0) rows.slice(p0 + 1, p1 > p0 ? p1 : p0 + 12).forEach(r => { const line = r.join('  '); if(/requested by|authori[sz]ed/i.test(line)) return;
@@ -10684,7 +10689,7 @@ function trParseTRF(rows){
   R.forEach(l => { const m = /^comments\s*:\s*(.+)$/i.exec(l); if(m) cm.push(m[1].trim()); }); o.comments = cm.join('\n').trim();
   // requested by / authorized by: two columns after the header row
   const h = find(/requested\s+by.*authori[sz]ed\s+by/i);
-  if(h >= 0){ rows.slice(h + 1, h + 6).forEach(r => { const k = (r[0] || '').toLowerCase(); if(/^name/.test(k)){ o.requestedBy = r[1] || ''; o.authorizedBy = r[2] || ''; } else if(/^designation/.test(k)){ o.requestedDesig = r[1] || ''; o.authorizedDesig = r[2] || ''; } }); }
+  if(h >= 0){ rows.slice(h + 1, h + 6).forEach(r => { const k = String(r[0] || '').toLowerCase(); if(/^name/.test(k)){ o.requestedBy = r[1] || ''; o.authorizedBy = r[2] || ''; } else if(/^designation/.test(k)){ o.requestedDesig = r[1] || ''; o.authorizedDesig = r[2] || ''; } }); }
   // country: from the destination (a city or a country with rates), else local
   const dest = trNorm(o.destination), rateC = [...new Set(trRates().map(r => r.country).filter(Boolean))];
   const city = Object.keys(TR_CITY_COUNTRY).find(c => new RegExp('\\b' + c + '\\b').test(dest));
@@ -10787,7 +10792,7 @@ async function trFromForm(files, viaAnya){
 function anyaFindTrip(t){
   const list = state.travelRequests.slice(); if(!list.length) return null;
   const no = /\b(?:trf\s*\/?\s*\d{4}\s*\/?\s*)?(\d{1,4}(?:-\d+)?)\b/.exec(t.replace(/\b20\d\d\b(?!\s*\/)/g, ''));
-  const byNo = no && list.find(x => (x.formNumber || '').replace(/\s+/g, '').toLowerCase().endsWith('/' + no[1]));
+  const byNo = no && list.find(x => String(x.formNumber || '').replace(/\s+/g, '').toLowerCase().endsWith('/' + no[1]));
   if(byNo) return byNo;
   const words = t.split(' ').filter(w => w.length > 3 && !/^(memo|process|prepare|make|create|generate|trip|travel|request|please|for|the|dsa|send|email|finance|draft)$/.test(w));
   const scored = list.map(x => ({ x, s:words.filter(w => anyaNorm([x.destination, x.country, x.purpose, x.formNumber, trParts(x).map(p => p.name).join(' ')].join(' ')).includes(w)).length })).filter(y => y.s).sort((a, b) => b.s - a.s);
@@ -10960,6 +10965,37 @@ function anyaRuleIntent(t){
   if(g && (s >= 1.5 || how)) return 'g:' + g.id;
   return null;
 }
+// short factual questions answered straight from the records (found by the app's full test run: these used to get a how-to guide instead)
+function anyaQuick(t){
+  const can = id => typeof anyaCanSee !== 'function' || anyaCanSee(id);
+  if(/\bnext\b.{0,20}\bhandover\b.{0,12}\b(no|number|ref|reference)\b|\bhandover\b.{0,12}\bnext (no|number|ref)/.test(t) && can('handovers')){
+    anyaSay('The next handover number is **' + hoNextRef() + '**.', [['New handover', "goTo('handovers'); openHandoverForm()"]]); return true; }
+  if(/\b(who|anyone|any one|staff)\b.{0,25}\b(on leave|off)\b.{0,15}\b(today|now|this week)\b/.test(t) && can('leave-plan')){
+    const T = vToday(), wk = /this week/.test(t), to = wk ? clIsoAdd(T, 6) : T, L = lvBetween(T, to);
+    if(!L.length) anyaSay(wk ? 'Nobody has leave planned in the next 7 days.' : 'Nobody is on leave today.', [['Open Staff Leave Plan', "goTo('leave-plan')"]]);
+    else anyaSay((wk ? 'On leave in the next 7 days' : 'On leave today') + ':', [['Open Staff Leave Plan', "goTo('leave-plan')"]], `<ul class="anya-list">${L.map(s => `<li><b>${esc(s.name)}</b>${s.department ? ' — ' + esc(s.department) : ''}: ${s.items.map(i => esc(i.code) + ' ' + esc(fmtDate(i.from)) + (i.to !== i.from ? '–' + esc(fmtDate(i.to)) : '')).join(', ')}</li>`).join('')}</ul>`);
+    return true; }
+  if(/\bfuel\b.{0,15}\b(balance|left|remaining|available)\b|\b(balance|left)\b.{0,15}\bfuel\b/.test(t) && can('fueling')){
+    const rqs = (state.fuelRequisitions || []).filter(rq => !rq.closed && vReqBalance(rq) > 0.004);
+    if(!rqs.length){ anyaSay('There is no fuel balance left on any open requisition.', [['Open Fueling', "goTo('fueling')"]]); return true; }
+    anyaSay('Fuel balance on open requisitions:', [['Open Fueling', "goTo('fueling')"]], `<ul class="anya-list">${rqs.map(rq => { const v = vehById(rq.vehicleId); return `<li><b>${esc(v ? v.plate : '—')}</b> · ${esc(vReqLabel(rq))}: ${esc(vMoney(vReqBalance(rq)))}${vHasL(rq) ? ' / ' + esc(vFmtL(vReqBalanceL(rq))) : ''}</li>`; }).join('')}</ul>`);
+    return true; }
+  if(/\b(vehicle|fleet|car|bike)\b.{0,15}\b(issues?|problems?|repairs?|faults?)\b|\bopen issues\b/.test(t) && can('servicing')){
+    const open = (state.serviceRecords || []).filter(r => r.kind === 'incident' && r.status !== 'Resolved');
+    anyaSay(open.length ? '**' + open.length + '** vehicle issue' + (open.length === 1 ? ' is' : 's are') + ' not resolved:' : 'No open vehicle issues. 👍', [['Open Servicing → Issues', "vehUi.svcTab='incident'; goTo('servicing')"]],
+      open.length ? `<ul class="anya-list">${open.slice(0, 8).map(r => { const v = vehById(r.vehicleId); return `<li><b>${esc(v ? v.plate : '—')}</b>: ${esc(r.issue || '—')} <span style="opacity:.7">(${esc(r.status || 'Open')}, ${esc(fmtDate(r.date))})</span></li>`; }).join('')}</ul>` : '');
+    return true; }
+  if(/\b(insurance|roadworthiness|annual fee|registration)\b.{0,25}\b(expir|due|renew)|\b(expir|due|renew)\w*\b.{0,25}\b(insurance|roadworthiness|annual fee)\b/.test(t) && can('vehicles')){
+    const rows = []; state.vehicles.forEach(v => VEH_STATUTORY.forEach(s => { const x = v[s.key]; if(x && x.expiry) rows.push({ v, s, d:x.expiry }); }));
+    const want = /insurance/.test(t) ? 'insurance' : /roadworth/.test(t) ? 'roadworthiness' : /annual fee|registration/.test(t) ? 'annualFee' : '';
+    const list = rows.filter(r => !want || r.s.key === want).sort((a, b) => String(a.d).localeCompare(String(b.d)));
+    if(!list.length){ anyaSay('No expiry dates are recorded for that yet.', [['Open Vehicles', "goTo('vehicles')"]]); return true; }
+    anyaSay('Expiry dates, soonest first:', [['Open Vehicles', "goTo('vehicles')"]], `<ul class="anya-list">${list.slice(0, 10).map(r => { const st = vExpiry(r.d); return `<li><b>${esc(r.v.plate)}</b> · ${esc(r.s.label)}: ${esc(fmtDate(r.d))}${st.k === 'crit' ? ' — <b>expired / due</b>' : st.k === 'warn' ? ' — due soon' : ''}</li>`; }).join('')}</ul>`);
+    return true; }
+  if(/\b(download|export|get|print)\b.{0,15}\bstock report\b|^stock report\b.{0,10}\b(pdf|excel|download)\b/.test(t) && can('stock-report')){
+    goTo('stock-report'); exportStockReportXlsx(); anyaSay('Choose the location and the period, then press **Download** (PDF or Excel).'); return true; }
+  return false;
+}
 async function anyaReply(q){
   // a reaction typed as a message rates my last answer
   const qq = String(q).trim(), up = /^(👍|👌|✅|good|great answer|correct|right|yes that'?s it|perfect)!*$/i.test(qq), down = /^(👎|❌|wrong|not what i meant|no that'?s wrong|incorrect|bad answer)!*$/i.test(qq);
@@ -10982,6 +11018,7 @@ async function anyaReply(q){
   if(!/\bdownload\b/.test(t) && (/\b(process|prepare|make|create|generate|do|issue|raise|calculate|work out)\b.{0,30}\bdsa\b|\bdsa memo\b.{0,20}\b(for|of)\b|\b(email|mail|send)\b.{0,25}\b(dsa|memo)\b/.test(t))){ await anyaProcessDsa(q); return; }
   if(/\b(submit|upload|attach|add|create|make|register|from)\b.{0,30}\b(travel|trip)\b.{0,25}\b(form|request form|file|pdf|scan|signed)\b|\btravel request form\b/.test(t) && !/\bhow\b/.test(t)){ anyaSay('Choose the signed travel request form (PDF or photo) — I\'ll read it, create the travel request and attach the form.', [['📎 Choose the form', () => trFormPick(true)]]); return; }
   if(await anyaCommands(t, q)) return;
+  if(anyaQuick(t)) return;
   if(anyaStockRequest(t, q)) return;
   if(anyaDownload(t)) return;
   if(/^(show|list|view|see)\b/.test(t) && /\b(letters|agreements|contracts|memos|documents|leases|vouchers|vehicles|tasks|complaints|handovers)\b/.test(t) && anyaRecordAnswer(t)) return;
@@ -11973,7 +12010,7 @@ function agAlert(d){
   return null;
 }
 function agTrackHtml(d){
-  const t = agTrack(d), T = agTotals(d), ed = !viewerBlock(), id = d.id, t0 = vToday();
+  const t = agTrack(d), T = agTotals(d), ed = !amIViewer(), id = d.id, t0 = vToday();
   const sec = (title, add, body) => `<div class="rounded-lg border border-slate-200 mb-4"><div class="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between"><span class="text-sm font-bold text-slate-800">${title}</span>${ed && add ? `<button onclick="${add}" class="text-xs font-semibold text-brand-600 hover:underline">+ Add</button>` : ''}</div>${body}</div>`;
   const rowsP = t.payments.map((p, i) => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agRowEdit('${id}', 'payments', ${i})"` : ''}><span class="w-24 text-slate-500">${p.due ? vDate(p.due) : '—'}</span><span class="flex-1 min-w-0 truncate">${esc(p.note || 'Payment')}</span><b class="num">${esc(agMoney(p.amount))}</b>${p.paid ? vPill('good', 'Paid ' + (p.paidOn ? vDate(p.paidOn) : '')) : p.due && p.due < t0 ? vPill('crit', 'Overdue') : vPill('warn', 'Due')}</div>`).join('');
   const rowsO = t.obligations.map((o, i) => `<div class="px-4 py-2 border-b border-slate-100 last:border-0 flex items-center gap-3 text-sm ${ed ? 'cursor-pointer hover:bg-slate-50' : ''}" ${ed ? `onclick="agRowEdit('${id}', 'obligations', ${i})"` : ''}><span class="w-24 text-slate-500">${o.due ? vDate(o.due) : '—'}</span><span class="flex-1 min-w-0"><span class="text-[11px] font-semibold text-slate-400 mr-1">${esc(o.who || '')}</span>${esc(o.text || '')}</span>${o.status === 'Done' ? vPill('good', 'Done') : o.due && o.due < t0 ? vPill('crit', 'Overdue') : vPill('warn', 'Pending')}</div>`).join('');
@@ -13014,7 +13051,7 @@ function pfDesignations(){
   sdDesigs().forEach(d => add(d.name, d.level)); sdAll().forEach(p => add(p.designation, p.level));
   state.documents.filter(x => x.type === 'tor' && (x.extra || {}).torKind !== 'service').forEach(x => add(x.title, sdLevelFor(x.title)));
   Object.keys(pfSpecs()).forEach(k => add(pfSpecs()[k].name || k));
-  return [...names.values()].sort((a, b) => (sdLevels().indexOf(a.level) + 1 || 99) - (sdLevels().indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name));
+  return [...names.values()].sort((a, b) => (sdLevels().indexOf(a.level) + 1 || 99) - (sdLevels().indexOf(b.level) + 1 || 99) || String(a.name || '').localeCompare(String(b.name || '')));
 }
 async function pfSaveSpecs(map){ vehSettings = Object.assign({}, vehSettings, { perfSpec:map }); await persistVehSettings(); }
 async function pfGenerateAll(onlyMissing){
@@ -13143,7 +13180,12 @@ const wrWeekEnd = iso => { let d = iso || vToday(); while(lvDow(d) !== 4) d = cl
 const wrWeekNo = thu => { const d = new Date(thu + 'T00:00:00Z'), y0 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return Math.ceil(((d - y0) / 86400000 + 1) / 7 + (((y0.getUTCDay() + 6) % 7) > 3 ? -1 : 0)) || 1; };
 const wrIsoWeek = thu => { const d = new Date(thu + 'T00:00:00Z'); const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7)); const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 86400000 + 1) / 7); };
 const wrTitle = r => 'Week ' + r.weekNo + ' - ' + pcOrdinalDate(r.weekStart).replace(/ \d{4}$/, '').replace(/ (\w+)$/, ' $1') + ' - ' + pcOrdinalDate(r.weekEnd).replace(/ \d{4}$/, '');
-const wrById = id => state.weeklyReports.find(r => r.id === id) || null;
+// a report saved without its week (old or damaged data) gets the week of its creation date, so it can still be opened and printed
+const wrIso = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !isNaN(new Date(s + 'T00:00:00Z'));
+function wrFix(r){ if(!r || (wrIso(r.weekStart) && wrIso(r.weekEnd))) return r;
+  const c = typeof r.createdAt === 'number' ? new Date(r.createdAt).toISOString().slice(0, 10) : String(r.createdAt || '').slice(0, 10), base = [r.weekEnd, r.weekStart, r.date, c].find(wrIso) || vToday();
+  r.weekEnd = wrWeekEnd(base); r.weekStart = clIsoAdd(r.weekEnd, -5); if(!r.weekNo) r.weekNo = wrIsoWeek(r.weekEnd); if(!r.department) r.department = ''; return r; }
+const wrById = id => wrFix(state.weeklyReports.find(r => r.id === id) || null);
 
 /* =====================================================================
    DEPARTMENTAL UPDATE REPORT (the FDC template, from October 2026):
@@ -13368,7 +13410,7 @@ async function buildWr2Docx(r, blank){
 }
 function viewWeeklyReport(){
   if(vehUi.wrId && wrById(vehUi.wrId)){ const r0 = wrById(vehUi.wrId); return wr2Is(r0) ? wr2Editor(r0) : wrEditor(r0); }
-  const list = state.weeklyReports.slice().sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)) || String(a.department).localeCompare(String(b.department)));
+  const list = state.weeklyReports.map(wrFix).slice().sort((a, b) => String(b.weekEnd).localeCompare(String(a.weekEnd)) || String(a.department).localeCompare(String(b.department)));
   const thisWeek = wrWeekEnd(vToday()), mine = list.filter(r => r.weekEnd === thisWeek);
   return vHead('Department Weekly Report', 'Each department\'s weekly departmental update (FDC template): main activities, progress on objectives, pending matters, concerns and next week\'s priorities — drafted from the app, downloaded as PDF or Word.', vBtnPlain('Blank template', 'openWrBlank()') + vBtnPrimary('+ Weekly report', 'openWrNew()')) +
     vKpis(statCard('This week', 'Week ' + wrIsoWeek(thisWeek), pcOrdinalDate(clIsoAdd(thisWeek, -5)) + ' – ' + pcOrdinalDate(thisWeek), 'brand') + statCard('Reports this week', fmtNum(mine.length), mine.map(r => r.department).join(', ') || 'None yet', mine.length ? 'emerald' : 'amber') +
@@ -13435,7 +13477,7 @@ function wrAutoVehicles(start, end){
       (p.lineItems || []).filter(l => mentions(v, [l.itemName, l.itemDescription, p.title].join(' '))).forEach(l => { const t = [l.itemName, l.itemDescription].filter(Boolean).join(' – ') || p.title || 'Item', line = tag('PR', p.prNumber) + ': ' + t + money(l.totalCost) + ', ' + dt(d);
         (FUEL.test(t) ? fu : sv).push(line); }); });
     // fuel log (fills)
-    state.fuelRecords.filter(r => r.vehicleId === v.id && inW(r.date)).sort((a, b) => a.date.localeCompare(b.date)).forEach(r => { const rq = vReqById(r.requisitionId);
+    state.fuelRecords.filter(r => r.vehicleId === v.id && inW(r.date)).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).forEach(r => { const rq = vReqById(r.requisitionId);
       fu.push((r.fuelType || 'Fuel') + ' ' + fmtNum(vNum(r.litres)) + 'Lt' + money(r.total) + ', ' + dt(r.date) + (rq ? ' — ' + tag(rq.kind === 'PR' ? 'PR' : 'Petty cash', rq.refNo) : '')); });
     // servicing and incidents
     state.serviceRecords.filter(r => r.vehicleId === v.id && inW(r.date)).forEach(r => sv.push((r.kind === 'incident' ? (r.issue || 'Issue') + (r.status ? ' (' + r.status + ')' : '') : (r.serviceType || r.type || 'Service')) + money(r.cost) + ', ' + dt(r.date)));
@@ -13526,7 +13568,7 @@ async function buildWeeklyReportPdf(r, opt){
   const center = (x0, x1, b, t, o) => { o = Object.assign({ size:FS }, o || {}); pg.text(x0 + (x1 - x0 - pdfTextWidth(t, !!o.bold, o.size)) / 2, b, t, o); };
   center(L, R, y, 'WEEKLY REPORT', { bold:true, size:15 }); y += 20; center(L, R, y, r.department, { bold:true, size:11 }); y += 18;
   pdfRuns(pg, L, y, [{ t:'Week: ', bold:true, size:10 }, { t:String(r.weekNo), size:10 }]); y += 15;
-  const dp = s => { const d = pcReplDateParts(s); return [{ t:d.d.padStart(2, '0'), size:10 }, { t:d.suf, size:6, rise:3.6 }, { t:' ' + PC_MONTH_NAMES[+s.slice(5, 7) - 1], size:10 }]; };
+  const dp = s => { s = String(s || ''); if(!/^\d{4}-\d{2}-\d{2}/.test(s)) return [{ t:'—', size:10 }]; const d = pcReplDateParts(s); return [{ t:d.d.padStart(2, '0'), size:10 }, { t:d.suf, size:6, rise:3.6 }, { t:' ' + PC_MONTH_NAMES[+s.slice(5, 7) - 1], size:10 }]; };
   pdfRuns(pg, L, y, [{ t:'Date: ', bold:true, size:10 }].concat(dp(r.weekStart), [{ t:' – ', size:10 }], dp(r.weekEnd))); y += 26;
   const TITLE_H = 8;                                                                  // the sub heading sits above the table
   const table = (title, cols, rows) => {                                             // cols: [label, width share]; rows: arrays of strings
@@ -13828,7 +13870,7 @@ function baTotals(r){
   return { balance:pcRound(es.reduce((s, e) => s + baNet(e), 0)), spent:pcRound(es.filter(e => e.type === 'Transferred').reduce((s, e) => s + vNum(e.amount), 0)),
     received:pcRound(es.filter(e => e.type === 'Received').reduce((s, e) => s + vNum(e.amount), 0)), pending:es.filter(e => e.invoice === 'Pending').length };
 }
-const baCanEdit = r => !viewerBlock() && (canManageInventory() || !r || (authUser && (r.createdByUid === authUser.uid || r.holder === authUser.name)));
+const baCanEdit = r => !amIViewer() && (canManageInventory() || !r || (authUser && (r.createdByUid === authUser.uid || r.holder === authUser.name)));
 const baPendingAll = () => (state.businessAdvances || []).filter(r => r.status !== 'Settled').reduce((s, r) => s + baTotals(r).pending, 0);
 const baDate = d => d ? pcOrdinalDate(d) : '';
 const baFile = r => (r.no ? r.no + ' - ' : '') + String(r.title || 'Business Advance').replace(/[^A-Za-z0-9 &()-]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -15254,7 +15296,7 @@ function attReadMap(k){
 function attParseText(text){
   const T = String(text || ''), lines = T.replace(/\r/g, '').split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean), inv = pcParseInvoiceText(T);
   const after = re => { for(let i = 0; i < lines.length; i++){ const m = re.exec(lines[i]); if(m){ const d = pcFindDates(lines[i].slice(m.index + m[0].length))[0] || (lines[i + 1] ? pcFindDates(lines[i + 1])[0] : ''); if(d) return d; } } return ''; };
-  const val = re => { for(let i = 0; i < lines.length; i++){ const m = re.exec(lines[i]); if(m){ const v = (m[1] || '').trim() || (lines[i + 1] || '').trim(); if(v) return v.replace(/^[:#\-.\s]+/, '').trim(); } } return ''; };
+  const val = re => { for(let i = 0; i < lines.length; i++){ const m = re.exec(lines[i]); if(m){ const v = String(m[1] || '').trim() || String(lines[i + 1] || '').trim(); if(v) return v.replace(/^[:#\-.\s]+/, '').trim(); } } return ''; };
   const num = re => { const v = val(re), t = /([A-Za-z0-9][A-Za-z0-9\/\-.()]*\d[A-Za-z0-9\/\-.()]*)/.exec(v); return t ? t[1].replace(/[.,]$/, '') : ''; };
   const all = lines.flatMap(pcFindDates).sort();
   const o = {
@@ -15289,7 +15331,7 @@ function prParseForm(text){
   const h = L.findIndex(l => /Description/i.test(l) && /(Qty|Unit\s*Cost|Amount)/i.test(l)), t = L.findIndex((l, i) => i > h && /^Total\b/i.test(l));
   if(h >= 0) L.slice(h + 1, t > h ? t : h + 12).forEach(l => {
     const m = /^(\S+)\s+(.+?)\s+(?:([A-Za-z]{2,6})\s+)?(\d[\d,]*(?:\.\d+)?)\s+(\d[\d,]*\.\d{2})\s+(\d[\d,]*\.\d{2})(?:\s+(.+))?$/.exec(l);
-    if(m){ out.items.push({ code:m[1], name:m[2].trim(), uom:m[3] || '', qty:money(m[4]), unitCost:money(m[5]), amount:money(m[6]), budget:(m[7] || '').trim() }); return; }
+    if(m){ out.items.push({ code:m[1], name:m[2].trim(), uom:m[3] || '', qty:money(m[4]), unitCost:money(m[5]), amount:money(m[6]), budget:String(m[7] || '').trim() }); return; }
     // a scan read less cleanly: an item line (ITM-… or text) ending in qty · unit cost · amount, checked by qty × unit cost = amount
     const nums = [...l.matchAll(/\d[\d,]*(?:[.,]\d{1,2})?/g)].map(x => ({ v:money(x[0].replace(/,(?=\d{2}$)/, '.')), i:x.index, t:x[0] })).filter(x => x.v > 0);
     if(nums.length < 3 || /^total\b/i.test(l)) return;
@@ -16122,12 +16164,12 @@ function utAccountsHtml(type){
 const UT_PREF_KEY = 'fdc_inventory_ut_layout';
 function utPrefs(){ let p = {}; try{ p = JSON.parse(localStorage.getItem(UT_PREF_KEY) || '{}') || {}; }catch(e){} return Object.assign({ layout:'cards', sort:(vehSettings.utLocOrder || []).length ? 'custom' : 'name', unlinked:'below' }, p); }
 function utSetPref(k, v){ const p = utPrefs(); p[k] = v; try{ localStorage.setItem(UT_PREF_KEY, JSON.stringify(p)); }catch(e){} vehUi._utPrefs = p; rerenderMain(); }
-function utCustomOrder(){ const ord = vehSettings.utLocOrder || [], pos = {}; ord.forEach((id, i) => { pos[id] = i; }); return LOCATIONS.slice().sort((a, b) => ((pos[a.id] ?? 1e6) - (pos[b.id] ?? 1e6)) || a.name.localeCompare(b.name)); }
+function utCustomOrder(){ const ord = vehSettings.utLocOrder || [], pos = {}; ord.forEach((id, i) => { pos[id] = i; }); return LOCATIONS.slice().sort((a, b) => ((pos[a.id] ?? 1e6) - (pos[b.id] ?? 1e6)) || String(a.name || '').localeCompare(String(b.name || ''))); }
 function utSortedLocs(type, sort){
   const month = localDateStr(new Date()).slice(0, 7), accIds = l => state.utilityAccounts.filter(a => a.type === type && a.locationId === l.id).map(a => a.id);
   const cost = l => { const ids = accIds(l); return state.utilityBills.filter(b => ids.includes(b.accountId) && b.period === month).reduce((t, b) => t + vNum(b.amount), 0); };
   const unpaid = l => { const ids = accIds(l); return state.utilityBills.filter(b => ids.includes(b.accountId) && !b.paidDate).length; };
-  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric:true });
+  const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric:true });
   if(sort === 'custom') return utCustomOrder();
   if(sort === 'code') return LOCATIONS.slice().sort((a, b) => String(a.code || '~').localeCompare(String(b.code || '~'), undefined, { numeric:true }) || byName(a, b));
   if(sort === 'cost') return LOCATIONS.slice().sort((a, b) => cost(b) - cost(a) || byName(a, b));
@@ -16783,10 +16825,10 @@ function backfillDepartmentAssetCodes(){
   if(!canManageInventory()) return; // only an admin session persists this, avoiding permission errors and duplicate work across sessions
   const missing = state.assets.filter(a=>!a.departmentAssetCode);
   if(!missing.length){ assetCodeBackfillDone = true; return; }
-  missing.sort((a,b)=> (a.createdAt||'').localeCompare(b.createdAt||'') || (a.name||'').localeCompare(b.name||''));
+  missing.sort((a,b)=> String(a.createdAt || '').localeCompare(b.createdAt||'') || String(a.name || '').localeCompare(b.name||''));
   let next = 0;
   state.assets.forEach(a=>{
-    const match = (a.departmentAssetCode||'').match(/^AD-(\d+)$/);
+    const match = String(a.departmentAssetCode || '').match(/^AD-(\d+)$/);
     if(match){ const n = parseInt(match[1], 10); if(n > next) next = n; }
   });
   missing.forEach(a=>{
@@ -16831,6 +16873,8 @@ function dashFitValues(){
 }
 try{ window.addEventListener('resize', () => { clearTimeout(window._dashFitT); window._dashFitT = setTimeout(dashFitValues, 120); }); }catch(e){}
 function render(){
+  // pages only admins have in their menu are not shown to anyone else, even from an old link
+  if((ui.tab === 'admin' && !(authUser && authUser.role === 'admin')) || ((ui.tab === 'locations' || ui.tab === 'backups') && !canManageInventory())) ui.tab = 'dashboard';
   try{ setTimeout(dashFitValues, 0); setTimeout(fitAppTitle, 0); }catch(e){}
   try{ setTimeout(() => { try{ anyaSync(); }catch(e){} }, 0); }catch(e){}
   try{ stkAlertSoon(); ndSoon(); }catch(e){}
@@ -16901,6 +16945,7 @@ function render(){
   }
   try{ const banner = unsyncedBannerHtml(); if(banner) el.innerHTML = banner + el.innerHTML; }catch(e){}
   try{ vehAfterRender(); }catch(e){ console.error(e); }
+  try{ viewerTrim(); }catch(e){}
   try{ eggAfterRender(); }catch(e){}
   try{ eggAfterRender2(); }catch(e){}
   try{ if(authUser && !sfLoaded){ sfLoad(); plusBoot(); setTimeout(rerenderMain, 0); } plusAfterRender(); }catch(e){ console.error(e); }
@@ -17155,7 +17200,7 @@ function locationTotalItems(locId){ return state.products.filter(p=>qtyAt(p, loc
 function categoryBreakdown(){
   const map = {};
   state.products.forEach(p=>{
-    const cat = (p.category||'').trim() || 'Uncategorized';
+    const cat = String(p.category || '').trim() || 'Uncategorized';
     map[cat] = (map[cat]||0) + productTotalQty(p);
   });
   return Object.entries(map).map(([category, units])=>({category, units})).sort((a,b)=>b.units-a.units);
@@ -17163,7 +17208,7 @@ function categoryBreakdown(){
 function assetCategoryBreakdown(){
   const map = {};
   state.assets.forEach(a=>{
-    const cat = (a.category||'').trim() || 'Uncategorized';
+    const cat = String(a.category || '').trim() || 'Uncategorized';
     map[cat] = (map[cat]||0) + 1;
   });
   return Object.entries(map).map(([category, count])=>({category, count})).sort((a,b)=>b.count-a.count);
@@ -17498,7 +17543,7 @@ function viewAssetReport(){
   const maxAssetsAtLoc = Math.max(1, ...LOCATIONS.map(l=>assetLocationTotals(l.id)));
   const assetCatBreakdown = assetCategoryBreakdown();
   const maxAssetCat = Math.max(1, ...assetCatBreakdown.map(b=>b.count));
-  const recentAssetActivity = [...state.assetTransfers].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,8);
+  const recentAssetActivity = [...state.assetTransfers].sort((a,b)=> dtKey(b).localeCompare(dtKey(a))).slice(0,8);
   return `
     <div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-6">
       <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Asset Report</h1>
@@ -18427,7 +18472,7 @@ const DEPARTMENTS = [
 ];
 function departmentOptionsHtml(filterText, prefix){
   prefix = prefix || 'mf';
-  const f = (filterText||'').trim().toLowerCase();
+  const f = String(filterText || '').trim().toLowerCase();
   const list = DEPARTMENTS.filter(d => !f || d.name.toLowerCase().includes(f) || d.code.toLowerCase().includes(f));
   if(!list.length) return `<div class="px-3.5 py-2.5 text-sm text-slate-400">No matching department — you can still type a custom one.</div>`;
   return list.map(d => `
@@ -18483,7 +18528,7 @@ function costValuationByItem(){
 function costValuationByCategory(){
   const map = {};
   costValuationByItem().forEach(e=>{
-    const cat = (e.product.category||'').trim() || 'Uncategorized';
+    const cat = String(e.product.category || '').trim() || 'Uncategorized';
     map[cat] = (map[cat]||0) + e.totalCost;
   });
   return Object.entries(map)
@@ -18529,12 +18574,12 @@ function categoryMonthlyCostSeriesRange(months){
   const categories = new Set();
   state.movements.forEach(m=>{
     const p = getProduct(m.productId);
-    if(p) categories.add((p.category||'').trim() || 'Uncategorized');
+    if(p) categories.add(String(p.category || '').trim() || 'Uncategorized');
   });
   return [...categories].sort((a,b)=>a.localeCompare(b)).map(cat=>{
     const catMovements = state.movements.filter(m=>{
       const p = getProduct(m.productId);
-      return p && ((p.category||'').trim() || 'Uncategorized') === cat;
+      return p && (String(p.category || '').trim() || 'Uncategorized') === cat;
     });
     return { category: cat, ...monthlyCostSeriesForMovements(catMovements, months) };
   }).filter(c => c.purchaseCost.some(v=>v>0) || c.consumptionCost.some(v=>v>0));
@@ -18741,7 +18786,7 @@ function listenToAllProfiles(){
 }
 function viewAdmin(){
   listenToAllProfiles();
-  const list = [...state.profiles].sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const list = [...state.profiles].sort((a,b)=>String(a.name || '').localeCompare(b.name||''));
   const rows = list.map(p=>{
     const isSelf = authUser && p.uid===authUser.uid;
     return `
@@ -18911,7 +18956,7 @@ function viewLocations(){
         <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Locations</h1>
         <p class="text-sm text-slate-500 mt-0.5">Manage the sites you track stock and assets across.</p>
       </div>
-      <button onclick="openLocationForm()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Add Location</button>
+      ${canManageInventory() ? `<button onclick="openLocationForm()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">+ Add Location</button>` : ''}
     </div>
     <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
       <div class="overflow-x-auto">
@@ -19099,7 +19144,7 @@ function removeMember(uid, name){
   if(!firestoreProfilesRef || !firestoreDb){ toast('Removing members requires cloud sync to be connected.', true); return; }
   const removedProfile = state.profiles.find(p => p.uid === uid) || {};
   confirmAction(`Remove ${name}? They will lose access immediately. Their sign-in stays blocked until an admin adds them again or unblocks them in the Admin Panel.`, async ()=>{
-    const isPermissionError = e => e && (e.code==='permission-denied' || (e.message||'').toLowerCase().includes('permission'));
+    const isPermissionError = e => e && (e.code==='permission-denied' || String(e.message || '').toLowerCase().includes('permission'));
     try{
       await firestoreProfilesRef.doc(uid).delete();
     }catch(e){
@@ -19290,7 +19335,7 @@ async function submitAddMember(){
   if(!designation) return fail('Enter their designation.');
   if(!department) return fail('Enter their department.');
   if(mode === 'set' && typed.length < 6) return fail('The password must be at least 6 characters.');
-  if(state.profiles.some(p => (p.email || '').toLowerCase() === email.toLowerCase())) return fail('There is already a member with this email.');
+  if(state.profiles.some(p => String(p.email || '').toLowerCase() === email.toLowerCase())) return fail('There is already a member with this email.');
   addingMember = true;
   const btn = document.getElementById('am-go');
   if(btn){ btn.disabled = true; btn.textContent = 'Adding…'; }
@@ -19408,7 +19453,7 @@ function viewMovements(mode){
   const report = mode === 'report';
   const f = ui.movementsFilter;
   let list = getFilteredMovements();
-  list.sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt));
+  list.sort((a,b)=> dtKey(b).localeCompare(dtKey(a)));
 
   const totalIn = list.filter(m=>m.type==='in').reduce((s,m)=>s+m.quantity,0);
   const totalOut = list.filter(m=>m.type==='out').reduce((s,m)=>s+m.quantity,0);
@@ -19421,7 +19466,7 @@ function viewMovements(mode){
   const isRequests = !report && ui.movementsView==='requests';
   const requestsToApprove = stockRequestsAwaitingMe().length;
   const pendingTransferCount = state.itemTransfers.filter(t=>t.status==='pending').length;
-  const transferList = isTransfers ? [...state.itemTransfers].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)) : [];
+  const transferList = isTransfers ? [...state.itemTransfers].sort((a,b)=> dtKey(b).localeCompare(dtKey(a))) : [];
   const valuation = isValuation ? costValuationByItem() : [];
   const valuationGrandTotal = valuation.reduce((s,v)=>s+v.totalCost,0);
   const categoryValuation = isValuation ? costValuationByCategory() : [];
@@ -19656,10 +19701,10 @@ function viewItemTransfersTab(list){
 }
 
 function getUniqueItemNames(){
-  return [...new Set(state.products.map(p=>p.name))].sort((a,b)=>a.localeCompare(b));
+  return [...new Set(state.products.map(p=>String(p.name || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
 }
 function movementItemOptionsHtml(filterText, idx){
-  const f = (filterText||'').trim().toLowerCase();
+  const f = String(filterText || '').trim().toLowerCase();
   const names = getUniqueItemNames().filter(n=> !f || n.toLowerCase().includes(f));
   if(!names.length) return `<div class="px-3.5 py-2.5 text-sm text-slate-400">No items match "${esc(filterText)}".</div>`;
   return names.map(n=>{
@@ -20374,7 +20419,7 @@ function getFilteredAssets(){
   if(f.locationId) list = list.filter(a=> f.locationId === '__ext' ? isExtLoc(a.locationId) : a.locationId===f.locationId);
   if(f.department){
     const q = f.department.toLowerCase();
-    list = list.filter(a=>(a.department||'').toLowerCase() === q);
+    list = list.filter(a=>String(a.department || '').toLowerCase() === q);
   }
   if(f.search){
     const q = f.search.toLowerCase();
@@ -20529,7 +20574,7 @@ function viewAssets(){
   }).join('');
   const deptOpts = [...new Set(DEPARTMENTS.map(d => d.name).concat(state.assets.map(a => a.department).filter(Boolean)))].sort((x, y) => x.localeCompare(y));
 
-  const recentTransfers = [...state.assetTransfers].sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,8);
+  const recentTransfers = [...state.assetTransfers].sort((a,b)=> dtKey(b).localeCompare(dtKey(a))).slice(0,8);
 
   return `
     <div class="sticky-toolbar flex items-start justify-between gap-4 flex-wrap mb-6">
@@ -20720,7 +20765,7 @@ const prNumberCollator = new Intl.Collator(undefined, { numeric:true, sensitivit
 function prSortCompare(sortId){
   const num  = (a,b) => prNumberCollator.compare(a.prNumber||'', b.prNumber||'');
   const date = (a,b) => prRequisitionDate(a).localeCompare(prRequisitionDate(b));
-  const made = (a,b) => (a.createdAt||'').localeCompare(b.createdAt||'');
+  const made = (a,b) => String(a.createdAt || '').localeCompare(b.createdAt||'');
   switch(sortId){
     case 'number_asc': return (a,b) => num(a,b) || made(a,b);
     case 'date_desc':  return (a,b) => date(b,a) || num(b,a);
@@ -20891,8 +20936,8 @@ function updatePrGrandTotal(){
   if(grandEl) grandEl.textContent = fmtMVR(total);
 }
 function prLineSkuOptionsHtml(filterText, idx){
-  const f = (filterText||'').trim().toLowerCase();
-  const matches = state.products.filter(p => !f || displayName(p).toLowerCase().includes(f) || (p.sku||'').toLowerCase().includes(f)).slice(0, 30);
+  const f = String(filterText || '').trim().toLowerCase();
+  const matches = state.products.filter(p => !f || displayName(p).toLowerCase().includes(f) || String(p.sku || '').toLowerCase().includes(f)).slice(0, 30);
   if(!matches.length) return `<div class="px-3.5 py-2.5 text-sm text-slate-400">No matching item — you can still enter the item name manually above.</div>`;
   return matches.map(p=>`
     <button type="button" onmousedown="event.preventDefault(); selectPrLineSku('${p.id}', ${idx})" class="w-full text-left px-3.5 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2">
@@ -20922,8 +20967,8 @@ function selectPrLineSku(productId, idx){
   if(nameInput && !nameInput.value.trim()) nameInput.value = displayName(p);
 }
 function prLineAssetOptionsHtml(filterText, idx){
-  const f = (filterText||'').trim().toLowerCase();
-  const matches = state.assets.filter(a => !f || a.name.toLowerCase().includes(f) || (a.departmentAssetCode||'').toLowerCase().includes(f) || (a.tag||'').toLowerCase().includes(f)).slice(0, 30);
+  const f = String(filterText || '').trim().toLowerCase();
+  const matches = state.assets.filter(a => !f || String(a.name || '').toLowerCase().includes(f) || String(a.departmentAssetCode || '').toLowerCase().includes(f) || String(a.tag || '').toLowerCase().includes(f)).slice(0, 30);
   if(!matches.length) return `<div class="px-3.5 py-2.5 text-sm text-slate-400">No matching asset.</div>`;
   return matches.map(a=>`
     <button type="button" onmousedown="event.preventDefault(); selectPrLineAsset('${a.id}', ${idx})" class="w-full text-left px-3.5 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2">
@@ -20994,7 +21039,7 @@ async function prBgUpload(id, att){
 /* ---------- a requisition opens as details (read only); "Edit" at the top right opens the form ---------- */
 function openPrDetail(id){
   const pr = state.purchaseRequisitions.find(x => x.id === id); if(!pr) return;
-  const loc = getLocation(pr.locationId), items = pr.lineItems || [], s = prStatusMeta(pr.status), ap = pr.approvals || {}, canEdit = !(typeof viewerBlock === 'function' && viewerBlock());
+  const loc = getLocation(pr.locationId), items = pr.lineItems || [], s = prStatusMeta(pr.status), ap = pr.approvals || {}, canEdit = !amIViewer();
   const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v}</div></div>`;
   const rows = items.map(l => `<tr class="border-t border-slate-100 align-top"><td class="py-2 pr-3"><div class="text-slate-800 font-medium">${esc(l.itemName || '—')}</div>${l.itemDescription ? `<div class="text-[11.5px] text-slate-500">${esc(l.itemDescription)}</div>` : ''}${l.linkedProductId && getProduct(l.linkedProductId) ? `<div class="text-[11px] text-brand-600">↳ stock item: ${esc(displayName(getProduct(l.linkedProductId)))}${l.stockedIn ? ' · stocked in' : ''}</div>` : ''}</td>
     <td class="py-2 pr-3 text-[12px] text-slate-500">${esc(prLineBudgetCode(pr, l) || '—')}</td><td class="py-2 pr-3 text-right num">${fmtNum(l.quantity)}</td><td class="py-2 pr-3 text-right num whitespace-nowrap">${fmtMVR(l.unitCost)}</td><td class="py-2 text-right num font-semibold whitespace-nowrap">${fmtMVR(l.totalCost)}</td></tr>`).join('');
@@ -21374,7 +21419,7 @@ function prCardHtml(pr){
         <div class="text-[11.5px] text-slate-400">${items.length} item${items.length===1?'':'s'}</div>
       </div>
       <div class="pb-total pb-nowrap text-right"><div class="text-[15px] font-extrabold text-slate-900 num">${fmtMVR(pr.totalCost)}</div>
-        ${typeof viewerBlock === 'function' && viewerBlock() ? '' : `<select aria-label="Status" title="Change the status" onclick="event.stopPropagation()" onchange="prQuickStatus('${pr.id}', this.value, this)" class="mt-1.5 text-[11px] font-semibold rounded-full border border-transparent px-2.5 py-0.5 pr-7 cursor-pointer ${s.badge}">${PR_STATUSES.map(x => `<option value="${x.id}" ${x.id === (pr.status || 'open') ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`}</div>
+        ${amIViewer() ? '' : `<select aria-label="Status" title="Change the status" onclick="event.stopPropagation()" onchange="prQuickStatus('${pr.id}', this.value, this)" class="mt-1.5 text-[11px] font-semibold rounded-full border border-transparent px-2.5 py-0.5 pr-7 cursor-pointer ${s.badge}">${PR_STATUSES.map(x => `<option value="${x.id}" ${x.id === (pr.status || 'open') ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`}</div>
     </div>
   `;
 }
@@ -21522,7 +21567,7 @@ function hoRefreshAssetHint(idx){
   hint.textContent = a ? ('Linked asset · ' + a.name) : '';
 }
 function hoItemOptionsHtml(filterText, idx){
-  const f = (filterText||'').trim().toLowerCase();
+  const f = String(filterText || '').trim().toLowerCase();
   const names = getUniqueItemNames().filter(n=> !f || n.toLowerCase().includes(f));
   if(!names.length) return `<div class="px-3.5 py-2.5 text-sm text-slate-400">Not in the catalog — keep typing and it will be saved as a manual entry.</div>`;
   return names.map(n=>{
@@ -21548,7 +21593,7 @@ function hoItemTyped(idx){
   const pidEl = document.getElementById('ho-product-'+idx);
   const p = pidEl.value ? getProduct(pidEl.value) : null;
   // typing something other than the picked catalog item turns the row into a manual entry
-  if(p && input.value.trim().toLowerCase() !== p.name.toLowerCase()){
+  if(p && input.value.trim().toLowerCase() !== String(p.name || '').toLowerCase()){
     pidEl.value = '';
     document.getElementById('ho-variant-'+idx).innerHTML = '';
     document.querySelector(`.ho-line-wrap[data-line="${idx}"]`).classList.remove('has-variant');
@@ -21571,8 +21616,8 @@ function hoSelectVariant(idx){
   hoRefreshItemHint(idx);
 }
 function hoAssetOptionsHtml(filterText){
-  const f = (filterText||'').trim().toLowerCase();
-  const matches = state.assets.filter(a => !f || (a.name||'').toLowerCase().includes(f) || (a.departmentAssetCode||'').toLowerCase().includes(f) || (a.tag||'').toLowerCase().includes(f)).slice(0, 30);
+  const f = String(filterText || '').trim().toLowerCase();
+  const matches = state.assets.filter(a => !f || String(a.name || '').toLowerCase().includes(f) || String(a.departmentAssetCode || '').toLowerCase().includes(f) || String(a.tag || '').toLowerCase().includes(f)).slice(0, 30);
   if(!matches.length) return `<div class="px-3.5 py-2.5 text-sm text-slate-400">No matching asset — whatever you type is saved as the asset code.</div>`;
   return matches.map(a=>`
     <button type="button" onmousedown="event.preventDefault(); hoSelectAsset('${esc(a.id)}', __IDX__)" class="w-full text-left px-3.5 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2">
@@ -21639,7 +21684,7 @@ async function hoRemoveSigned(hid){ const h = state.handovers.find(x => x.id ===
 /* ---------- a handover opens as details (read only); "Edit" at the top right opens the form ---------- */
 function openHoDetail(id){
   const h = state.handovers.find(x => x.id === id); if(!h) return;
-  const lines = hoLines(h), canEdit = !(typeof viewerBlock === 'function' && viewerBlock()), sec = t => `<div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">${t}</div>`;
+  const lines = hoLines(h), canEdit = !amIViewer(), sec = t => `<div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">${t}</div>`;
   const rows = lines.map((l, i) => `<tr class="border-t border-slate-100"><td class="py-2 pr-3 text-slate-400 num">${i + 1}</td><td class="py-2 pr-3 text-slate-800">${esc(l.itemName || '—')}${l.itemDetails ? `<div class="text-[11.5px] text-slate-500">${esc(l.itemDetails)}</div>` : ''}</td><td class="py-2 pr-3">${l.assetCode ? `<span class="inline-flex px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-semibold">${esc(l.assetCode)}</span>` : '<span class="text-slate-300">—</span>'}</td><td class="py-2 text-right num font-semibold">${fmtNum(l.quantity)}</td></tr>`).join('');
   const qty = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
   shareFor('ho', id);
@@ -21779,7 +21824,7 @@ function saveHandover(id){
   if(fileUrl === null){ fail('The handover form link must be a web address (starting with https://).'); return; }
 
   if(!referenceNumber){ fail('Reference number is required.'); return; }
-  if(state.handovers.some(h=>(h.referenceNumber||'').toLowerCase()===referenceNumber.toLowerCase() && h.id!==id)){ fail('That reference number is already used by another handover.'); return; }
+  if(state.handovers.some(h=>String(h.referenceNumber || '').toLowerCase()===referenceNumber.toLowerCase() && h.id!==id)){ fail('That reference number is already used by another handover.'); return; }
   if(!handoverType){ fail('Handover type is required.'); return; }
   if(!handoverDate){ fail('Handover date is required.'); return; }
 
@@ -21803,7 +21848,7 @@ function saveHandover(id){
   if(!lineItems.length){ fail('Add at least one item.'); return; }
   const seenAssets = new Set();
   for(const l of lineItems){
-    const key = (l.assetCode||'').toLowerCase();
+    const key = String(l.assetCode || '').toLowerCase();
     if(!key) continue;
     if(seenAssets.has(key)){ fail(`Asset code ${l.assetCode} is on more than one item — an asset can only be handed over once in a handover.`); return; }
     seenAssets.add(key);
@@ -21896,7 +21941,7 @@ const hoFullySigned = h => !!(h && (h.fileUrl || h.signedFileId || (h.fromSignat
 // ---- export: one row per item, with every detail of its handover (follows the search box, never the "show more" paging)
 function exportHandoversCSV(){
   const all = [...state.handovers].sort(hoCompare);
-  const q = (ui.hoQuery || '').trim().toLowerCase(), terms = q ? q.split(/\s+/) : [];
+  const q = String(ui.hoQuery || '').trim().toLowerCase(), terms = q ? q.split(/\s+/) : [];
   const list = terms.length ? all.filter(h => { const hay = hoSearchText(h); return terms.every(t => hay.includes(t)); }) : all;
   if(!list.length){ toast('No handovers to export.', true); return; }
   const sigWhen = sig => sig && sig.signedAt ? localDateStr(new Date(sig.signedAt)) : '';
@@ -21928,7 +21973,7 @@ function exportHandoversCSV(){
 
 function viewHandovers(){
   const all = [...state.handovers].sort(hoCompare);
-  const q = (ui.hoQuery || '').trim().toLowerCase();
+  const q = String(ui.hoQuery || '').trim().toLowerCase();
   const terms = q ? q.split(/\s+/) : [];
   const filtered = terms.length ? all.filter(h => { const hay = hoSearchText(h); return terms.every(t => hay.includes(t)); }) : all;
   const list = filtered.slice(0, ui.hoShown || HO_PAGE);
@@ -23080,7 +23125,7 @@ async function hoImportFileChosen(input){
   }
 }
 function hoImportStage(parsed, fileName, sheetName){
-  const existing = new Set(state.handovers.map(h => (h.referenceNumber || '').trim().toLowerCase()).filter(Boolean));
+  const existing = new Set(state.handovers.map(h => String(h.referenceNumber || '').trim().toLowerCase()).filter(Boolean));
   const seen = new Set();
   const fresh = [], already = [], repeated = [];
   parsed.records.forEach(r => {
@@ -23186,7 +23231,7 @@ function showMoreHandovers(){ ui.hoShown = (ui.hoShown || HO_PAGE) + HO_PAGE; re
 function viewAssetTransactions(){
   const f = ui.assetTransactionsFilter;
   let list = getFilteredAssetTransactions();
-  list.sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt));
+  list.sort((a,b)=> dtKey(b).localeCompare(dtKey(a)));
   const locOptions = LOCATIONS.map(l=>`<option value="${l.id}" ${f.locationId===l.id?'selected':''}>${esc(l.name)}</option>`).join('') + (state.assetTransfers.some(t=>isExtLoc(t.toLocationId)||isExtLoc(t.fromLocationId)) ? `<option value="__ext" ${f.locationId==='__ext'?'selected':''}>↗ Outside the corporation</option>` : '');
 
   const rows = list.map(t=>{
@@ -23261,7 +23306,7 @@ function deleteAssetTransfer(id){
 function exportAssetTransfersCSV(){
   const f = ui.assetTransactionsFilter;
   const header = ['Date','Asset','Tag','From','To','Department','Assignee','Reason','Handled by'];
-  const rows = getFilteredAssetTransactions().sort((a,b)=>a.date.localeCompare(b.date)).map(t=>{
+  const rows = getFilteredAssetTransactions().sort((a,b)=>String(a.date || '').localeCompare(String(b.date || ''))).map(t=>{
     const a = getAsset(t.assetId);
     const fromLoc = getLocation(t.fromLocationId);
     const toLoc = getLocation(t.toLocationId);
@@ -23290,7 +23335,7 @@ function viewItemDetail(){
   }
   const low = isLowStock(p);
   const total = productTotalQty(p);
-  const history = state.movements.filter(m=>m.productId===p.id).sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,15);
+  const history = state.movements.filter(m=>m.productId===p.id).sort((a,b)=> dtKey(b).localeCompare(dtKey(a))).slice(0,15);
   const locMovements = movementsByLocation(p.id);
   const currentYear = new Date().getFullYear();
   const costSeries = monthlyCostSeries(p.id, currentYear);
@@ -23470,7 +23515,7 @@ function viewAssetDetail(){
       </div>`;
   }
   const loc = getLocation(asset.locationId);
-  const history = [...state.assetTransfers].filter(t=>t.assetId===asset.id).sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt));
+  const history = [...state.assetTransfers].filter(t=>t.assetId===asset.id).sort((a,b)=> dtKey(b).localeCompare(dtKey(a)));
 
   return `
     <button onclick="goTo('assets')" class="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:underline mb-4">← Back to Assets</button>
@@ -23653,7 +23698,7 @@ function saveAssetCodeEdit(id){
 function nextDepartmentAssetCode(){
   let max = 0;
   state.assets.forEach(a=>{
-    const match = (a.departmentAssetCode||'').match(/^AD-(\d+)$/);
+    const match = String(a.departmentAssetCode || '').match(/^AD-(\d+)$/);
     if(match){ const n = parseInt(match[1], 10); if(n > max) max = n; }
   });
   return 'AD-' + String(max+1).padStart(4, '0');
@@ -23905,7 +23950,7 @@ function exportProductsCSV(){
 function exportMovementsCSV(){
   const f = ui.movementsFilter;
   const header = ['Date','Type','Item','SKU','Location','Quantity','Acquisition','Reason / reference','Department','Staff name','Logged by'];
-  const rows = getFilteredMovements().sort((a,b)=>a.date.localeCompare(b.date)).map(m=>{
+  const rows = getFilteredMovements().sort((a,b)=>String(a.date || '').localeCompare(String(b.date || ''))).map(m=>{
     const p = getProduct(m.productId);
     const loc = getLocation(m.locationId);
     return [m.date, m.type==='in'?'Stock In':'Stock Out', p?displayName(p):'', p?p.sku||'':'', loc?loc.name:'', m.quantity, m.acquisition||'', m.reason||'', m.department||'', m.staffName||'', m.loggedByName||''];

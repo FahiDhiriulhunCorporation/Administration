@@ -1998,7 +1998,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.365';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.366';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -5006,13 +5006,26 @@ async function pcReadInvoiceFile(file, onStatus, opts){
 const PC_FILES_COLLECTION = 'fdc_inventory_petty_cash_files', PC_FILE_MAX_CHARS = 850000, PC_FILE_MAX_PAGES = 6;
 const pcFileCache = {}, pcAttach = {};                                  // pcAttach: files chosen in the open form, not saved yet
 let pcRowCounter = 0;
-async function pcFileSave(id, data){ pcFileCache[id] = data; if(firestoreDb) await firestoreDb.collection(PC_FILES_COLLECTION).doc(id).set(data); }
+async function pcFileSave(id, data){
+  // SharePoint on: photo / scan pages go to the SharePoint library; only a small pointer is kept in the database
+  if(data && data.pages && data.pages.length && !data.sp && !/_c\d+$/.test(id) && spOn()){
+    try{ const sp = await spPutPages(data); pcFileCache[id] = Object.assign({}, data, { sp }); if(firestoreDb) await firestoreDb.collection(PC_FILES_COLLECTION).doc(id).set({ id, voucher:data.voucher || '', name:data.name || '', sp, at:data.at || Date.now() }); return; }
+    catch(e){ spFellBack(e); }
+  }
+  pcFileCache[id] = data; if(firestoreDb) await firestoreDb.collection(PC_FILES_COLLECTION).doc(id).set(data);
+}
+// the stored record as it is (a SharePoint pointer is not downloaded)
+async function pcFileRaw(id){
+  if(pcFileCache[id] && !pcFileCache[id].__hyd) return pcFileCache[id];
+  if(!firestoreDb) return pcFileCache[id] || null;
+  const snap = await firestoreDb.collection(PC_FILES_COLLECTION).doc(id).get(); return snap && snap.exists ? snap.data() : null;
+}
 async function pcFileLoad(id){
-  if(pcFileCache[id]) return pcFileCache[id];
-  if(!firestoreDb) return null;
-  const snap = await firestoreDb.collection(PC_FILES_COLLECTION).doc(id).get();
-  if(snap && snap.exists){ pcFileCache[id] = snap.data(); return pcFileCache[id]; }
-  return null;
+  if(pcFileCache[id] && !(pcFileCache[id].sp && !pcFileCache[id].pages && !pcFileCache[id].kind)) return pcFileCache[id];
+  let m = pcFileCache[id] || null;
+  if(!m){ if(!firestoreDb) return null; const snap = await firestoreDb.collection(PC_FILES_COLLECTION).doc(id).get(); if(!(snap && snap.exists)) return null; m = snap.data(); }
+  if(m.sp && !m.pages && !m.kind){ pcFileCache[id] = await spHydrate(id, m); return pcFileCache[id]; }
+  pcFileCache[id] = m; return m;
 }
 async function pcFileDelete(id){ delete pcFileCache[id]; if(firestoreDb){ try{ await firestoreDb.collection(PC_FILES_COLLECTION).doc(id).delete(); }catch(e){} } }
 async function pcPdfToCanvases(file){
@@ -12044,8 +12057,174 @@ async function agPrepare(files){
 }
 const agSizeText = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 const agAttText = a => a.pdf ? a.name + ' · PDF, ' + agSizeText(a.size) : a.name + ' · ' + a.pages.length + ' page' + (a.pages.length === 1 ? '' : 's');
+
+/* =====================================================================
+   SHAREPOINT — attachments saved to the Administration Department site (Microsoft Graph, each person signs in to Microsoft once).
+   Off until an admin enters the app registration in Admin Panel → SharePoint storage. If an upload to SharePoint is not possible
+   (not signed in, offline, no access) the file is kept in the app's own database as before, so nothing is ever lost.
+===================================================================== */
+const SP_DEF = { on:false, clientId:'', tenant:'fahi.onmicrosoft.com', site:'https://fahi.sharepoint.com/sites/AdministrationDepartment', library:'Documents', folder:'General/19. DATABASE/App attachments' };
+const SP_SCOPES = ['Sites.ReadWrite.All'];
+const SP_MSAL_URLS = ['https://alcdn.msauth.net/browser/2.38.4/js/msal-browser.min.js', 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js'];
+const spCfg = () => Object.assign({}, SP_DEF, vehSettings.sp || {});
+const spOn = () => { const c = spCfg(); return !!(c.on && c.clientId && c.site); };
+const spRedirect = () => location.origin + location.pathname;
+let spApp = null, spAppKey = '', spDriveCache = null, spFallToastAt = 0;
+async function spMsal(){
+  const c = spCfg(), key = c.clientId + '|' + c.tenant;
+  if(spApp && spAppKey === key) return spApp;
+  if(typeof msal === 'undefined'){ let ok = false; for(const u of SP_MSAL_URLS){ try{ await loadScriptOnce(u); ok = typeof msal !== 'undefined'; if(ok) break; }catch(e){} } if(!ok) throw new Error('the Microsoft sign-in library could not be loaded — check the internet connection'); }
+  const app = new msal.PublicClientApplication({ auth:{ clientId:c.clientId, authority:'https://login.microsoftonline.com/' + (c.tenant || 'organizations'), redirectUri:spRedirect() }, cache:{ cacheLocation:'localStorage' } });
+  if(app.initialize) await app.initialize(); try{ await app.handleRedirectPromise(); }catch(e){}
+  spApp = app; spAppKey = key; spDriveCache = null; return app;
+}
+function spSignInError(){ const e = new Error('connect your Microsoft account first (Notifications & settings → SharePoint, or the banner at the top)'); e.spSignIn = true; return e; }
+async function spToken(interactive){
+  const app = await spMsal(), acc = app.getAllAccounts()[0];
+  if(acc){ try{ return (await app.acquireTokenSilent({ scopes:SP_SCOPES, account:acc })).accessToken; }catch(e){ if(!interactive) throw spSignInError(); } }
+  if(!interactive) throw spSignInError();
+  const r = await app.acquireTokenPopup({ scopes:SP_SCOPES, loginHint:(authUser && authUser.email) || undefined });
+  try{ localStorage.setItem('fdc_sp_ok', authUser ? authUser.uid : '1'); }catch(e){}
+  return r.accessToken;
+}
+async function spFetch(path, opt, interactive){
+  const t = await spToken(interactive), o = Object.assign({}, opt || {}); o.headers = Object.assign({ Authorization:'Bearer ' + t }, o.headers || {});
+  const r = await fetch(/^https:/.test(path) ? path : 'https://graph.microsoft.com/v1.0' + path, o);
+  if(!r.ok){ let m = ''; try{ const j = await r.json(); m = j && j.error && j.error.message; }catch(e){} const err = new Error('SharePoint: ' + (m || (r.status + ' ' + r.statusText))); err.status = r.status; throw err; }
+  return r;
+}
+async function spDrive(interactive){
+  if(spDriveCache) return spDriveCache;
+  const c = spCfg(), u = new URL(c.site), sp = u.pathname.replace(/\/+$/, '');
+  const site = await (await spFetch('/sites/' + u.hostname + ':' + sp, null, interactive)).json();
+  const drives = ((await (await spFetch('/sites/' + site.id + '/drives', null, interactive)).json()).value) || [];
+  const want = String(c.library || 'Documents').trim().toLowerCase();
+  const d = drives.find(x => String(x.name || '').toLowerCase() === want) || drives.find(x => /\/shared%20documents$|\/shared documents$/i.test(String(x.webUrl || ''))) || drives[0];
+  if(!d) throw new Error('SharePoint: the document library "' + c.library + '" was not found on the site');
+  return spDriveCache = { siteId:site.id, driveId:d.id, webUrl:d.webUrl, name:d.name };
+}
+const spSafe = s => String(s || '').replace(/[\\\/:*?"<>|#%~&{}]+/g, '-').replace(/\s+/g, ' ').replace(/^[ .]+|[ .]+$/g, '').slice(0, 90) || 'file';
+const spEnc = p => p.split('/').map(encodeURIComponent).join('/');
+// one file into <folder>/<year>/<record>/<name>; a name already there gets a number added (nothing is overwritten)
+async function spUpload(blob, name, voucher, onProgress, interactive){
+  const c = spCfg(), d = await spDrive(interactive), prog = x => { try{ if(onProgress) onProgress(x); }catch(e){} };
+  const path = [String(c.folder || '').replace(/^\/+|\/+$/g, ''), String(new Date().getFullYear()), spSafe(voucher || 'Other'), spSafe(name)].filter(Boolean).join('/');
+  const base = '/drives/' + d.driveId + '/root:/' + spEnc(path) + ':'; let item = null; prog(0);
+  if(blob.size <= 3.5 * 1024 * 1024){ item = await (await spFetch(base + '/content?@microsoft.graph.conflictBehavior=rename', { method:'PUT', headers:{ 'Content-Type':blob.type || 'application/octet-stream' }, body:blob }, interactive)).json(); }
+  else {
+    const s = await (await spFetch(base + '/createUploadSession', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ item:{ '@microsoft.graph.conflictBehavior':'rename' } }) }, interactive)).json();
+    const CH = 320 * 1024 * 15; let at = 0;
+    while(at < blob.size){ const end = Math.min(at + CH, blob.size), r = await fetch(s.uploadUrl, { method:'PUT', headers:{ 'Content-Range':'bytes ' + at + '-' + (end - 1) + '/' + blob.size }, body:blob.slice(at, end) });
+      if(!r.ok) throw new Error('SharePoint: the upload stopped (' + r.status + ')'); if(r.status === 200 || r.status === 201) item = await r.json(); at = end; prog(at / blob.size); }
+  }
+  if(!item || !item.id) throw new Error('SharePoint did not confirm the upload');
+  prog(1); return { driveId:d.driveId, itemId:item.id, webUrl:item.webUrl || '', name:item.name || name, mime:blob.type || '', size:blob.size };
+}
+const spDataUrlBlob = u => { const m = /^data:([^;,]+)?(;base64)?,(.*)$/.exec(String(u || '')); if(!m) return null; const bin = atob(m[3]), a = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type:m[1] || 'image/jpeg' }); };
+async function spPutPages(data, onProgress, interactive){
+  const pages = data.pages || [], nm = String(data.name || 'file').replace(/\.(pdf|jpe?g|png|heic|webp|gif)$/i, '');
+  const blob = pages.length === 1 ? spDataUrlBlob(pages[0].jpeg) : await jpegPagesPdf(pages);
+  if(!blob) throw new Error('the picture could not be read');
+  return spUpload(blob, nm + (pages.length === 1 ? '.jpg' : '.pdf'), data.voucher, onProgress, interactive);
+}
+// a SharePoint file made to look like a stored one (a PDF in one part, or picture pages), so every viewer and download works as before
+async function spHydrate(id, m){
+  const meta = await (await spFetch('/drives/' + m.sp.driveId + '/items/' + m.sp.itemId + '?select=id,name,file,webUrl,@microsoft.graph.downloadUrl')).json();
+  const url = meta['@microsoft.graph.downloadUrl']; if(!url) throw new Error('SharePoint: the file could not be opened');
+  const blob = await (await fetch(url)).blob(), mime = (meta.file && meta.file.mimeType) || blob.type || m.sp.mime || '';
+  if(/pdf/i.test(mime) || /\.pdf$/i.test(meta.name || '')){
+    const b = new Uint8Array(await blob.arrayBuffer()); let bin = ''; for(let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+    pcFileCache[id + '_c0'] = { id:id + '_c0', part:0, data:btoa(bin) };
+    return { id, name:m.name || meta.name, voucher:m.voucher, kind:'pdf', chunks:1, size:b.length, sp:m.sp, __hyd:1 };
+  }
+  const jpeg = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+  const wh = await new Promise(res => { const im = new Image(); im.onload = () => res([im.naturalWidth, im.naturalHeight]); im.onerror = () => res([0, 0]); im.src = jpeg; });
+  return { id, name:m.name || meta.name, voucher:m.voucher, pages:[{ jpeg, w:wh[0], h:wh[1] }], sp:m.sp, __hyd:1 };
+}
+async function spDelete(sp){ try{ await spFetch('/drives/' + sp.driveId + '/items/' + sp.itemId, { method:'DELETE' }); }catch(e){ console.warn('SharePoint delete', e); } }
+function spFellBack(e){
+  console.warn('SharePoint upload — kept in the app database instead', e);
+  if(Date.now() - spFallToastAt > 15000){ spFallToastAt = Date.now(); toast('Saved in the app\'s database instead of SharePoint: ' + (e && e.message ? e.message : e) + '.', true); }
+}
+const spConnected = () => { try{ return !!localStorage.getItem('fdc_sp_ok'); }catch(e){ return false; } };
+async function spConnect(btn){
+  const lab = btn ? btn.textContent : ''; if(btn){ btn.disabled = true; btn.textContent = 'Connecting…'; }
+  try{ await spToken(true); spDriveCache = null; const d = await spDrive(true); toast('Connected to SharePoint — attachments are saved to ' + (d.name || 'the library') + ' › ' + spCfg().folder + '.'); rerenderMain(); }
+  catch(e){ toast('Could not connect to SharePoint: ' + (e && e.message ? e.message : e), true); }
+  finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = lab; } }
+}
+// banner for anyone who has not connected their Microsoft account yet
+function spBanner(){ if(!spOn() || spConnected() || !authUser) return '';
+  return `<div class="flex items-center gap-3 flex-wrap rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 mb-4 text-sm text-sky-900"><span>📁 Attachments are saved to <b>SharePoint</b>. Connect your Microsoft account once so your files go there.</span><span class="flex-1"></span><button type="button" onclick="spConnect(this)" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-700">Connect Microsoft account</button></div>`; }
+// Admin Panel section
+function spAdminPanel(){
+  if(!authUser || authUser.role !== 'admin') return '';
+  const c = spCfg(), inp = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white', lbl = 'block text-xs font-semibold text-slate-600 mb-1';
+  return `<div class="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
+    <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center gap-3 flex-wrap"><div><h2 class="text-sm font-bold text-slate-900">SharePoint storage</h2><p class="text-xs text-slate-500">Save every attachment to the Administration Department SharePoint instead of the app's database.</p></div><span class="flex-1"></span>${vPill(spOn() ? 'good' : '', spOn() ? 'On' : 'Off')}</div>
+    <div class="px-5 sm:px-6 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+      <div><label class="${lbl}">Application (client) ID</label><input id="sp-client" data-no-clear="1" value="${esc(c.clientId)}" placeholder="from the app registration in Entra ID" class="${inp} font-mono"></div>
+      <div><label class="${lbl}">Directory (tenant) ID or domain</label><input id="sp-tenant" data-no-clear="1" value="${esc(c.tenant)}" class="${inp} font-mono"></div>
+      <div class="sm:col-span-2"><label class="${lbl}">SharePoint site</label><input id="sp-site" data-no-clear="1" value="${esc(c.site)}" class="${inp}"></div>
+      <div><label class="${lbl}">Document library</label><input id="sp-lib" data-no-clear="1" value="${esc(c.library)}" class="${inp}"></div>
+      <div><label class="${lbl}">Folder inside the library</label><input id="sp-folder" data-no-clear="1" value="${esc(c.folder)}" class="${inp}"></div>
+      <label class="sm:col-span-2 inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" id="sp-on" ${c.on ? 'checked' : ''} class="w-4 h-4"> Save new attachments to SharePoint</label>
+      <div class="sm:col-span-2 text-[11.5px] text-slate-500 leading-relaxed bg-slate-50 rounded-lg px-3 py-2">For IT — register an app in Microsoft Entra ID: platform <b>Single-page application</b>, redirect URI <code class="font-mono">${esc(spRedirect())}</code>, Microsoft Graph delegated permission <b>Sites.ReadWrite.All</b> with admin consent. Files go to <i>${esc(c.library)} › ${esc(c.folder)} › year › record</i>. Staff need edit access to that library.</div>
+      <div class="sm:col-span-2 flex flex-wrap gap-2.5">
+        <button type="button" onclick="spSaveSettings()" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Save settings</button>
+        <button type="button" onclick="spConnect(this)" ${c.clientId ? '' : 'disabled'} class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50">${spConnected() ? 'Test connection' : 'Connect & test'}</button>
+        <button type="button" onclick="spMoveAll(this)" ${spOn() ? '' : 'disabled'} class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50">Move existing files to SharePoint</button>
+      </div>
+    </div></div>`;
+}
+async function spSaveSettings(){
+  if(!authUser || authUser.role !== 'admin') return toast('Only admins can change this.', true);
+  const v = id => (document.getElementById(id) || {}).value || '', site = v('sp-site').trim().replace(/\/+$/, ''), on = !!(document.getElementById('sp-on') || {}).checked, cid = v('sp-client').trim();
+  if(site && !/^https:\/\/[^\/]+\.sharepoint\.com\/sites\/[^\/]+/i.test(site)) return toast('The site should look like https://fahi.sharepoint.com/sites/AdministrationDepartment', true);
+  if(on && !/^[0-9a-f-]{36}$/i.test(cid)) return toast('Enter the Application (client) ID (36 characters, from the app registration) before switching SharePoint on.', true);
+  vehSettings = Object.assign({}, vehSettings, { sp:{ on, clientId:cid, tenant:v('sp-tenant').trim() || 'organizations', site:site || SP_DEF.site, library:v('sp-lib').trim() || 'Documents', folder:v('sp-folder').trim().replace(/^\/+|\/+$/g, '') || SP_DEF.folder } });
+  spApp = null; spDriveCache = null; await persistVehSettings(); toast('SharePoint settings saved' + (on ? ' — new attachments go to SharePoint.' : '.')); rerenderMain();
+}
+// admin: copy every file kept in the app database to SharePoint, check it arrived, then remove the database copy
+async function spMoveAll(btn){
+  if(!spOn()) return toast('Switch SharePoint on and save the settings first.', true);
+  if(!firestoreDb) return toast('Not connected to the cloud database.', true);
+  try{ await spToken(true); await spDrive(true); }catch(e){ return toast('Could not connect to SharePoint: ' + (e && e.message ? e.message : e), true); }
+  confirmAction('Move every attachment from the app database to SharePoint? Each file is copied, checked, then removed from the database. Keep this window open until it finishes.', async () => {
+    const key = uid(); agUploads[key] = { name:'files to SharePoint', f:0 }; agUploadBar(); let moved = 0, failed = 0, last = null, seen = 0;
+    const col = firestoreDb.collection(PC_FILES_COLLECTION), FP = firebase.firestore.FieldPath.documentId();
+    try{
+      for(;;){
+        let q = col.orderBy(FP).limit(15); if(last) q = q.startAfter(last); const snap = await q.get(); if(snap.empty) break; last = snap.docs[snap.docs.length - 1];
+        for(const d of snap.docs){ const m = d.data(), id = d.id; seen++; if(/_c\d+$/.test(id) || m.part != null || m.sp) continue;
+          try{
+            let sp;
+            if(m.kind === 'pdf'){ let b64 = ''; for(let i = 0; i < (m.chunks || 0); i++){ const c = await col.doc(id + '_c' + i).get(); if(!c.exists) throw new Error('a part is missing'); b64 += c.data().data; }
+              const bin = atob(b64), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+              sp = await spUpload(new Blob([u], { type:'application/pdf' }), String(m.name || 'file').replace(/\.pdf$/i, '') + '.pdf', m.voucher, null, true); }
+            else if(m.pages && m.pages.length) sp = await spPutPages(m, null, true);
+            else continue;
+            const chk = await (await spFetch('/drives/' + sp.driveId + '/items/' + sp.itemId + '?select=id,size', null, true)).json(); if(!chk || !chk.id) throw new Error('not confirmed');
+            await col.doc(id).set({ id, voucher:m.voucher || '', name:m.name || '', sp, at:m.at || Date.now(), movedAt:Date.now() });
+            if(m.kind === 'pdf') for(let i = 0; i < (m.chunks || 0); i++){ try{ await col.doc(id + '_c' + i).delete(); }catch(e){} }
+            delete pcFileCache[id]; moved++;
+          }catch(e){ failed++; console.warn('move', id, e); }
+          agUploads[key].name = 'files to SharePoint (' + moved + ' moved' + (failed ? ', ' + failed + ' failed' : '') + ')'; agUploads[key].f = Math.min(0.98, seen / (seen + 30)); agUploadBar();
+        }
+      }
+      toast(moved + ' file' + (moved === 1 ? '' : 's') + ' moved to SharePoint' + (failed ? '; ' + failed + ' could not be moved and stay in the database (run it again later)' : '') + '.', !!failed);
+    } catch(e){ toast('Moving stopped: ' + (e && e.message ? e.message : e) + '. Files moved so far are safe; run it again to continue.', true); }
+    finally{ delete agUploads[key]; agUploadBar(); }
+  });
+}
 async function agStore(att, voucher, onProgress){
   const fid = uid(), prog = f => { try{ if(onProgress) onProgress(f); }catch(e){} };
+  if(att.pdf && spOn()){
+    try{ const sp = await spUpload(new Blob([att.bytes], { type:'application/pdf' }), String(att.name || 'file').replace(/\.pdf$/i, '') + '.pdf', voucher, prog);
+      await pcFileSave(fid, { id:fid, voucher, name:att.name, sp, at:Date.now() });
+      return { fileId:fid, fileName:att.name, filePages:0, fileKind:'pdf', fileSize:att.size, spUrl:sp.webUrl }; }
+    catch(e){ spFellBack(e); }
+  }
   if(att.pdf){
     let bin = ''; for(let i = 0; i < att.bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, att.bytes.subarray(i, i + 0x8000));
     const b64 = btoa(bin), n = Math.ceil(b64.length / AG_CHUNK); let done = 0, next = 0; prog(0);
@@ -12074,7 +12253,7 @@ async function agBgUpload(docId, att, voucher, apply){
   catch(e){ toast('The file ' + att.name + ' could not be uploaded: ' + (e && e.message ? e.message : e) + '. Attach it again from the agreement.', true); }
   finally{ delete agUploads[key]; agUploadBar(); }
 }
-async function agFileDel(fid){ if(!fid) return; try{ const m = await pcFileLoad(fid); if(m && m.kind === 'pdf') for(let i = 0; i < (m.chunks || 0); i++) pcFileDelete(fid + '_c' + i); }catch(e){} pcFileDelete(fid); }
+async function agFileDel(fid){ if(!fid) return; try{ const r = await pcFileRaw(fid); if(r && r.sp) spDelete(r.sp); }catch(e){} try{ const m = await pcFileRaw(fid); if(m && m.kind === 'pdf') for(let i = 0; i < (m.chunks || 0); i++) pcFileDelete(fid + '_c' + i); }catch(e){} pcFileDelete(fid); }
 /* ---------- every attachment can be viewed and downloaded as a PDF: a stored PDF as it is; photos / scans become a PDF (one page each) ---------- */
 async function jpegPagesPdf(pages){
   const enc = new TextEncoder(), parts = [], offs = []; let len = 0;
@@ -16944,6 +17123,7 @@ function render(){
     el.innerHTML = `<div class="text-center py-16 text-slate-500"><h3 class="text-base font-semibold text-slate-800 mb-1">Something went wrong</h3><p class="text-sm">${esc(e.message)}</p></div>`;
   }
   try{ const banner = unsyncedBannerHtml(); if(banner) el.innerHTML = banner + el.innerHTML; }catch(e){}
+  try{ const spb = spBanner(); if(spb) el.innerHTML = spb + el.innerHTML; }catch(e){}
   try{ vehAfterRender(); }catch(e){ console.error(e); }
   try{ viewerTrim(); }catch(e){}
   try{ eggAfterRender(); }catch(e){}
@@ -18839,6 +19019,7 @@ function viewAdmin(){
       </div>`}
     </div>
     ${blockedUsersPanel()}
+    ${spAdminPanel()}
     ${viewLowStockNotificationSettings()}
   `;
 }

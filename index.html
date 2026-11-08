@@ -1998,7 +1998,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.366';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.367';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2291,6 +2291,7 @@ function currentNav(){
     { id:'utility-report', label:'Report', icon:'chart' },
     { id:'keys', label:'Key Registry', icon:'key' },
     { section:'Maintenance' },
+    { id:'maintenance', label:'Maintenance Projects', icon:'service', badge:cntOf(mtOverdueTasks), tone:'crit', hint:'Overdue maintenance tasks' },
     { id:'cleaning', label:'Cleaning Checklist', icon:'broom', badge:cntOf(clPendingCount), tone:'warn', hint:"Locations whose last week's checklist is not completed or attached" },
     { section:'Travel' },
     { id:'travel-local', label:'Local Travel', icon:'plane', badge:(()=>{ try{ return state.travelRequests.filter(t => (t.scope || 'local') === 'local' && t.status === 'Pending').length; }catch(e){ return 0; } })(), tone:'warn' },
@@ -2536,6 +2537,7 @@ const VEH_COLS = {
   staffDir:         { collection:'fdc_inventory_staff_directory',       label:'staff records', one:'staff record' },
   complaints:       { collection:'fdc_inventory_complaints',            label:'complaints', one:'complaint' },
   tasks:            { collection:'fdc_inventory_tasks',                 label:'tasks', one:'task' },
+  maintenance:      { collection:'fdc_inventory_maintenance',           label:'maintenance projects', one:'maintenance project' },
   documents:        { collection:'fdc_inventory_documents',             label:'documents', one:'document' },
   incidentReports:  { collection:'fdc_inventory_incident_reports',      label:'incident reports', one:'incident report' },
   itemSpecs:        { collection:'fdc_inventory_item_specs',            label:'item specifications', one:'item specification' },
@@ -8123,6 +8125,244 @@ function tkFiltered(){
 }
 
 /* ---------- the page ---------- */
+/* =====================================================================
+   MAINTENANCE PROJECTS (Facilities → Maintenance) — one project made of several tasks; each task names the departments
+   involved instead of staff. Projects list, Gantt chart (by project or by department), department report.
+===================================================================== */
+const MT_OVERRIDE = ['On hold', 'Cancelled'];
+const mtAll = () => state.maintenance || [];
+const mtById = id => mtAll().find(p => p.id === id) || null;
+const mtTasks = p => ((p && p.tasks) || []).filter(t => t && (t.title || t.start));
+const mtDeptNames = () => [...new Set(DEPARTMENTS.map(d => d.name).concat(mtAll().flatMap(p => mtTasks(p).flatMap(t => t.depts || [])).filter(Boolean)))].sort((a, b) => a.localeCompare(b));
+const mtDeptCode = n => { const d = DEPARTMENTS.find(x => x.name === n); return d ? d.code : String(n || '').split(/\s+/).map(w => w[0]).join('').toUpperCase(); };
+const mtStart = p => [p.start].concat(mtTasks(p).map(t => t.start)).filter(Boolean).sort()[0] || '';
+const mtDue = p => p.due || mtTasks(p).map(t => t.due).filter(Boolean).sort().pop() || '';
+const mtEnd = p => { const ds = mtTasks(p).map(tkEnd).filter(Boolean).sort(); return [mtDue(p)].concat(ds).filter(Boolean).sort().pop() || mtStart(p) || vToday(); };
+const mtProg = p => { const ts = mtTasks(p).filter(t => t.status !== 'Cancelled'); if(p.status === 'Completed') return 100; return ts.length ? Math.round(ts.reduce((s, t) => s + tkProg(t), 0) / ts.length) : 0; };
+function mtStatus(p){
+  if(MT_OVERRIDE.includes(p.status)) return p.status;
+  const ts = mtTasks(p);
+  if(ts.length && ts.every(tkDone)) return 'Completed';
+  if(ts.some(t => t.status === 'In progress' || tkProg(t) > 0 || tkDone(t))) return 'In progress';
+  return 'Not started';
+}
+const mtDoneP = p => ['Completed', 'Cancelled'].includes(mtStatus(p));
+const mtOverdue = p => !mtDoneP(p) && !!mtDue(p) && mtDue(p) < vToday();
+const mtState = p => mtOverdue(p) ? 'Overdue' : mtStatus(p);
+const mtDepts = p => [...new Set([p.lead].concat(mtTasks(p).flatMap(t => t.depts || [])).filter(Boolean))];
+const mtOverdueTasks = () => mtAll().filter(p => !MT_OVERRIDE.includes(p.status)).reduce((n, p) => n + mtTasks(p).filter(tkOverdue).length, 0);
+// who may update a task: admins, or staff of a department working on it
+const mtMyDept = () => authUser && authUser.department ? (deptMatch ? deptMatch(authUser.department) || authUser.department : authUser.department) : '';
+const mtCanUpdate = t => !!authUser && !amIViewer() && (canManageInventory() || (!!mtMyDept() && (t.depts || []).includes(mtMyDept())));
+function mtNextNo(){ const y = vToday().slice(2, 4), pre = 'MNT-' + y + '-'; const n = mtAll().map(p => String(p.no || '')).filter(x => x.startsWith(pre)).map(x => +x.slice(pre.length) || 0); return pre + String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0'); }
+const mtDeptChips = (list, sm) => (list || []).map(n => `<span class="inline-flex items-center px-1.5 py-0.5 rounded ${sm ? 'text-[10px]' : 'text-[11px]'} font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100" title="${esc(n)}">${esc(sm ? mtDeptCode(n) : n)}</span>`).join(' ');
+const mtStatePill = s => vPill(s === 'Completed' ? 'good' : s === 'Overdue' ? 'crit' : s === 'In progress' ? 'acc' : s === 'On hold' ? 'warn' : '', esc(s));
+const mtBar = (p, c, w) => `<div class="flex items-center gap-2 ${w || 'w-32'}"><div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${p}%;background:${c}"></div></div><span class="text-xs text-slate-500 num w-8 text-right">${p}%</span></div>`;
+
+function mtFiltered(){
+  const q = String(vehUi.mtQ || '').toLowerCase().trim(), dep = vehUi.mtDep || '', st = vehUi.mtSt || '', loc = vehUi.mtLoc || '';
+  return mtAll().filter(p => (!dep || mtDepts(p).includes(dep)) && (!loc || p.locationId === loc)
+    && (!st || (st === 'open' ? !mtDoneP(p) : st === 'Overdue' ? mtOverdue(p) : mtStatus(p) === st))
+    && (!q || [p.no, p.title, p.description, p.lead, (getLocation(p.locationId) || {}).name].concat(mtTasks(p).flatMap(t => [t.title, t.notes].concat(t.depts || []))).join(' ').toLowerCase().includes(q)));
+}
+function viewMaintenance(){
+  const tab = vehUi.mtTab || 'list', all = mtAll(), admin = canManageInventory() && !amIViewer(), mon = vToday().slice(0, 7);
+  const active = all.filter(p => !mtDoneP(p)), overT = mtOverdueTasks(), doneM = all.filter(p => mtStatus(p) === 'Completed' && mtTasks(p).some(t => String(t.completedOn || '').slice(0, 7) === mon));
+  const deps = new Set(active.flatMap(mtDepts));
+  const kpis = vKpis(statCard('Active projects', fmtNum(active.length), active.filter(p => mtStatus(p) === 'In progress').length + ' in progress', 'brand') +
+    statCard('Overdue tasks', fmtNum(overT), 'Past the due date, not completed', overT ? 'rose' : 'slate') +
+    statCard('Completed this month', fmtNum(doneM.length), 'Projects finished in ' + new Date().toLocaleString('en-GB', { month:'long' }), 'emerald') +
+    statCard('Departments involved', fmtNum(deps.size), 'In active projects', 'slate'));
+  const locs = LOCATIONS.map(l => [l.id, l.name]);
+  const filters = `<div class="flex flex-wrap items-center gap-3 mb-4">${vTabs([['list', 'Projects'], ['gantt', 'Gantt chart'], ['dept', 'By department']], tab, 'mtSetTab')}
+    ${vSelect('mtDep', mtDeptNames(), vehUi.mtDep || '', 'All departments')}${tab !== 'dept' ? vSelect('mtSt', [['open', 'Open (not done)'], ['Overdue', 'Overdue']].concat(['Not started', 'In progress', 'On hold', 'Completed', 'Cancelled'].map(s => [s, s])), vehUi.mtSt || '', 'All statuses') + vSelect('mtLoc', locs, vehUi.mtLoc || '', 'All locations') : ''}
+    <input type="search" id="mt-q" value="${esc(vehUi.mtQ || '')}" oninput="vehUi.mtQ = this.value; clearTimeout(window._mtT); window._mtT = setTimeout(rerenderMain, 250)" placeholder="Search projects, tasks, departments…" class="${VEH_INPUT} flex-1 min-w-[12rem]"></div>`;
+  const head = vHead('Maintenance', 'Maintenance projects, each made of tasks with start and due dates and the departments involved. Departments update the progress of their tasks.', admin ? vBtnPrimary('+ Maintenance project', "openMtForm('')") : '');
+  return head + kpis + filters + (tab === 'gantt' ? mtGantt(mtFiltered(), { ctrl:true }) : tab === 'dept' ? mtDeptReport() : mtList());
+}
+function mtSetTab(t){ vehUi.mtTab = t; rerenderMain(); }
+function mtList(){
+  const list = mtFiltered().sort((a, b) => mtDoneP(a) - mtDoneP(b) || String(mtDue(a) || '9999').localeCompare(String(mtDue(b) || '9999')) || String(b.no || '').localeCompare(String(a.no || '')));
+  if(!list.length) return `<div class="bg-white rounded-xl border border-slate-200">${vEmpty(mtAll().length ? 'No projects match.' : 'No maintenance projects yet.' + (canManageInventory() ? ' Use "+ Maintenance project" to add one with its tasks.' : ''))}</div>`;
+  const t0 = vToday();
+  return `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">${list.map(p => {
+    const s = mtState(p), ts = mtTasks(p), done = ts.filter(tkDone).length, od = ts.filter(tkOverdue).length, loc = getLocation(p.locationId), due = mtDue(p), d = due ? tkDays(t0, due) : null;
+    return `<div class="bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-brand-400 hover:shadow-sm transition" onclick="openMtView('${p.id}')">
+      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="text-[11px] font-semibold text-slate-400 num">${esc(p.no || '')}${loc ? ' · ' + esc(loc.name) : ''}</div><div class="font-bold text-slate-900 truncate">${esc(p.title || '—')}</div></div>${mtStatePill(s)}</div>
+      <div class="flex flex-wrap gap-1 mt-2.5">${mtDeptChips(mtDepts(p)) || '<span class="text-xs text-slate-400">No departments yet</span>'}</div>
+      <div class="flex items-center gap-4 mt-3 flex-wrap text-[12px] text-slate-500"><span class="num">${mtStart(p) ? esc(isoToDmy(mtStart(p))) : '—'}${due ? ' – ' + esc(isoToDmy(due)) : ''}</span>
+        ${d != null && !mtDoneP(p) ? `<span class="${d < 0 ? 'text-rose-600 font-semibold' : d <= 7 ? 'text-amber-600' : ''}">${d < 0 ? Math.abs(d) + ' day' + (Math.abs(d) === 1 ? '' : 's') + ' overdue' : d === 0 ? 'due today' : 'in ' + d + ' day' + (d === 1 ? '' : 's')}</span>` : ''}
+        <span>${done}/${ts.length} task${ts.length === 1 ? '' : 's'} done${od ? ` · <b class="text-rose-600">${od} overdue</b>` : ''}</span></div>
+      <div class="mt-3">${mtBar(mtProg(p), TK_COL[s] || TK_COL['In progress'], 'w-full')}</div></div>`; }).join('')}</div>`;
+}
+// ---- Gantt: project rows (summary bar) with their task rows; or grouped by department
+function mtShift(n){ vehUi.mtShift = n === 0 ? 0 : (+vehUi.mtShift || 0) + n; rerenderMain(); }
+function mtSetSpan(s){ vehUi.mtSpan = s; vehUi.mtShift = 0; rerenderMain(); }
+function mtSetGroup(g){ vehUi.mtGroup = g; rerenderMain(); }
+function mtRange(items, span, sh){
+  const t0 = vToday(), now = new Date();
+  if(span === 'fit'){
+    let from = items.reduce((m, x) => x.a < m ? x.a : m, clIsoAdd(t0, -7)), to = items.reduce((m, x) => x.b > m ? x.b : m, clIsoAdd(t0, 14));
+    from = clIsoAdd(from, -((new Date(from + 'T00:00:00Z').getUTCDay() + 6) % 7)); if(tkDays(from, to) < 34) to = clIsoAdd(from, 34);
+    to = clIsoAdd(to, 6 - ((new Date(to + 'T00:00:00Z').getUTCDay() + 6) % 7)); return { from, to, span };
+  }
+  const n = span === 'month' ? 1 : 3, first = new Date(Date.UTC(now.getFullYear(), now.getMonth() + sh * n - (n === 1 ? 0 : 1), 1)), last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + n, 0));
+  return { from:first.toISOString().slice(0, 10), to:last.toISOString().slice(0, 10), span };
+}
+function mtGantt(projects, o){
+  o = o || {}; const span = o.ctrl ? (vehUi.mtSpan || 'fit') : 'fit', group = o.ctrl ? (vehUi.mtGroup || 'project') : 'project', depF = o.ctrl ? (vehUi.mtDep || '') : '';
+  const iso = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+  const items = [];
+  projects.forEach(p => { const ts = mtTasks(p).filter(t => iso(t.start) && (!depF || (t.depts || []).includes(depF)));
+    const a = mtStart(p), b = mtEnd(p); if(iso(a)) items.push({ kind:'proj', p, a, b:iso(b) && b >= a ? b : a });
+    ts.forEach(t => { const e = tkEnd(t); items.push({ kind:'task', p, t, a:t.start, b:iso(e) && e >= t.start ? e : t.start }); }); });
+  const R = mtRange(items, span, +vehUi.mtShift || 0), nD = tkDays(R.from, R.to) + 1, t0 = vToday();
+  const dW = span === 'fit' ? Math.max(6, Math.min(40, Math.floor((o.ctrl ? 980 : 640) / nD))) : span === 'month' ? 34 : 13, LW = o.ctrl ? 270 : 220, RH = 40, W = nD * dW;
+  const btn = 'h-9 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50';
+  const ctrl = o.ctrl ? `<div class="flex flex-wrap items-center gap-2 mb-3">${vTabs([['fit', 'Fit projects'], ['month', 'Month'], ['3m', '3 months']], span, 'mtSetSpan')}
+      ${span !== 'fit' ? `<div class="inline-flex gap-1"><button onclick="mtShift(-1)" class="${btn} w-9" title="Earlier">‹</button><button onclick="mtShift(0)" class="${btn} px-3 text-sm font-semibold">Today</button><button onclick="mtShift(1)" class="${btn} w-9" title="Later">›</button></div>` : ''}
+      ${vTabs([['project', 'By project'], ['dept', 'By department']], group, 'mtSetGroup')}<span class="flex-1"></span>
+      <div class="flex flex-wrap gap-3 text-xs text-slate-500">${['Not started', 'In progress', 'On hold', 'Completed', 'Overdue'].map(s => `<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:${TK_COL[s]}"></span>${s}</span>`).join('')}</div></div>` : '';
+  const vis = items.filter(x => x.a <= R.to && x.b >= R.from);
+  if(!vis.length) return ctrl + `<div class="bg-white rounded-xl border border-slate-200 mb-6">${vEmpty(items.length ? 'Nothing scheduled in ' + vDate(R.from) + ' – ' + vDate(R.to) + '.' : 'Add tasks with start dates to see the chart.')}</div>`;
+  let rows = [];
+  if(group === 'dept'){
+    const deps = [...new Set(vis.filter(x => x.kind === 'task').flatMap(x => x.t.depts || []))].sort((a, b) => a.localeCompare(b));
+    deps.forEach(d => { const ts = vis.filter(x => x.kind === 'task' && (x.t.depts || []).includes(d)); rows.push({ kind:'head', label:d, sub:ts.length + ' task' + (ts.length === 1 ? '' : 's') }); ts.sort((x, y) => x.a.localeCompare(y.a)).forEach(x => rows.push(Object.assign({}, x, { pre:x.p.title }))); });
+    const none = vis.filter(x => x.kind === 'task' && !(x.t.depts || []).length); if(none.length){ rows.push({ kind:'head', label:'No department', sub:String(none.length) }); none.forEach(x => rows.push(Object.assign({}, x, { pre:x.p.title }))); }
+  } else {
+    projects.slice().sort((a, b) => String(mtStart(a)).localeCompare(String(mtStart(b)))).forEach(p => { const pr = vis.find(x => x.kind === 'proj' && x.p === p), ts = vis.filter(x => x.kind === 'task' && x.p === p).sort((x, y) => x.a.localeCompare(y.a) || x.b.localeCompare(y.b));
+      if(!pr && !ts.length) return; if(pr) rows.push(pr); ts.forEach(x => rows.push(x)); });
+  }
+  const months = []; for(let i = 0; i < nD; ){ const d = clIsoAdd(R.from, i), m = d.slice(0, 7); let n = 0; while(i + n < nD && clIsoAdd(R.from, i + n).slice(0, 7) === m) n++; months.push({ d, n, i }); i += n; }
+  const days = []; for(let i = 0; i < nD; i++){ const d = clIsoAdd(R.from, i), wd = new Date(d + 'T00:00:00Z').getUTCDay(); days.push({ d, i, we:wd === 5 || wd === 6, mon:wd === 1, day:+d.slice(8) }); }
+  const every = dW >= 26, ti = tkDays(R.from, t0), inToday = ti >= 0 && ti < nD;
+  const header = `<div class="flex sticky top-0 z-10 bg-white border-b border-slate-200"><div class="shrink-0 sticky left-0 z-20 bg-white border-r border-slate-200 px-4 flex items-end pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400" style="width:${LW}px">${group === 'dept' ? 'Department / task' : 'Project / task'}</div>
+    <div class="relative shrink-0" style="width:${W}px;height:52px">
+      ${months.filter(m => m.n * dW >= 56).map(m => `<div class="absolute px-2 text-xs font-semibold text-slate-600 whitespace-nowrap overflow-hidden" style="top:6px;left:${m.i * dW}px;width:${m.n * dW}px">${new Date(m.d + 'T00:00:00Z').toLocaleString('en-GB', { month:dW * m.n < 90 ? 'short' : 'long', year:'numeric', timeZone:'UTC' })}</div>`).join('')}
+      ${days.filter(c => every || (c.mon && (dW >= 9 || c.day <= 7 || (c.day > 14 && c.day <= 21)))).map(c => `<div class="absolute text-[10.5px] num text-center ${c.we ? 'text-slate-300' : 'text-slate-400'}" style="top:30px;left:${c.i * dW}px;width:${every ? dW : 28}px">${c.day}</div>`).join('')}
+      ${inToday ? `<div class="absolute text-[10px] font-semibold text-white rounded px-1" style="top:29px;left:${Math.max(0, ti * dW + dW / 2 - 18)}px;background:#f43f5e">Today</div>` : ''}</div></div>`;
+  const bg = days.filter(c => c.we).map(c => `<div class="absolute top-0 bottom-0" style="left:${c.i * dW}px;width:${dW}px;background:rgba(148,163,184,.07)"></div>`).join('') + days.filter(c => c.mon && c.i).map(c => `<div class="absolute top-0 bottom-0 border-l border-slate-100" style="left:${c.i * dW}px"></div>`).join('')
+    + (inToday ? `<div class="absolute top-0 bottom-0 pointer-events-none" style="left:${ti * dW + dW / 2}px;border-left:1.5px dashed #f43f5e"></div>` : '');
+  const bar = (a0, b0, c, p, tall, tip, onclick, label) => { const a = a0 < R.from ? R.from : a0, b = b0 > R.to ? R.to : b0, x = tkDays(R.from, a) * dW + 2, w = Math.max(dW - 4, (tkDays(a, b) + 1) * dW - 4), h = tall ? 18 : 12, rr = h / 2;
+    return `<div onclick="${onclick}" title="${esc(tip)}" class="absolute cursor-pointer overflow-hidden" style="left:${x}px;width:${w}px;top:${RH / 2 - h / 2}px;height:${h}px;border-radius:${a0 < R.from ? 0 : rr}px ${b0 > R.to ? 0 : rr}px ${b0 > R.to ? 0 : rr}px ${a0 < R.from ? 0 : rr}px;background:${c}${tall ? '40' : '33'};${tall ? 'outline:1.5px solid ' + c + ';' : ''}"><div class="absolute left-0 top-0 bottom-0" style="width:${p}%;background:${c}"></div></div>
+      <span class="absolute text-[10.5px] font-semibold num text-slate-500 pointer-events-none whitespace-nowrap" style="${x + w + 90 < W ? `left:${x + w + 6}px` : `right:${Math.max(0, W - x + 6)}px`};top:${RH / 2 - 8}px">${label}</span>`; };
+  const body = rows.map(r => {
+    if(r.kind === 'head') return `<div class="flex border-b border-slate-100"><div class="shrink-0 sticky left-0 z-[5] bg-white border-r border-slate-200 px-4 pt-3 pb-1.5 flex items-baseline justify-between gap-2" style="width:${LW}px"><span class="text-[12px] font-bold uppercase tracking-wide text-slate-500 truncate">${esc(r.label)}</span><span class="text-[11px] text-slate-400 shrink-0">${esc(r.sub)}</span></div><div class="shrink-0" style="width:${W}px"></div></div>`;
+    if(r.kind === 'proj'){ const p = r.p, s = mtState(p), c = TK_COL[s] || TK_COL['In progress'], pg = mtProg(p);
+      return `<div class="flex border-b border-slate-100 bg-slate-50/60" style="height:${RH}px"><div class="shrink-0 sticky left-0 z-[5] bg-slate-50 border-r border-slate-200 pl-3 pr-3 flex items-center gap-2 cursor-pointer hover:bg-slate-100" style="width:${LW}px" onclick="openMtView('${p.id}')" title="Open project"><span class="text-[11px] text-slate-400 num shrink-0">${esc(p.no || '')}</span><span class="flex-1 min-w-0 text-[13px] font-bold text-slate-900 truncate">${esc(p.title || '—')}</span></div>
+        <div class="relative shrink-0" style="width:${W}px">${bar(r.a, r.b, c, pg, true, p.title + '\n' + s + ' · ' + pg + '% done\n' + vDate(r.a) + ' → ' + vDate(r.b), `openMtView('${p.id}')`, pg + '%')}</div></div>`; }
+    const t = r.t, s = tkState(t), c = TK_COL[s] || TK_COL['Not started'], pg = tkProg(t), deps = t.depts || [];
+    return `<div class="flex border-b border-slate-100" style="height:${RH}px"><div class="shrink-0 sticky left-0 z-[5] bg-white border-r border-slate-200 pl-7 pr-3 flex items-center gap-2 cursor-pointer hover:bg-slate-50" style="width:${LW}px" onclick="openMtView('${r.p.id}')" title="${esc((r.pre ? r.pre + ' — ' : '') + (t.title || ''))}">
+        <span class="w-2 h-2 rounded-full shrink-0" style="background:${c}"></span><span class="flex-1 min-w-0 text-[12.5px] text-slate-700 truncate">${r.pre ? `<span class="text-slate-400">${esc(r.pre)} › </span>` : ''}${esc(t.title || '—')}</span>${group === 'project' ? `<span class="flex gap-0.5 shrink-0">${mtDeptChips(deps.slice(0, 3), 1)}${deps.length > 3 ? `<span class="text-[10px] text-slate-400">+${deps.length - 3}</span>` : ''}</span>` : ''}</div>
+      <div class="relative shrink-0" style="width:${W}px">${bar(r.a, r.b, c, pg, false, (t.title || '') + '\n' + s + ' · ' + pg + '%\n' + vDate(t.start) + ' → ' + (t.due ? vDate(t.due) : 'no due date') + (deps.length ? '\n' + deps.join(', ') : ''), `openMtView('${r.p.id}')`, pg + '%' + (deps.length && dW * nD > 500 ? ' · ' + deps.map(mtDeptCode).join(', ') : ''))}</div></div>`;
+  }).join('');
+  return ctrl + `<div class="bg-white rounded-xl border border-slate-200 overflow-auto mb-2" style="max-height:${o.ctrl ? 'calc(100vh - 220px)' : '420px'}"><div class="relative" style="width:${LW + W}px">${header}
+      <div class="relative"><div class="absolute top-0 bottom-0" style="left:${LW}px;width:${W}px">${bg}</div><div class="relative">${body}</div></div></div></div>
+    ${o.ctrl ? '<p class="text-[11.5px] text-slate-400 mb-6">Thick bar = whole project · solid part = progress · dashed line = today · department codes after each task · click to open.</p>' : ''}`;
+}
+// ---- by department: what each department has on its plate
+function mtDeptReport(){
+  const t0 = vToday(), depF = vehUi.mtDep || '', rows = {};
+  mtAll().filter(p => !MT_OVERRIDE.includes(p.status) || p.status === 'On hold').forEach(p => mtTasks(p).forEach(t => (t.depts && t.depts.length ? t.depts : ['No department']).forEach(d => {
+    if(depF && d !== depF) return; const r = rows[d] || (rows[d] = { d, projects:new Set(), open:[], over:0, done:0, prog:[] });
+    r.projects.add(p.id); if(t.status === 'Cancelled') return; r.prog.push(tkProg(t)); if(tkDone(t)) r.done++; else { r.open.push({ p, t }); if(tkOverdue(t)) r.over++; } })));
+  const list = Object.values(rows).sort((a, b) => b.over - a.over || b.open.length - a.open.length || a.d.localeCompare(b.d));
+  if(!list.length) return `<div class="bg-white rounded-xl border border-slate-200">${vEmpty('No maintenance tasks' + (depF ? ' for ' + esc(depF) : '') + ' yet.')}</div>`;
+  return `<div class="space-y-3 mb-6">${list.map(r => { const avg = r.prog.length ? Math.round(r.prog.reduce((s, x) => s + x, 0) / r.prog.length) : 0;
+    return `<details class="bg-white rounded-xl border border-slate-200" ${depF ? 'open' : ''}><summary class="cursor-pointer select-none px-5 py-3.5 flex items-center gap-4 flex-wrap"><span class="font-bold text-slate-900 min-w-[10rem]">${esc(r.d)}</span>
+      <span class="text-xs text-slate-500">${r.projects.size} project${r.projects.size === 1 ? '' : 's'}</span><span class="text-xs text-slate-500">${r.open.length} open task${r.open.length === 1 ? '' : 's'}</span>${r.over ? `<span class="text-xs font-semibold text-rose-600">${r.over} overdue</span>` : ''}<span class="text-xs text-emerald-600">${r.done} done</span><span class="flex-1"></span>${mtBar(avg, '#3b82f6', 'w-36')}</summary>
+      ${r.open.length ? `<div class="border-t border-slate-100 divide-y divide-slate-100">${r.open.sort((x, y) => String(x.t.due || '9999').localeCompare(String(y.t.due || '9999'))).map(({ p, t }) => `<div class="px-5 py-2.5 flex items-center gap-3 flex-wrap text-sm cursor-pointer hover:bg-slate-50" onclick="openMtView('${p.id}')"><span class="w-2 h-2 rounded-full" style="background:${TK_COL[tkState(t)]}"></span><span class="font-medium text-slate-800">${esc(t.title || '—')}</span><span class="text-xs text-slate-400">${esc(p.no || '')} ${esc(p.title || '')}</span><span class="flex-1"></span><span class="text-xs num ${tkOverdue(t) ? 'text-rose-600 font-semibold' : 'text-slate-500'}">${t.due ? 'due ' + esc(isoToDmy(t.due)) : 'no due date'}</span>${mtBar(tkProg(t), TK_COL[tkState(t)], 'w-28')}</div>`).join('')}</div>` : '<div class="border-t border-slate-100 px-5 py-3 text-sm text-slate-400">Nothing open.</div>'}</details>`; }).join('')}</div>`;
+}
+// ---- project details: tasks with inline status / progress (for admins and the departments involved), mini Gantt, Edit at the top right
+function openMtView(id){
+  const p = mtById(id); if(!p) return; const loc = getLocation(p.locationId), s = mtState(p), ts = mtTasks(p), admin = canManageInventory() && !amIViewer();
+  const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v}</div></div>`;
+  const row = (t, i) => { const can = mtCanUpdate(t), st = tkState(t);
+    return `<tr class="border-t border-slate-100 align-top"><td class="py-2.5 pr-3"><div class="font-medium text-slate-800">${i + 1}. ${esc(t.title || '—')}</div>${t.notes ? `<div class="text-[11.5px] text-slate-500 whitespace-pre-wrap">${esc(t.notes)}</div>` : ''}<div class="flex flex-wrap gap-1 mt-1">${mtDeptChips(t.depts || [])}</div></td>
+      <td class="py-2.5 pr-3 text-[12px] text-slate-600 whitespace-nowrap num">${t.start ? esc(isoToDmy(t.start)) : '—'}${t.due ? '<br>→ ' + esc(isoToDmy(t.due)) : ''}${tkOverdue(t) ? '<div class="text-rose-600 font-semibold text-[11px]">Overdue</div>' : t.status === 'Completed' && t.completedOn ? `<div class="text-emerald-600 text-[11px]">Done ${esc(isoToDmy(t.completedOn))}</div>` : ''}</td>
+      <td class="py-2.5 pr-3 whitespace-nowrap">${can ? `<input type="number" min="0" max="100" step="5" value="${tkProg(t)}" onchange="mtTaskSet('${p.id}', '${t.id}', 'progress', this.value)" class="w-16 px-2 py-1 rounded-md border border-slate-300 text-sm num" title="Progress %"> %` : `<span class="num text-sm">${tkProg(t)}%</span>`}</td>
+      <td class="py-2.5">${can ? `<select onchange="mtTaskSet('${p.id}', '${t.id}', 'status', this.value)" class="px-2 py-1 rounded-md border border-slate-300 text-xs font-semibold bg-white">${TK_STATUS.map(x => `<option ${x === (t.status || 'Not started') ? 'selected' : ''}>${x}</option>`).join('')}</select>` : mtStatePill(st)}</td></tr>`; };
+  openModal('Maintenance project', `<div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-lg font-extrabold text-slate-900">${esc(p.title || '—')}</div><div class="text-sm text-slate-500 num">${esc(p.no || '')}</div></div>${mtStatePill(s)}</div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">${item('Location', esc(loc ? loc.name : (p.locationText || '—')))}${item('Lead department', esc(p.lead || '—'))}${item('Dates', esc((mtStart(p) ? isoToDmy(mtStart(p)) : '—') + (mtDue(p) ? ' – ' + isoToDmy(mtDue(p)) : '')))}${item('Progress', mtBar(mtProg(p), TK_COL[s] || TK_COL['In progress'], 'w-full'))}</div>
+    ${p.description ? `<div class="text-sm text-slate-700 whitespace-pre-wrap mb-4">${esc(p.description)}</div>` : ''}
+    <div class="flex flex-wrap gap-1 mb-1">${mtDeptChips(mtDepts(p))}</div>
+    ${vSec('Tasks (' + ts.filter(tkDone).length + '/' + ts.length + ' done)')}
+    ${ts.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-[11px] uppercase tracking-wide text-slate-400"><th class="py-1.5 pr-3 font-semibold">Task · departments</th><th class="py-1.5 pr-3 font-semibold">Dates</th><th class="py-1.5 pr-3 font-semibold">Progress</th><th class="py-1.5 font-semibold">Status</th></tr></thead><tbody>${ts.map(row).join('')}</tbody></table></div>` : '<div class="text-sm text-slate-400">No tasks yet.</div>'}
+    ${ts.some(t => t.start) ? vSec('Timeline') + mtGantt([p], {}) : ''}
+    ${p.createdByName ? `<div class="text-[11px] text-slate-400 mt-3">Created by ${esc(p.createdByName)}${p.createdAt ? ' · ' + esc(fmtDate(new Date(p.createdAt).toISOString().slice(0, 10))) : ''}</div>` : ''}`, true);
+  if(admin){ const t = document.getElementById('modal-title'), b = document.createElement('button'); b.type = 'button'; b.id = 'modal-edit'; b.textContent = '✎ Edit'; b.title = 'Edit this project';
+    b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700'; b.style.cssText = 'margin-left:auto;margin-right:10px'; b.onclick = () => openMtForm(id); t.after(b); }
+}
+async function mtTaskSet(pid, tid, field, val){
+  const p = mtById(pid); if(!p) return; const tasks = (p.tasks || []).map(t => Object.assign({}, t)), t = tasks.find(x => x.id === tid); if(!t) return;
+  if(!mtCanUpdate(t)) return toast('Only admins and the departments on this task can update it.', true);
+  if(field === 'progress'){ const n = Math.max(0, Math.min(100, Math.round(+val || 0))); t.progress = n; if(n === 100 && t.status !== 'Completed'){ t.status = 'Completed'; t.completedOn = vToday(); } else if(n > 0 && t.status === 'Not started') t.status = 'In progress'; }
+  else { t.status = TK_STATUS.includes(val) ? val : 'Not started'; if(t.status === 'Completed'){ t.progress = 100; t.completedOn = t.completedOn || vToday(); } else delete t.completedOn; }
+  t.updatedBy = authUser ? authUser.name : ''; t.updatedAt = Date.now();
+  await vehSave('maintenance', { id:pid, tasks }); toast((t.title || 'Task') + ' → ' + (field === 'progress' ? t.progress + '%' : t.status) + '.'); openMtView(pid);
+}
+// ---- the form: project details, then one row per task (title, departments, dates, status, progress, notes)
+const mtDepPicker = (sel) => `<details class="mt-dep relative"><summary class="${VEH_FIELD} bg-white cursor-pointer list-none text-sm truncate"><span class="mt-dep-lbl">${sel && sel.length ? esc(sel.join(', ')) : '<span class="text-slate-400">Departments involved…</span>'}</span></summary>
+    <div class="absolute z-30 mt-1 w-64 max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg p-2">${mtDeptNames().map(n => `<label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 text-sm cursor-pointer"><input type="checkbox" class="mt-dep-cb" value="${esc(n)}" ${(sel || []).includes(n) ? 'checked' : ''} onchange="mtDepLabel(this)"> ${esc(n)}</label>`).join('')}</div></details>`;
+function mtDepLabel(cb){ const d = cb.closest('.mt-dep'), v = [...d.querySelectorAll('.mt-dep-cb:checked')].map(x => x.value); d.querySelector('.mt-dep-lbl').innerHTML = v.length ? esc(v.join(', ')) : '<span class="text-slate-400">Departments involved…</span>'; }
+const mtTaskRow = t => { t = t || {}; const id = t.id || uid();
+  return `<div class="mt-task rounded-lg border border-slate-200 p-3 mb-2.5" data-id="${esc(id)}" data-done="${esc(t.completedOn || '')}">
+    <div class="flex items-center gap-2 mb-2"><span class="mt-num text-[11px] font-bold uppercase tracking-wide text-slate-400 shrink-0"></span><input class="mt-title ${VEH_FIELD} flex-1" value="${esc(t.title || '')}" placeholder="Task, e.g. Replace damaged ceiling boards"><button type="button" onclick="mtRemoveTask(this)" class="text-slate-400 hover:text-rose-600 text-sm shrink-0" title="Remove this task">✕</button></div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2"><div class="col-span-2"><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Departments involved</div>${mtDepPicker(t.depts)}</div>
+      <div><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Start</div><input type="date" class="mt-start ${VEH_FIELD}" value="${esc(t.start || '')}"></div>
+      <div><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Due</div><input type="date" class="mt-due ${VEH_FIELD}" value="${esc(t.due || '')}"></div>
+      <div class="col-span-2 sm:col-span-2"><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Status</div><select class="mt-status ${VEH_FIELD} bg-white">${TK_STATUS.map(x => `<option ${x === (t.status || 'Not started') ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      <div class="col-span-2 sm:col-span-2"><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Progress %</div><input type="number" min="0" max="100" step="5" class="mt-prog ${VEH_FIELD} num" value="${tkProg(t)}"></div></div>
+    <input class="mt-notes ${VEH_FIELD} mt-2 text-sm" value="${esc(t.notes || '')}" placeholder="Notes (optional)"></div>`; };
+function mtRenumber(){ document.querySelectorAll('#mt-tasks .mt-task').forEach((el, i) => { const s = el.querySelector('.mt-num'); if(s) s.textContent = '#' + (i + 1); }); }
+function mtAddTask(){ const box = document.getElementById('mt-tasks'); if(!box) return; const last = [...box.querySelectorAll('.mt-task')].pop(); const prev = last ? { start:(last.querySelector('.mt-due').value || last.querySelector('.mt-start').value) } : { start:vToday() };
+  box.insertAdjacentHTML('beforeend', mtTaskRow({ start:prev.start })); mtRenumber(); const ts = box.querySelectorAll('.mt-title'); ts[ts.length - 1].focus(); }
+function mtRemoveTask(btn){ const el = btn.closest('.mt-task'); if(!el) return; if(document.querySelectorAll('#mt-tasks .mt-task').length <= 1){ el.querySelectorAll('input').forEach(x => { if(x.type !== 'checkbox') x.value = ''; else x.checked = false; }); el.querySelectorAll('.mt-dep-cb').forEach(c => mtDepLabel(c)); return; } el.remove(); mtRenumber(); }
+document.addEventListener('click', e => { document.querySelectorAll('details.mt-dep[open]').forEach(d => { if(!d.contains(e.target)) d.open = false; }); });
+function openMtForm(id){
+  if(!canManageInventory() || amIViewer()) return toast('Only admins can add or edit maintenance projects.', true);
+  const p = id ? mtById(id) : null; if(id && !p) return;
+  const d = p || { no:mtNextNo(), start:vToday(), lead:mtMyDept() || 'Administration', priority:'Normal' }, tasks = (p && p.tasks && p.tasks.length) ? p.tasks : [{ start:vToday() }];
+  openModal(p ? 'Edit maintenance project ' + (p.no || '') : 'New maintenance project', vFormOpen +
+    vGrid(2, vF('Reference no.', 'no', d.no, 'text', { req:1 }) + vS('Priority', 'priority', TK_PRIORITY, d.priority || 'Normal') +
+      vF('Project title', 'title', d.title, 'text', { req:1, span:'sm:col-span-2', attrs:' placeholder="e.g. Apollo Tower 3rd floor renovation"' }) +
+      vS('Location', 'locationId', LOCATIONS.map(l => [l.id, l.name + (l.code ? ' (' + l.code + ')' : '')]), d.locationId || '', 'Choose…') + vS('Lead department', 'lead', mtDeptNames(), d.lead || '', 'None') +
+      vF('Start date', 'start', d.start, 'date') + vF('Target end date', 'due', d.due, 'date', { attrs:' title="Leave empty to use the last task\'s due date"' }) +
+      vS('Project status', 'status', [['', 'Automatic (from the tasks)']].concat(MT_OVERRIDE.map(x => [x, x])), MT_OVERRIDE.includes(d.status) ? d.status : '') +
+      vTa('Description (optional)', 'description', d.description || '', { span:'sm:col-span-2', rows:2, ph:'What needs to be done and why' })) +
+    vSec('Tasks — with the departments involved') + `<div class="text-[11.5px] text-slate-500 -mt-1 mb-2">Each task: what to do, which departments do it, start and due dates. Departments update their own tasks' progress.</div><div id="mt-tasks">${tasks.map(mtTaskRow).join('')}</div>
+    <button type="button" onclick="mtAddTask()" class="text-sm font-semibold text-brand-600 hover:underline mb-2">+ Add another task</button>` +
+    vFoot(p ? 'Save' : 'Save project', `saveMtForm('${id || ''}')`, p ? `deleteMt('${id}')` : ''), true);
+  setTimeout(mtRenumber, 0);
+}
+async function saveMtForm(id){
+  const f = document.getElementById('vform'), o = vehFormObj(f), old = id ? mtById(id) : null;
+  const no = String(o.no || '').trim().toUpperCase(); if(!no) return vFail('Enter the reference number.');
+  if(mtAll().some(x => x.id !== id && String(x.no || '').toUpperCase() === no)) return vFail('Reference ' + no + ' is already used.');
+  if(!String(o.title || '').trim()) return vFail('Enter the project title.');
+  if(o.start && o.due && o.due < o.start) return vFail('The target end date is before the start date.');
+  const tasks = [];
+  for(const [i, el] of [...f.querySelectorAll('.mt-task')].entries()){
+    const t = { id:el.dataset.id || uid(), title:el.querySelector('.mt-title').value.trim(), depts:[...el.querySelectorAll('.mt-dep-cb:checked')].map(c => c.value), start:el.querySelector('.mt-start').value, due:el.querySelector('.mt-due').value,
+      status:el.querySelector('.mt-status').value, progress:Math.max(0, Math.min(100, Math.round(+el.querySelector('.mt-prog').value || 0))), notes:el.querySelector('.mt-notes').value.trim() };
+    if(!t.title && !t.depts.length && !t.due && !t.notes) continue;
+    if(!t.title) return vFail('Task #' + (i + 1) + ' needs a title.');
+    if(!t.start) return vFail('Give task "' + t.title + '" a start date.');
+    if(t.due && t.due < t.start) return vFail('Task "' + t.title + '" is due before it starts.');
+    if(t.status === 'Completed'){ t.progress = 100; t.completedOn = el.dataset.done || vToday(); } else if(t.progress === 100){ t.status = 'Completed'; t.completedOn = el.dataset.done || vToday(); }
+    else if(t.progress > 0 && t.status === 'Not started') t.status = 'In progress';
+    const prev = old && (old.tasks || []).find(x => x.id === t.id); if(prev && prev.updatedBy){ t.updatedBy = prev.updatedBy; t.updatedAt = prev.updatedAt; }
+    tasks.push(t);
+  }
+  if(!tasks.length) return vFail('Add at least one task.');
+  const rec = { id:id || undefined, no, title:o.title.trim(), priority:TK_PRIORITY.includes(o.priority) ? o.priority : 'Normal', locationId:o.locationId || '', lead:o.lead || '', start:o.start || '', due:o.due || '', status:MT_OVERRIDE.includes(o.status) ? o.status : '', description:o.description || '', tasks };
+  if(!old){ rec.createdByName = authUser ? authUser.name : ''; rec.createdAt = Date.now(); }
+  const btn = document.getElementById('vf-save'); if(btn) btn.disabled = true;
+  const nid = await vehSave('maintenance', rec); closeModal(); rerenderMain(); toast('Maintenance project ' + no + ' saved.'); openMtView(id || nid);
+}
+function deleteMt(id){ const p = mtById(id); if(!p) return; closeModal(); confirmAction('Delete maintenance project ' + (p.no || '') + ' and its ' + mtTasks(p).length + ' tasks?', async () => { await vehDelete('maintenance', id); rerenderMain(); toast('Deleted.'); }); }
+
 function viewTasks(){
   const tab = vehUi.tkTab || 'list', all = state.tasks, admin = canManageInventory();
   const open = all.filter(t => !tkDone(t)), over = all.filter(tkOverdue), mon = vToday().slice(0, 7);
@@ -17111,6 +17351,7 @@ function render(){
     else if(ui.tab==='staff-list') el.innerHTML = viewStaffList();
     else if(ui.tab==='complaints') el.innerHTML = viewComplaints();
     else if(ui.tab==='tasks') el.innerHTML = viewTasks();
+    else if(ui.tab==='maintenance') el.innerHTML = viewMaintenance();
     else if(ui.tab==='my-work') el.innerHTML = viewMyWork();
     else if(ui.tab==='backups') el.innerHTML = viewBackups();
     else if(ui.tab==='notifications') el.innerHTML = viewNotifSettings();

@@ -74,6 +74,7 @@ const COLOR_SCHEMES = [
   { id:'cyberpunk',        name:'Cyberpunk ✦ theme', swatches:['#0D0221','#FF2A6D','#F9F002','#05D9E8'], accent:'#FF2A6D', chrome:'#0D0221', chromeHover:'#26084a', tintFrom:'#3a0d6b', tint:.07, darkBase:.15, theme:true },
   { id:'tron',             name:'Tron ✦ theme',      swatches:['#000508','#00E5FF','#6FFFE9','#0B2A33'], accent:'#00C8E0', chrome:'#00060a', chromeHover:'#062430', tintFrom:'#004a5c', tint:.045, darkBase:.12, theme:true },
   { id:'tronhud',          name:'Tron HUD ✦ theme',  swatches:['#0a141d','#13283a','#00d8ff','#7fa6c2'], accent:'#00C2E8', chrome:'#08121a', chromeHover:'#13283a', tintFrom:'#1d4a6b', tint:.06, darkBase:.15, theme:true },
+  { id:'agent',            name:'Agent ✦ theme',     swatches:['#0a0a0b','#2f6bff','#ff3b30','#facc15'], accent:'#2f6bff', chrome:'#0a0a0b', chromeHover:'#161a24', tintFrom:'#0b1a4a', tint:.025, darkBase:.10, theme:true, egg:'agent' },
   { id:'cp2027',           name:'Cyberpunk 2027 ✦ theme', swatches:['#070508','#0f1f66','#FF3B3B','#5c0f14'], accent:'#FF3B3B', chrome:'#0a0507', chromeHover:'#2a0a10', tintFrom:'#4a0a12', tint:.05, darkBase:.12, theme:true },
 ];
 
@@ -199,7 +200,7 @@ function appearanceBodyHtml(){
   const sun = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="3.2"/><path stroke-linecap="round" d="M10 2.5v1.8M10 15.7v1.8M17.5 10h-1.8M4.3 10H2.5M15.3 4.7l-1.27 1.27M5.97 14.03L4.7 15.3M15.3 15.3l-1.27-1.27M5.97 5.97L4.7 4.7"/></svg>';
   const moon = '<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 10.8A7.5 7.5 0 0 1 9.2 3 7.5 7.5 0 1 0 17 10.8z"/></svg>';
   const unlocked = themesUnlocked();
-  const cards = COLOR_SCHEMES.filter(s => !s.theme || unlocked || s.id === current).map(s => {
+  const cards = COLOR_SCHEMES.filter(s => s.id === current || (s.egg === 'agent' ? (typeof agentUnlocked === 'function' && agentUnlocked()) : (!s.theme || unlocked))).map(s => {
     const sel = s.id === current;
     return `
     <button type="button" onclick="setColorScheme('${s.id}')" aria-pressed="${sel}" class="text-left rounded-lg border ${sel ? 'border-brand-600 ring-2 ring-brand-500' : 'border-slate-200 hover:border-brand-400'} p-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
@@ -1483,7 +1484,7 @@ function handleCloudSyncError(err, collectionLabel){
 }
 function listenToCloudItems(){
   if(itemsUnsub) itemsUnsub();
-  itemsUnsub = firestoreItemsRef.onSnapshot(snap=>{
+  itemsUnsub = dsListen(firestoreItemsRef, snap=>{
     cloudStatus = 'synced';
     state.products = snap.docs.map(d=>d.data());
     setJSON('products', stripImagesForLocalCache(state.products));
@@ -1492,7 +1493,7 @@ function listenToCloudItems(){
 }
 function listenToCloudMovements(){
   if(movementsUnsub) movementsUnsub();
-  movementsUnsub = firestoreMovementsRef.onSnapshot(snap=>{
+  movementsUnsub = dsListen(firestoreMovementsRef, snap=>{
     state.movements = snap.docs.map(d=>d.data());
     setJSON('movements', state.movements);
     renderApp();
@@ -1500,7 +1501,7 @@ function listenToCloudMovements(){
 }
 function listenToCloudAssets(){
   if(assetsUnsub) assetsUnsub();
-  assetsUnsub = firestoreAssetsRef.onSnapshot(snap=>{
+  assetsUnsub = dsListen(firestoreAssetsRef, snap=>{
     state.assets = snap.docs.map(d=>d.data());
     setJSON('assets', stripImagesForLocalCache(state.assets));
     renderApp();
@@ -1508,7 +1509,7 @@ function listenToCloudAssets(){
 }
 function listenToCloudAssetTransfers(){
   if(assetTransfersUnsub) assetTransfersUnsub();
-  assetTransfersUnsub = firestoreAssetTransfersRef.onSnapshot(snap=>{
+  assetTransfersUnsub = dsListen(firestoreAssetTransfersRef, snap=>{
     state.assetTransfers = snap.docs.map(d=>d.data());
     setJSON('assetTransfers', state.assetTransfers);
     renderApp();
@@ -1516,21 +1517,21 @@ function listenToCloudAssetTransfers(){
 }
 function listenToCloudItemTransfers(){
   if(itemTransfersUnsub) itemTransfersUnsub();
-  itemTransfersUnsub = firestoreItemTransfersRef.onSnapshot(snap=>{
+  itemTransfersUnsub = dsListen(firestoreItemTransfersRef, snap=>{
     applyCloudSnapshot('itemTransfers', snap);
     renderApp();
   }, err=> syncListenerError('itemTransfers', err));
 }
 function listenToCloudPurchaseRequisitions(){
   if(purchaseRequisitionsUnsub) purchaseRequisitionsUnsub();
-  purchaseRequisitionsUnsub = firestorePurchaseRequisitionsRef.onSnapshot(snap=>{
+  purchaseRequisitionsUnsub = dsListen(firestorePurchaseRequisitionsRef, snap=>{
     applyCloudSnapshot('purchaseRequisitions', snap);
     renderApp();
   }, err=> syncListenerError('purchaseRequisitions', err));
 }
 function listenToCloudHandovers(){
   if(handoversUnsub) handoversUnsub();
-  handoversUnsub = firestoreHandoversRef.onSnapshot(snap=>{
+  handoversUnsub = dsListen(firestoreHandoversRef, snap=>{
     applyCloudSnapshot('handovers', snap);
     renderApp();
   }, err=> syncListenerError('handovers', err));
@@ -1998,7 +1999,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.368';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.370';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2564,7 +2565,7 @@ function vehClearState(){
 }
 function listenVeh(key){
   if(vehUnsubs[key]) vehUnsubs[key]();
-  vehUnsubs[key] = vehRefs[key].onSnapshot(snap => { applyCloudSnapshot(key, snap); renderApp(); }, err => syncListenerError(key, err));
+  vehUnsubs[key] = dsListen(vehRefs[key], snap => { applyCloudSnapshot(key, snap); renderApp(); }, err => syncListenerError(key, err));
 }
 function listenVehSettings(){
   if(vehSettingsUnsub) vehSettingsUnsub();
@@ -8782,6 +8783,7 @@ async function tkSaveUpdate(id){
   11. type "niyaz" on the Dashboard → a quote
   12. type "awtgg" on the Dashboard → a question… and "waaawb" → the answer
   13. type "tronxcyberpunk" anywhere → unlocks the hidden Tron and Cyberpunk themes in Appearance
+  14. type "agent" on the Dashboard → the Agent ✦ theme (a swarm of AI agents inspecting the page); again → back
 ===================================================================== */
 const EGG_CALM = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function eggCanvas(z){
@@ -8866,7 +8868,7 @@ document.addEventListener('keydown', e => {
   const k = String(e.key || '').toLowerCase();
   eggKeys = eggKeys.concat(k).slice(-10);
   if(eggKeys.join() === EGG_KONAMI.join()){ eggKeys = []; const on = document.documentElement.classList.toggle('egg-retro'); toast(on ? 'RETRO MODE ENGAGED. Enter the code again (or reload) to return.' : 'Back to normal.'); return; }
-  if(k.length === 1 && /[a-z]/.test(k)){ eggTyped = (eggTyped + k).slice(-20); if(eggTyped.endsWith('tronxcyberpunk')){ eggTyped = ''; eggUnlockThemes(); return; } if(ui.tab === 'dashboard'){ if(eggTyped.endsWith('monsoon')){ eggTyped = ''; eggMonsoon(); } else if(eggTyped.endsWith('niyaz')){ eggTyped = ''; eggQuote(); } else if(eggTyped.endsWith('waaawb')){ eggTyped = ''; eggCode('We.Are.And.Always.Will.Be', ''); } else if(eggTyped.endsWith('awtgg')){ eggTyped = ''; eggCode('Are.We.The.Good.Guys?', '(WAAAWB)'); } } }
+  if(k.length === 1 && /[a-z]/.test(k)){ eggTyped = (eggTyped + k).slice(-20); if(eggTyped.endsWith('tronxcyberpunk')){ eggTyped = ''; eggUnlockThemes(); return; } if(ui.tab === 'dashboard'){ if(eggTyped.endsWith('agent')){ eggTyped = ''; eggAgent(); } else if(eggTyped.endsWith('monsoon')){ eggTyped = ''; eggMonsoon(); } else if(eggTyped.endsWith('niyaz')){ eggTyped = ''; eggQuote(); } else if(eggTyped.endsWith('waaawb')){ eggTyped = ''; eggCode('We.Are.And.Always.Will.Be', ''); } else if(eggTyped.endsWith('awtgg')){ eggTyped = ''; eggCode('Are.We.The.Good.Guys?', '(WAAAWB)'); } } }
 });
 function eggMonsoon(){
   if(EGG_CALM() || document.getElementById('egg-rain')) return;
@@ -9007,6 +9009,91 @@ function eggQuote(){
 }
 
 /* type "awtgg" → the question, "waaawb" → the answer: typed out letter by letter, terminal style */
+/* ---------- type "agent" on the Dashboard → the Agent ✦ theme: near-black, electric blue, and a swarm of little AI agents
+   that fly around the screen, select parts of the page and "inspect" them (like the video). Type it again to switch back. */
+const AGENT_KEY = 'fdc_egg_agent';
+function agentUnlocked(){ try{ if(localStorage.getItem(AGENT_KEY) === '1') return true; }catch(e){} try{ return !!(authUser && anyaML.data().agent); }catch(e){ return false; } }
+function eggAgent(){
+  const cur = getColorSchemeId();
+  if(cur === 'agent'){ let back = 'default'; try{ back = localStorage.getItem(AGENT_KEY + '_prev') || 'default'; }catch(e){} setColorScheme(back === 'agent' ? 'default' : back); toast('Agents recalled. 🛰️'); return; }
+  try{ localStorage.setItem(AGENT_KEY, '1'); localStorage.setItem(AGENT_KEY + '_prev', cur); }catch(e){} try{ if(authUser){ anyaML.data().agent = true; anyaML.save(); } }catch(e){}
+  eggCode('AGENTS.DEPLOYED', 'AGENT ✦ THEME — type “agent” again to recall them');
+  setTimeout(() => setColorScheme('agent'), 900);
+}
+// the look
+(function(){
+  const S = 'html[data-color-scheme="agent"][data-theme="dark"]', st = document.createElement('style');
+  st.textContent = `
+  ${S} body{ background-color:#0a0a0b !important; letter-spacing:-.005em; }
+  ${S} h1, ${S} h2, ${S} h3{ letter-spacing:-.03em; font-weight:800; color:#fafafa; }
+  ${S} h1{ font-size:1.75rem; }
+  ${S} .bg-white{ background-color:#111114 !important; border-color:#24262e !important; }
+  ${S} .rounded-xl, ${S} .rounded-2xl{ border-radius:6px !important; }
+  ${S} .text-slate-900, ${S} .text-slate-800{ color:#f4f4f5; } ${S} .text-slate-700, ${S} .text-slate-600{ color:#c4c4cc; } ${S} .text-slate-500, ${S} .text-slate-400{ color:#8b8b95; }
+  ${S} .bg-brand-600{ background-color:#2f6bff !important; border-radius:3px !important; box-shadow:0 0 0 1px #2f6bff, 0 6px 20px -8px rgba(47,107,255,.8); }
+  ${S} .bg-brand-600:hover{ background-color:#4a7dff !important; }
+  ${S} .nav-item-on{ background:rgba(47,107,255,.12) !important; color:#fff !important; outline:1px solid #2f6bff; outline-offset:-1px; border-radius:2px !important; position:relative; }
+  ${S} .nav-item-on::before, ${S} .nav-item-on::after{ content:''; position:absolute; width:5px; height:5px; background:#0a0a0b; border:1px solid #2f6bff; }
+  ${S} .nav-item-on::before{ left:-3px; top:-3px; } ${S} .nav-item-on::after{ right:-3px; bottom:-3px; }
+  ${S} .nav-rail-on{ background:rgba(47,107,255,.14) !important; box-shadow:inset 2px 0 0 #2f6bff; }
+  ${S} .nav-rail-on svg{ color:#2f6bff; }
+  ${S} input, ${S} select, ${S} textarea{ border-color:#2a2d36 !important; border-radius:4px !important; }
+  ${S} input:focus, ${S} select:focus, ${S} textarea:focus{ border-color:#2f6bff !important; box-shadow:0 0 0 1px #2f6bff !important; }
+  ${S} ::selection{ background:#2f6bff; color:#fff; }
+  ${S} .num{ font-feature-settings:'tnum'; }
+  #agent-layer{ position:fixed; inset:0; pointer-events:none; z-index:45; overflow:hidden; }
+  #agent-layer .ag{ position:absolute; left:0; top:0; width:16px; height:16px; will-change:transform; filter:drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+  #agent-layer .ag i{ position:absolute; left:13px; top:12px; font:600 9px/1 ui-monospace,Menlo,Consolas,monospace; color:#0a0a0b; padding:2px 4px; border-radius:2px; white-space:nowrap; opacity:.92; font-style:normal; }
+  #agent-layer .sel{ position:absolute; border:1px solid #2f6bff; background:rgba(47,107,255,.06); transition:opacity .35s; }
+  #agent-layer .sel b{ position:absolute; width:5px; height:5px; background:#0a0a0b; border:1px solid #2f6bff; }
+  #agent-layer .sel em{ position:absolute; left:-1px; top:-17px; font:600 10px/1 ui-monospace,Menlo,Consolas,monospace; color:#fff; background:#2f6bff; padding:3px 5px; white-space:nowrap; font-style:normal; }
+  #agent-layer .guide{ position:absolute; top:0; bottom:0; width:1px; background:#ff3b30; box-shadow:0 0 6px rgba(255,59,48,.7); transition:opacity .5s; }
+  #agent-layer .glitch{ position:absolute; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,#2f6bff 20%,#7aa2ff 50%,#2f6bff 80%,transparent); opacity:.85; transition:transform .5s linear, opacity .5s; }
+  @media print{ #agent-layer{ display:none; } }`;
+  document.head.appendChild(st);
+})();
+// the swarm
+let agentRun = null;
+function agentSync(){
+  const on = document.documentElement.getAttribute('data-color-scheme') === 'agent' && document.documentElement.getAttribute('data-theme') === 'dark';
+  if(on && !agentRun) agentStart(); else if(!on && agentRun) agentStop();
+}
+function agentStop(){ if(!agentRun) return; agentRun.dead = true; cancelAnimationFrame(agentRun.raf); clearInterval(agentRun.iv); const l = document.getElementById('agent-layer'); if(l) l.remove(); agentRun = null; }
+function agentStart(){
+  if(agentRun || !document.body) return;
+  const calm = EGG_CALM(), N = calm ? 5 : (window.innerWidth < 700 ? 8 : 16), COLS = ['#2f6bff', '#22d3ee', '#f472b6', '#facc15', '#4ade80', '#fb923c', '#a78bfa', '#ff3b30'];
+  const VERBS = ['inspecting', 'reviewing', 'indexing', 'auditing', 'reading', 'checking', 'tracing', 'syncing'];
+  const L = document.createElement('div'); L.id = 'agent-layer'; L.setAttribute('aria-hidden', 'true'); document.body.appendChild(L);
+  const W = () => window.innerWidth, H = () => window.innerHeight;
+  const agents = Array.from({ length:N }, (_, i) => { const c = COLS[i % COLS.length], el = document.createElement('div'); el.className = 'ag';
+    el.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16"><path d="M1 1l13 5.2-5.6 1.6L6.8 14z" fill="${c}" stroke="#0a0a0b" stroke-width="1"/></svg>${i % 3 === 0 ? `<i style="background:${c}">agent-${String(i + 1).padStart(2, '0')}</i>` : ''}`;
+    L.appendChild(el); return { el, c, n:i + 1, x:Math.random() * W(), y:Math.random() * H(), tx:0, ty:0, sp:(calm ? .02 : .035) + Math.random() * .03, wait:0, target:null }; });
+  const targets = () => [...document.querySelectorAll('#main-inner .bg-white, #main-inner button, #main-inner h1, #main-inner h2, #main-inner tr, #main-inner .nav-item, aside .nav-item, #modal-overlay:not(.hidden) .bg-white, #modal-overlay:not(.hidden) button')]
+    .filter(e => { const r = e.getBoundingClientRect(); return r.width > 20 && r.height > 12 && r.bottom > 0 && r.top < H() && r.right > 0 && r.left < W(); });
+  const pick = a => { const ts = targets(); if(ts.length && Math.random() < .8){ const t = ts[Math.floor(Math.random() * ts.length)], r = t.getBoundingClientRect(); a.target = t; a.tx = r.left + Math.random() * Math.min(r.width, 200); a.ty = r.top + Math.min(r.height - 4, 6 + Math.random() * r.height * .6); }
+    else { a.target = null; a.tx = Math.random() * W(); a.ty = Math.random() * H(); } };
+  agents.forEach(pick);
+  const boxes = [];
+  const select = a => { if(!a.target || boxes.length >= (calm ? 1 : 3)) return; const r = a.target.getBoundingClientRect(); if(r.width > W() * .9 && r.height > H() * .6) return;
+    const b = document.createElement('div'); b.className = 'sel'; b.style.cssText = `left:${r.left - 3}px;top:${r.top - 3}px;width:${r.width + 6}px;height:${r.height + 6}px;border-color:${a.c === '#ff3b30' ? '#ff3b30' : '#2f6bff'}`;
+    b.innerHTML = '<b style="left:-3px;top:-3px"></b><b style="right:-3px;top:-3px"></b><b style="left:-3px;bottom:-3px"></b><b style="right:-3px;bottom:-3px"></b>' + `<em>agent-${String(a.n).padStart(2, '0')} · ${VERBS[Math.floor(Math.random() * VERBS.length)]}</em>`;
+    L.appendChild(b); boxes.push(b); setTimeout(() => { b.style.opacity = '0'; setTimeout(() => { b.remove(); boxes.splice(boxes.indexOf(b), 1); }, 380); }, 1400 + Math.random() * 1600); };
+  const guide = () => { const ts = targets(); if(!ts.length) return; const r = ts[Math.floor(Math.random() * ts.length)].getBoundingClientRect(), g = document.createElement('div'); g.className = 'guide'; g.style.left = Math.round(r.left) + 'px'; L.appendChild(g);
+    setTimeout(() => { g.style.opacity = '0'; setTimeout(() => g.remove(), 520); }, 900 + Math.random() * 900); };
+  const glitch = () => { const g = document.createElement('div'); g.className = 'glitch'; const y = Math.random() * H(); g.style.top = y + 'px'; L.appendChild(g); requestAnimationFrame(() => { g.style.transform = 'translateY(' + (Math.random() < .5 ? -1 : 1) * (20 + Math.random() * 60) + 'px)'; g.style.opacity = '0'; }); setTimeout(() => g.remove(), 600); };
+  const run = agentRun = { dead:false, raf:0, iv:0 };
+  run.iv = setInterval(() => { if(document.hidden) return; if(Math.random() < (calm ? .15 : .45)) guide(); if(!calm && Math.random() < .35) glitch(); }, 2200);
+  let last = performance.now();
+  const step = now => { if(run.dead) return; const dt = Math.min(48, now - last); last = now;
+    if(!document.hidden) agents.forEach(a => { const dx = a.tx - a.x, dy = a.ty - a.y, d = Math.hypot(dx, dy);
+      if(d < 3){ if(!a.wait){ a.wait = now + 500 + Math.random() * 1800; if(Math.random() < .55) select(a); } else if(now > a.wait){ a.wait = 0; pick(a); } }
+      else { const k = Math.min(1, a.sp * dt / 16); a.x += dx * k; a.y += dy * k; }
+      a.el.style.transform = `translate(${a.x.toFixed(1)}px,${a.y.toFixed(1)}px)`; });
+    run.raf = requestAnimationFrame(step); };
+  run.raf = requestAnimationFrame(step);
+}
+try{ new MutationObserver(agentSync).observe(document.documentElement, { attributes:true, attributeFilter:['data-color-scheme', 'data-theme'] }); }catch(e){}
+document.addEventListener('DOMContentLoaded', agentSync); setTimeout(agentSync, 0);
 // type "tronxcyberpunk" anywhere → the Tron and Cyberpunk themes appear in Appearance
 function eggUnlockThemes(){
   const was = themesUnlocked();
@@ -9045,19 +9132,72 @@ function viewerTrim(root){ if(!amIViewer()) return; (root || document.getElement
   if(/^\+\s/.test(t) || /^\+[A-Z]/.test(t) || /^(✎\s*)?(edit|delete|remove)\b/i.test(t) || /\b(open\w*Form|delete\w*|confirmDelete\w*)\(/.test(oc) && !/download|pdf|word|excel|csv/i.test(t)) b.style.display = 'none'; }); }
 window.addEventListener('unhandledrejection', e => { if(e.reason && e.reason.viewOnly) e.preventDefault(); });     // the toast already told them
 
+/* ---------- fewer cloud reads: records come from this device's copy, and only what changed is downloaded ----------
+   Firestore counts a read for every record a listener receives. Listening to whole collections re-reads every record each
+   time the app is opened (after ~30 min). Instead each collection is read in full once a week per device; in between the
+   app starts from the device copy and listens only for records changed since the last time (_u) and for deletion markers. */
+const DS_V = 1, DS_FULL_DAYS = 7;
+const DS_LEGACY = ['fdc_inventory_items', 'fdc_inventory_movements', 'fdc_inventory_assets', 'fdc_inventory_asset_transfers', 'fdc_inventory_item_transfers', 'fdc_inventory_purchase_requisitions', 'fdc_inventory_handovers'];
+let dsColsSet = null;
+const dsCols = () => dsColsSet || (dsColsSet = new Set(DS_LEGACY.concat(Object.values(VEH_COLS).map(c => c.collection))));
+const dsOf = path => { const s = String(path || '').split('/'); return s.length === 2 && dsCols().has(s[0]) ? s : null; };
+const dsKey = c => 'fdc_ds_' + c + '_' + ((authUser && authUser.uid) || 'anon');
+const dsGet = c => { try{ return JSON.parse(localStorage.getItem(dsKey(c)) || 'null') || {}; }catch(e){ return {}; } };
+const dsPut = (c, st) => { try{ localStorage.setItem(dsKey(c), JSON.stringify(st)); }catch(e){} };
+const dsStats = { full:0, delta:0, docs:0 };
+function dsListen(ref, cb, onErr){
+  const col = ref.id, st = dsGet(col), map = new Map(); let unsub = null, dead = false; st.maxU = st.maxU || st.last || 0; st.del = st.del && typeof st.del === 'object' && !Array.isArray(st.del) ? st.del : {};
+  const emit = fromCache => { if(!dead) cb({ docs:[...map.values()].map(x => ({ id:x.id, data:() => x.data, metadata:{ hasPendingWrites:x.pend, fromCache } })), metadata:{ fromCache }, size:map.size }); };
+  const take = d => { const raw = d.data(); if(!raw) return; const u = raw._u && raw._u.toMillis ? raw._u.toMillis() : 0; if(u > st.maxU) st.maxU = u;
+    const data = Object.assign({}, raw); delete data._u;
+    if(data.__deleted || /^__del__/.test(d.id)){ const gone = String(data.id || d.id.replace(/^__del__/, '')), tu = u || Date.now(), cur = map.get(gone); if(!cur || (cur.u || 0) <= tu) map.delete(gone); st.del[gone] = Math.max(st.del[gone] || 0, tu); return; }
+    if(st.del[d.id] != null){ if(u > st.del[d.id]) delete st.del[d.id]; else return; }      // deleted elsewhere: the older device copy is ignored (only a newer save brings it back)
+    map.set(d.id, { id:d.id, data, u, pend:!!(d.metadata && d.metadata.hasPendingWrites) }); };
+  const full = () => { dsStats.full++;
+    unsub = ref.onSnapshot(snap => { map.clear(); snap.docs.forEach(take); emit(snap.metadata.fromCache);
+      if(!snap.metadata.fromCache && !snap.metadata.hasPendingWrites){ Object.assign(st, { v:DS_V, full:Date.now(), last:st.maxU || Date.now() - 10 * 60000, n:map.size, del:{} }); dsPut(col, st); dsPrune(ref, snap); } }, onErr); };
+  const delta = () => { dsStats.delta++;
+    const since = firebase.firestore.Timestamp.fromMillis(Math.max(0, (st.last || 0) - 5 * 60000));          // 5 minutes back, for clock differences
+    unsub = ref.where('_u', '>', since).onSnapshot(snap => { snap.docChanges().forEach(ch => { if(ch.type !== 'removed') take(ch.doc); }); dsStats.docs += snap.docChanges().length;
+      if(!snap.metadata.fromCache){ if(st.maxU > (st.last || 0)) st.last = st.maxU; st.n = map.size; dsPut(col, st); } emit(snap.metadata.fromCache); }, err => { if(dead) return; try{ unsub && unsub(); }catch(e){} full(); onErr && console.warn(err); }); };
+  const due = !st.full || st.v !== DS_V || Date.now() - st.full > DS_FULL_DAYS * 864e5 || !firebase.firestore.Timestamp;
+  if(due) full();
+  else ref.get({ source:'cache' }).then(snap => { if(dead) return; snap.docs.forEach(take);
+      if(map.size < Math.floor((st.n || 0) * 0.9)){ map.clear(); full(); return; }                         // the device copy is missing records: read everything once
+      emit(true); delta(); }).catch(() => { if(!dead){ map.clear(); full(); } });
+  return () => { dead = true; try{ unsub && unsub(); }catch(e){} };
+}
+// deletion markers older than three weeks are no longer needed (every device reads everything at least weekly) — an admin's app tidies them
+function dsPrune(ref, snap){ try{ if(!authUser || authUser.role !== 'admin' || amIViewer()) return; const old = Date.now() - 21 * 864e5;
+  snap.docs.filter(d => /^__del__/.test(d.id) && (d.data().at || 0) < old).slice(0, 200).forEach(d => d.ref.delete().catch(() => {})); }catch(e){} }
+// Settings: read everything again on this device (e.g. if something looks out of date)
+function dsRefreshAll(){ try{ Object.keys(localStorage).filter(k => k.startsWith('fdc_ds_')).forEach(k => localStorage.removeItem(k)); }catch(e){} toast('Reloading all records from the cloud…'); setTimeout(() => location.reload(), 600); }
 /* ---------- Firestore: offline-friendly saves + view-only guard ---------- */
 function fsAfterInit(db){
+  try{ db.settings({ cacheSizeBytes:firebase.firestore.CACHE_SIZE_UNLIMITED, merge:true }); }catch(e){}   // the device copy is never trimmed (the app reads its records from it)
   try{ db.enablePersistence({ synchronizeTabs:true }).catch(() => {}); }catch(e){}            // keeps a copy on this device, so the app works offline
   if(window._fsPatched || !window.firebase || !firebase.firestore) return; window._fsPatched = 1;
   const F = firebase.firestore, own = path => !!authUser && (path === 'fdc_inventory_profiles/' + authUser.uid || path === 'fdc_inventory_notes/' + authUser.uid);
   const guard = path => { if(amIViewer() && !own(path)){ toast('You have view-only access.', true); return true; } return false; };
   // offline: the change is kept on this device and sent when the connection is back, so don't keep the screen waiting
   const soft = p => { if(navigator.onLine) return p; p.catch(e => console.warn('Saved offline, will sync later', e)); return Promise.resolve(); };
+  // every record saved in a synced collection gets the server time of the change (_u), and a deletion leaves a small marker,
+  // so other devices only download what changed since they last looked (see dsListen) instead of every record each time
+  const stamp = (path, a, m) => { const s = dsOf(path); if(!s) return a;
+    if(m === 'set' && a[0] && typeof a[0] === 'object') return [Object.assign({}, a[0], { _u:F.FieldValue.serverTimestamp() })].concat(a.slice(1));
+    if(m === 'update'){ if(a[0] && typeof a[0] === 'object' && !(a[0] instanceof F.FieldPath)) return [Object.assign({}, a[0], { _u:F.FieldValue.serverTimestamp() })]; return a.concat(['_u', F.FieldValue.serverTimestamp()]); }
+    return a; };
   ['set', 'update', 'delete'].forEach(m => { const o = F.DocumentReference.prototype[m]; if(!o) return;
-    F.DocumentReference.prototype[m] = function(...a){ if(guard(this.path)) return Promise.reject(new Error('View-only access')); return soft(o.apply(this, a)); }; });
+    F.DocumentReference.prototype[m] = function(...a){ if(guard(this.path)) return Promise.reject(new Error('View-only access'));
+      const r = soft(o.apply(this, stamp(this.path, a, m)));
+      if(m === 'delete'){ const s = dsOf(this.path); if(s && !/^__del__/.test(s[1])) try{ this.parent.doc('__del__' + s[1]).set({ id:s[1], __deleted:true, at:Date.now() }).catch(() => {}); }catch(e){} }
+      return r; }; });
+  if(F.WriteBatch){ ['set', 'update'].forEach(m => { const o = F.WriteBatch.prototype[m]; if(!o) return; F.WriteBatch.prototype[m] = function(ref, ...a){ return o.call(this, ref, ...stamp(ref && ref.path, a, m)); }; });
+    const od = F.WriteBatch.prototype.delete; if(od) F.WriteBatch.prototype.delete = function(ref){ const r = od.call(this, ref), s = dsOf(ref && ref.path); if(s && !/^__del__/.test(s[1])) try{ this.set(ref.parent.doc('__del__' + s[1]), { id:s[1], __deleted:true, at:Date.now() }); }catch(e){} return r; }; }
   const add = F.CollectionReference.prototype.add;
   if(add) F.CollectionReference.prototype.add = function(data){
     if(guard(this.path + '/new')) return Promise.reject(new Error('View-only access'));
+    if(dsOf(this.path + '/x') && data && typeof data === 'object') data = Object.assign({}, data, { _u:F.FieldValue.serverTimestamp() });
     if(navigator.onLine) return add.call(this, data);
     const ref = this.doc(); ref.set(data); return Promise.resolve(ref);
   };
@@ -9265,7 +9405,8 @@ function openNdSettings(){ goTo('notifications'); }
 // Settings → Notifications: the only place to change reminders
 function viewNotifSettings(){
   return vHead('Notifications', 'Reminders on this device: what you are reminded about, when, and how. Each person sets their own; the settings are kept on this device.', '') +
-    `<div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 max-w-3xl">${ndSettingsHtml()}</div>`;
+    `<div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 max-w-3xl">${ndSettingsHtml()}</div>` +
+    `<div class="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 max-w-3xl mt-5"><div class="text-sm font-bold text-slate-900 mb-1">Data on this device</div><p class="text-xs text-slate-500 mb-3">To save on cloud usage, the app keeps a copy of the records on this device and only downloads what changed; everything is downloaded again once a week. If something looks out of date, reload it all now.</p><button type="button" onclick="dsRefreshAll()" class="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50">Reload all records</button></div>`;
 }
 function ndReadForm(){
   const v = id => document.getElementById(id), o = ndPrefs();
@@ -11610,7 +11751,7 @@ async function bkBuild(withFiles){
   const cols = bkCollections(), data = { app:'Administration', format:1, createdAt:Date.now(), createdBy:authUser ? authUser.name : '', collections:{}, meta:{}, profiles:[] };
   for(const [k, col] of Object.entries(cols)){
     let rows = null;
-    if(firestoreDb){ try{ const s = await firestoreDb.collection(col).get(); rows = s.docs.map(d => Object.assign({ id:d.id }, d.data())); }catch(e){} }
+    if(firestoreDb){ try{ const s = await firestoreDb.collection(col).get(); rows = s.docs.filter(d => !/^__del__/.test(d.id) && !(d.data() || {}).__deleted).map(d => { const x = Object.assign({ id:d.id }, d.data()); delete x._u; return x; }); }catch(e){} }      // deletion markers and change times are not part of a backup
     data.collections[col] = rows || JSON.parse(JSON.stringify(state[k] || []));
   }
   if(firestoreDb){

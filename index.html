@@ -1998,7 +1998,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.367';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.368';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -2424,6 +2424,7 @@ const SHARE_KINDS = {
   sr:{ label:'Stock request', rec:id => (state.stockRequests || []).find(x => x.id === id), title:r => [r.number, (r.lines || []).map(l => { const p = getProduct(l.productId); return p ? l.qty + ' × ' + displayName(p) : ''; }).filter(Boolean).slice(0, 2).join(', ')].filter(Boolean).join(' — '),
     open:id => { goTo('movements'); ui.movementsView = 'requests'; rerenderMain(); setTimeout(() => { const el = document.getElementById('sr-card-' + id); if(el){ el.scrollIntoView({ block:'center', behavior:'smooth' }); el.classList.add('ring-2', 'ring-brand-500'); setTimeout(() => el.classList.remove('ring-2', 'ring-brand-500'), 4000); } }, 300); } },
   ho:{ label:'Handover', rec:id => (state.handovers || []).find(x => x.id === id), title:r => [r.referenceNumber, r.handoverType, [r.fromStaffName, r.toStaffName].filter(Boolean).join(' → ')].filter(Boolean).join(' — '), open:id => { goTo('handovers'); openHoDetail(id); } },
+  mt:{ label:'Maintenance project', rec:id => (state.maintenance || []).find(x => x.id === id), title:r => [r.no, r.title].filter(Boolean).join(' — '), open:id => { goTo('maintenance'); openMtView(id); } },
   cp:{ label:'Complaint', rec:id => (state.complaints || []).find(x => x.id === id), title:r => [r.no, r.title].filter(Boolean).join(' — '), open:id => { goTo('complaints'); openCpView(id); } },
 };
 const shareUrl = (kind, id) => location.origin + location.pathname + '?open=' + encodeURIComponent(kind + ':' + id);
@@ -8215,7 +8216,7 @@ function mtGantt(projects, o){
   const items = [];
   projects.forEach(p => { const ts = mtTasks(p).filter(t => iso(t.start) && (!depF || (t.depts || []).includes(depF)));
     const a = mtStart(p), b = mtEnd(p); if(iso(a)) items.push({ kind:'proj', p, a, b:iso(b) && b >= a ? b : a });
-    ts.forEach(t => { const e = tkEnd(t); items.push({ kind:'task', p, t, a:t.start, b:iso(e) && e >= t.start ? e : t.start }); }); });
+    ts.forEach(t => { const e = t.status === 'Completed' && iso(t.completedOn) ? t.completedOn : tkEnd(t); items.push({ kind:'task', p, t, a:t.start, b:iso(e) && e >= t.start ? e : t.start }); }); });      // a finished task ends on its completion date
   const R = mtRange(items, span, +vehUi.mtShift || 0), nD = tkDays(R.from, R.to) + 1, t0 = vToday();
   const dW = span === 'fit' ? Math.max(6, Math.min(40, Math.floor((o.ctrl ? 980 : 640) / nD))) : span === 'month' ? 34 : 13, LW = o.ctrl ? 270 : 220, RH = 40, W = nD * dW;
   const btn = 'h-9 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50';
@@ -8278,9 +8279,10 @@ function mtDeptReport(){
 function openMtView(id){
   const p = mtById(id); if(!p) return; const loc = getLocation(p.locationId), s = mtState(p), ts = mtTasks(p), admin = canManageInventory() && !amIViewer();
   const item = (l, v) => `<div><div class="text-[11px] uppercase tracking-wide text-slate-400">${l}</div><div class="text-sm font-semibold text-slate-800 mt-0.5">${v}</div></div>`;
+  shareFor('mt', id);
   const row = (t, i) => { const can = mtCanUpdate(t), st = tkState(t);
     return `<tr class="border-t border-slate-100 align-top"><td class="py-2.5 pr-3"><div class="font-medium text-slate-800">${i + 1}. ${esc(t.title || '—')}</div>${t.notes ? `<div class="text-[11.5px] text-slate-500 whitespace-pre-wrap">${esc(t.notes)}</div>` : ''}<div class="flex flex-wrap gap-1 mt-1">${mtDeptChips(t.depts || [])}</div></td>
-      <td class="py-2.5 pr-3 text-[12px] text-slate-600 whitespace-nowrap num">${t.start ? esc(isoToDmy(t.start)) : '—'}${t.due ? '<br>→ ' + esc(isoToDmy(t.due)) : ''}${tkOverdue(t) ? '<div class="text-rose-600 font-semibold text-[11px]">Overdue</div>' : t.status === 'Completed' && t.completedOn ? `<div class="text-emerald-600 text-[11px]">Done ${esc(isoToDmy(t.completedOn))}</div>` : ''}</td>
+      <td class="py-2.5 pr-3 text-[12px] text-slate-600 whitespace-nowrap num">${t.start ? esc(isoToDmy(t.start)) : '—'}${t.due ? '<br>→ ' + esc(isoToDmy(t.due)) : ''}${tkOverdue(t) ? '<div class="text-rose-600 font-semibold text-[11px]">Overdue</div>' : t.status === 'Completed' ? (can ? `<div class="text-emerald-600 text-[11px] mt-0.5">Done <input type="date" value="${esc(t.completedOn || '')}" onchange="mtTaskSet('${p.id}', '${t.id}', 'completedOn', this.value)" class="px-1 py-0.5 rounded border border-emerald-200 text-[11px] num"></div>` : t.completedOn ? `<div class="text-emerald-600 text-[11px]">Done ${esc(isoToDmy(t.completedOn))}</div>` : '') : ''}</td>
       <td class="py-2.5 pr-3 whitespace-nowrap">${can ? `<input type="number" min="0" max="100" step="5" value="${tkProg(t)}" onchange="mtTaskSet('${p.id}', '${t.id}', 'progress', this.value)" class="w-16 px-2 py-1 rounded-md border border-slate-300 text-sm num" title="Progress %"> %` : `<span class="num text-sm">${tkProg(t)}%</span>`}</td>
       <td class="py-2.5">${can ? `<select onchange="mtTaskSet('${p.id}', '${t.id}', 'status', this.value)" class="px-2 py-1 rounded-md border border-slate-300 text-xs font-semibold bg-white">${TK_STATUS.map(x => `<option ${x === (t.status || 'Not started') ? 'selected' : ''}>${x}</option>`).join('')}</select>` : mtStatePill(st)}</td></tr>`; };
   openModal('Maintenance project', `<div class="flex items-start justify-between gap-3 flex-wrap mb-4"><div><div class="text-lg font-extrabold text-slate-900">${esc(p.title || '—')}</div><div class="text-sm text-slate-500 num">${esc(p.no || '')}</div></div>${mtStatePill(s)}</div>
@@ -8292,15 +8294,17 @@ function openMtView(id){
     ${ts.some(t => t.start) ? vSec('Timeline') + mtGantt([p], {}) : ''}
     ${p.createdByName ? `<div class="text-[11px] text-slate-400 mt-3">Created by ${esc(p.createdByName)}${p.createdAt ? ' · ' + esc(fmtDate(new Date(p.createdAt).toISOString().slice(0, 10))) : ''}</div>` : ''}`, true);
   if(admin){ const t = document.getElementById('modal-title'), b = document.createElement('button'); b.type = 'button'; b.id = 'modal-edit'; b.textContent = '✎ Edit'; b.title = 'Edit this project';
-    b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700'; b.style.cssText = 'margin-left:auto;margin-right:10px'; b.onclick = () => openMtForm(id); t.after(b); }
+    const sh = document.getElementById('modal-share');
+    b.className = 'shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700'; b.style.cssText = sh ? 'margin-right:8px' : 'margin-left:auto;margin-right:10px'; b.onclick = () => openMtForm(id); if(sh) sh.after(b); else t.after(b); }
 }
 async function mtTaskSet(pid, tid, field, val){
   const p = mtById(pid); if(!p) return; const tasks = (p.tasks || []).map(t => Object.assign({}, t)), t = tasks.find(x => x.id === tid); if(!t) return;
   if(!mtCanUpdate(t)) return toast('Only admins and the departments on this task can update it.', true);
-  if(field === 'progress'){ const n = Math.max(0, Math.min(100, Math.round(+val || 0))); t.progress = n; if(n === 100 && t.status !== 'Completed'){ t.status = 'Completed'; t.completedOn = vToday(); } else if(n > 0 && t.status === 'Not started') t.status = 'In progress'; }
+  if(field === 'completedOn'){ if(!/^\d{4}-\d{2}-\d{2}$/.test(val || '')) return; if(t.start && val < t.start) return toast('The completion date is before the task started.', true); if(val > vToday()) return toast('The completion date can\'t be in the future.', true); t.completedOn = val; }
+  else if(field === 'progress'){ const n = Math.max(0, Math.min(100, Math.round(+val || 0))); t.progress = n; if(n === 100 && t.status !== 'Completed'){ t.status = 'Completed'; t.completedOn = vToday(); } else if(n > 0 && t.status === 'Not started') t.status = 'In progress'; }
   else { t.status = TK_STATUS.includes(val) ? val : 'Not started'; if(t.status === 'Completed'){ t.progress = 100; t.completedOn = t.completedOn || vToday(); } else delete t.completedOn; }
   t.updatedBy = authUser ? authUser.name : ''; t.updatedAt = Date.now();
-  await vehSave('maintenance', { id:pid, tasks }); toast((t.title || 'Task') + ' → ' + (field === 'progress' ? t.progress + '%' : t.status) + '.'); openMtView(pid);
+  await vehSave('maintenance', { id:pid, tasks }); toast((t.title || 'Task') + ' → ' + (field === 'progress' ? t.progress + '%' : field === 'completedOn' ? 'completed on ' + isoToDmy(t.completedOn) : t.status) + '.'); openMtView(pid);
 }
 // ---- the form: project details, then one row per task (title, departments, dates, status, progress, notes)
 const mtDepPicker = (sel) => `<details class="mt-dep relative"><summary class="${VEH_FIELD} bg-white cursor-pointer list-none text-sm truncate"><span class="mt-dep-lbl">${sel && sel.length ? esc(sel.join(', ')) : '<span class="text-slate-400">Departments involved…</span>'}</span></summary>
@@ -8312,9 +8316,14 @@ const mtTaskRow = t => { t = t || {}; const id = t.id || uid();
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2"><div class="col-span-2"><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Departments involved</div>${mtDepPicker(t.depts)}</div>
       <div><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Start</div><input type="date" class="mt-start ${VEH_FIELD}" value="${esc(t.start || '')}"></div>
       <div><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Due</div><input type="date" class="mt-due ${VEH_FIELD}" value="${esc(t.due || '')}"></div>
-      <div class="col-span-2 sm:col-span-2"><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Status</div><select class="mt-status ${VEH_FIELD} bg-white">${TK_STATUS.map(x => `<option ${x === (t.status || 'Not started') ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
-      <div class="col-span-2 sm:col-span-2"><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Progress %</div><input type="number" min="0" max="100" step="5" class="mt-prog ${VEH_FIELD} num" value="${tkProg(t)}"></div></div>
+      <div class="col-span-2 sm:col-span-2"><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Status</div><select class="mt-status ${VEH_FIELD} bg-white" onchange="mtDoneToggle(this)">${TK_STATUS.map(x => `<option ${x === (t.status || 'Not started') ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      <div><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Progress %</div><input type="number" min="0" max="100" step="5" class="mt-prog ${VEH_FIELD} num" value="${tkProg(t)}" oninput="mtProgTyped(this)"></div>
+      <div><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">Completed on</div><input type="date" class="mt-done ${VEH_FIELD}" value="${esc(t.status === 'Completed' ? (t.completedOn || '') : '')}" ${t.status === 'Completed' ? '' : 'disabled'} title="The date the task was finished"></div></div>
     <input class="mt-notes ${VEH_FIELD} mt-2 text-sm" value="${esc(t.notes || '')}" placeholder="Notes (optional)"></div>`; };
+// "Completed on" is filled with today when a task is marked completed (and can be changed); cleared otherwise
+function mtDoneToggle(sel){ const row = sel.closest('.mt-task'), d = row.querySelector('.mt-done'), pr = row.querySelector('.mt-prog'), on = sel.value === 'Completed';
+  d.disabled = !on; if(on){ if(!d.value) d.value = row.dataset.done || vToday(); pr.value = 100; } else { d.value = ''; if(+pr.value === 100) pr.value = 90; } }
+function mtProgTyped(inp){ const row = inp.closest('.mt-task'), s = row.querySelector('.mt-status'); if(+inp.value >= 100 && s.value !== 'Completed'){ s.value = 'Completed'; mtDoneToggle(s); } }
 function mtRenumber(){ document.querySelectorAll('#mt-tasks .mt-task').forEach((el, i) => { const s = el.querySelector('.mt-num'); if(s) s.textContent = '#' + (i + 1); }); }
 function mtAddTask(){ const box = document.getElementById('mt-tasks'); if(!box) return; const last = [...box.querySelectorAll('.mt-task')].pop(); const prev = last ? { start:(last.querySelector('.mt-due').value || last.querySelector('.mt-start').value) } : { start:vToday() };
   box.insertAdjacentHTML('beforeend', mtTaskRow({ start:prev.start })); mtRenumber(); const ts = box.querySelectorAll('.mt-title'); ts[ts.length - 1].focus(); }
@@ -8350,7 +8359,9 @@ async function saveMtForm(id){
     if(!t.title) return vFail('Task #' + (i + 1) + ' needs a title.');
     if(!t.start) return vFail('Give task "' + t.title + '" a start date.');
     if(t.due && t.due < t.start) return vFail('Task "' + t.title + '" is due before it starts.');
-    if(t.status === 'Completed'){ t.progress = 100; t.completedOn = el.dataset.done || vToday(); } else if(t.progress === 100){ t.status = 'Completed'; t.completedOn = el.dataset.done || vToday(); }
+    const doneOn = el.querySelector('.mt-done').value;
+    if(t.progress === 100 && t.status !== 'Cancelled') t.status = 'Completed';
+    if(t.status === 'Completed'){ t.progress = 100; t.completedOn = doneOn || el.dataset.done || vToday(); if(t.completedOn < t.start) return vFail('Task "' + t.title + '" is completed before it starts.'); if(t.completedOn > vToday()) return vFail('The completion date of "' + t.title + '" is in the future.'); }
     else if(t.progress > 0 && t.status === 'Not started') t.status = 'In progress';
     const prev = old && (old.tasks || []).find(x => x.id === t.id); if(prev && prev.updatedBy){ t.updatedBy = prev.updatedBy; t.updatedAt = prev.updatedAt; }
     tasks.push(t);

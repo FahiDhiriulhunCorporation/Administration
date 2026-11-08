@@ -1998,7 +1998,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 /* =====================================================================
    UPDATES — the installed app and open tabs notice when a newer index.html is on the website
 ===================================================================== */
-const APP_BUILD = '3.26.364';                 // version: redesigns . year . workflow runs
+const APP_BUILD = '3.26.365';                 // version: redesigns . year . workflow runs
 let updLast = 0;
 async function updCheck(force){
   if(!navigator.onLine || location.protocol === 'file:') return;
@@ -17550,10 +17550,11 @@ function viewAssetReport(){
       <button onclick="goTo('assets')" class="text-xs font-semibold text-brand-600 hover:underline">View all assets →</button>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
       ${statCard('Total assets', fmtNum(totalAssets), totalAssets + ' tracked across all locations', 'brand')}
       ${statCard('Active', fmtNum(activeAssets), 'Currently in use', 'emerald')}
       ${statCard('Retired', fmtNum(retiredAssets), retiredAssets ? 'No longer in service' : 'None retired', 'slate')}
+      ${(() => { const act = state.assets.filter(a => a.status !== 'retired'), n = act.filter(assetHasCost).length; return statCard('Asset value', fmtMVR(assetValue(act)), n ? 'Cost value of ' + fmtNum(n) + ' active asset' + (n === 1 ? '' : 's') + (n < act.length ? ' (' + fmtNum(act.length - n) + ' without a value)' : '') : 'Add cost values to the assets', 'amber'); })()}
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-6">
@@ -20538,6 +20539,9 @@ function assetStatusBadge(status){
     : '<span class="inline-flex px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">Active</span>';
 }
 document.addEventListener('click', e => { document.querySelectorAll('details.as-menu[open]').forEach(d => { if(!d.contains(e.target)) d.open = false; }); });
+// the cost value of an asset (MVR); blank when it was never entered
+const assetHasCost = a => !!a && a.cost !== '' && a.cost != null && !isNaN(Number(a.cost));
+const assetValue = list => Math.round(list.reduce((s, a) => s + (assetHasCost(a) ? Number(a.cost) : 0), 0) * 100) / 100;
 function viewAssets(){
   const f = ui.assetsFilter;
   const list = getFilteredAssets().sort(byTag);
@@ -20560,6 +20564,7 @@ function viewAssets(){
         <td class="py-2.5 pr-3"><div class="max-w-[11rem] truncate">${loc ? locTag(loc.id) : '<span class="text-slate-400">—</span>'}</div></td>
         <td class="py-2.5 pr-3 min-w-0"><div class="text-slate-800 truncate max-w-[14rem]">${esc(a.assignedTo || '—')}</div><div class="text-[11.5px] text-slate-400 truncate max-w-[14rem]">${esc(a.department || '')}</div></td>
         <td class="py-2.5 pr-3">${assetStatusBadge(a.status)}</td>
+        <td class="py-2.5 pr-4 text-right num whitespace-nowrap">${assetHasCost(a) ? fmtMVR(a.cost) : '<span class="text-slate-300">—</span>'}</td>
         <td class="py-2.5 pr-5 sm:pr-6 text-right whitespace-nowrap">
           <button onclick="openTransferForm('${a.id}')" class="text-xs font-semibold text-brand-600 hover:underline">Transfer</button>
           <details class="as-menu inline-block relative ml-2 align-middle"><summary title="More" aria-label="More actions" class="list-none cursor-pointer w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 text-base leading-none">⋯</summary>
@@ -20598,7 +20603,7 @@ function viewAssets(){
             <span class="ml-auto text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">${esc(l.code)}</span>
           </div>
           <div class="text-[26px] font-extrabold text-slate-900 num">${fmtNum(assetLocationTotals(l.id))}</div>
-          <div class="text-[11.5px] text-slate-400">Assets assigned</div>
+          <div class="text-[11.5px] text-slate-400">Assets assigned</div>${(() => { const v = assetValue(state.assets.filter(a => a.locationId === l.id && a.status !== 'retired')); return v ? `<div class="text-[11.5px] font-semibold text-slate-600 num mt-0.5">${fmtMVR(v)}</div>` : ''; })()}
         </div>
       `).join('')}
     </div>
@@ -20613,7 +20618,7 @@ function viewAssets(){
         <option value="">All departments</option>${deptOpts.map(d => `<option value="${esc(d)}" ${f.department === d ? 'selected' : ''}>${esc(d)} (${state.assets.filter(a => a.department === d).length})</option>`).join('')}
       </select>
       ${hasActiveAssetFilters() ? `<button onclick="clearAssetFilters()" class="text-xs font-semibold text-brand-600 hover:underline self-center">Clear filters</button>` : ''}
-      <span class="self-center text-xs text-slate-400 ml-auto">${list.length} asset${list.length===1?'':'s'}</span>
+      <span class="self-center text-xs text-slate-400 ml-auto">${list.length} asset${list.length===1?'':'s'}${list.some(assetHasCost) ? ' · value ' + fmtMVR(assetValue(list)) : ''}</span>
     </div>
 
     <div class="bg-white rounded-xl border border-slate-200 mb-6">
@@ -20625,6 +20630,7 @@ function viewAssets(){
             <th class="py-3 font-semibold">Location</th>
             <th class="py-3 font-semibold">Assigned to · department</th>
             <th class="py-3 font-semibold">Status</th>
+            <th class="py-3 pr-4 font-semibold text-right">Cost value</th>
             <th class="py-3 pr-5 sm:pr-6 font-semibold text-right"></th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -23552,8 +23558,13 @@ function viewAssetDetail(){
         <div class="text-sm font-bold text-slate-900 mt-1">${esc(asset.assignedTo||'—')}</div>
       </div>
       <div class="bg-white rounded-xl border border-slate-200 p-5">
+        <div class="text-xs font-medium text-slate-500">Cost value</div>
+        <div class="text-sm font-bold text-slate-900 mt-1 num">${assetHasCost(asset) ? fmtMVR(asset.cost) : '—'}</div>
+        ${asset.purchaseDate ? `<div class="text-[11.5px] text-slate-400 mt-0.5">Bought ${esc(fmtDate(asset.purchaseDate))}</div>` : ''}
+      </div>
+      <div class="bg-white rounded-xl border border-slate-200 p-5">
         <div class="text-xs font-medium text-slate-500">Added</div>
-        <div class="text-sm font-bold text-slate-900 mt-1">${asset.createdAt?fmtDate(asset.createdAt.slice(0,10)):'—'}</div>
+        <div class="text-sm font-bold text-slate-900 mt-1">${asset.createdAt?fmtDate(String(asset.createdAt).slice(0,10)):'—'}</div>
       </div>
     </div>
 
@@ -23761,12 +23772,16 @@ function openAssetForm(id){
       </div>
       <input type="hidden" id="af-image-data" value="${editing&&editing.image?esc(editing.image):''}">
     </div>
-    <div class="mb-4">
-      <label class="block text-xs font-semibold text-slate-600 mb-1.5">Status</label>
-      <select id="af-status" class="w-full sm:w-1/2 px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Status</label>
+      <select id="af-status" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white">
         <option value="active" ${!editing||editing.status!=='retired'?'selected':''}>Active</option>
         <option value="retired" ${editing&&editing.status==='retired'?'selected':''}>Retired</option>
-      </select>
+      </select></div>
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Cost value (MVR)</label>
+      <input type="number" id="af-cost" min="0" step="0.01" value="${editing && editing.cost != null && editing.cost !== '' ? esc(editing.cost) : ''}" placeholder="e.g. 12500.00" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm num"></div>
+      <div><label class="block text-xs font-semibold text-slate-600 mb-1.5">Purchase date <span class="font-normal text-slate-400">(optional)</span></label>
+      <input type="date" id="af-purchase-date" value="${editing ? esc(editing.purchaseDate || '') : ''}" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm"></div>
     </div>
     <div class="mb-5">
       <label class="block text-xs font-semibold text-slate-600 mb-1.5">Notes</label>
@@ -23787,6 +23802,8 @@ function saveAsset(id){
   const locationId = document.getElementById('af-location').value;
   if(!name){ errEl.textContent='Asset name is required.'; errEl.classList.remove('hidden'); return; }
   if(!locationId){ errEl.textContent='Choose a location.'; errEl.classList.remove('hidden'); return; }
+  const costIn = document.getElementById('af-cost').value.trim();
+  if(costIn !== '' && !(Number(costIn) >= 0)){ errEl.textContent='Enter the cost value as a number (0 or more).'; errEl.classList.remove('hidden'); return; }
   const dupCode = assetCodeTaken(document.getElementById('af-dept-code').value, id);
   if(dupCode){ errEl.textContent = 'Department asset code ' + dupCode.departmentAssetCode + ' is already used by ' + (dupCode.name || 'another asset') + '.'; errEl.classList.remove('hidden'); return; }
   const data = {
@@ -23800,6 +23817,8 @@ function saveAsset(id){
     assignedTo: document.getElementById('af-assignedto').value.trim(),
     status: document.getElementById('af-status').value,
     notes: document.getElementById('af-notes').value.trim(),
+    cost: (v => v === '' ? '' : Math.round(Number(v) * 100) / 100)(document.getElementById('af-cost').value.trim()),
+    purchaseDate: document.getElementById('af-purchase-date').value || '',
     image: document.getElementById('af-image-data').value || '',
   };
   let saved;
@@ -23960,10 +23979,10 @@ function exportMovementsCSV(){
   downloadCSV('stock_movements' + rangePart + '.csv', header, rows);
 }
 function exportAssetsCSV(){
-  const header = ['Tag','Serial Number','Name','Category','Location','Department','Assigned to','Status','Notes'];
+  const header = ['Tag','Department Asset Code','Serial Number','Name','Category','Location','Department','Assigned to','Status','Cost value (MVR)','Purchase date','Notes'];
   const rows = [...state.assets].sort(byName).map(a=>{
     const loc = getLocation(a.locationId);
-    return [a.tag||'', a.serialNumber||'', a.name, a.category||'', loc?loc.name:'', a.department||'', a.assignedTo||'', a.status==='retired'?'Retired':'Active', a.notes||''];
+    return [a.tag||'', a.departmentAssetCode||'', a.serialNumber||'', a.name, a.category||'', loc?loc.name:'', a.department||'', a.assignedTo||'', a.status==='retired'?'Retired':'Active', assetHasCost(a) ? Number(a.cost).toFixed(2) : '', a.purchaseDate||'', a.notes||''];
   });
   if(rows.length===0){ toast('No assets to export.', true); return; }
   downloadCSV('assets_' + todayStr() + '.csv', header, rows);
